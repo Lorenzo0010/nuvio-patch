@@ -58,7 +58,7 @@ index 613f767..fc91c4d 100644
 +internal fun currentEpochMillis(): Long = System.currentTimeMillis()
 \ No newline at end of file
 diff --git a/composeApp/src/androidFull/kotlin/com/nuvio/app/features/updater/AndroidAppUpdaterPlatform.kt b/composeApp/src/androidFull/kotlin/com/nuvio/app/features/updater/AndroidAppUpdaterPlatform.kt
-index b50f255..99d43e7 100644
+index b50f255..87e72ac 100644
 --- a/composeApp/src/androidFull/kotlin/com/nuvio/app/features/updater/AndroidAppUpdaterPlatform.kt
 +++ b/composeApp/src/androidFull/kotlin/com/nuvio/app/features/updater/AndroidAppUpdaterPlatform.kt
 @@ -2,7 +2,6 @@ package com.nuvio.app.features.updater
@@ -69,13 +69,17 @@ index b50f255..99d43e7 100644
  import android.net.Uri
  import android.os.Build
  import android.provider.Settings
-@@ -26,7 +25,8 @@ object AndroidAppUpdaterPlatform {
+@@ -22,11 +21,12 @@ import java.io.FileOutputStream
+ import java.util.concurrent.TimeUnit
+ 
+ object AndroidAppUpdaterPlatform {
++    fun isDebugBuild(): Boolean = com.nuvio.app.core.build.AppFeaturePolicy.isDebugBuild
+     private const val preferencesName = "nuvio_updater"
      private const val ignoredTagKey = "ignored_release_tag"
  
      private val httpClient = OkHttpClient.Builder()
 -        .connectTimeout(60, TimeUnit.SECONDS)
-+        .dns(com.nuvio.app.core.network.AndroidDnsProvider)
-+        .connectTimeout(30, TimeUnit.SECONDS)
++                .connectTimeout(30, TimeUnit.SECONDS)
          .readTimeout(60, TimeUnit.SECONDS)
          .writeTimeout(60, TimeUnit.SECONDS)
          .followRedirects(true)
@@ -99,7 +103,7 @@ index b50f255..99d43e7 100644
 +}
 \ No newline at end of file
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
-index 76a862a..079fbd1 100644
+index 76a862a..6157acc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
 @@ -5,6 +5,8 @@ import com.nuvio.app.core.ui.NativeNavigationTab
@@ -111,40 +115,49 @@ index 76a862a..079fbd1 100644
      Library,
      Settings,
      ;
+@@ -20,6 +22,7 @@ internal fun AppScreenTab.toNativeNavigationTab(): NativeNavigationTab = when (t
+     AppScreenTab.Search -> NativeNavigationTab.Search
+     AppScreenTab.Library -> NativeNavigationTab.Library
+     AppScreenTab.Settings -> NativeNavigationTab.Settings
++    else -> NativeNavigationTab.Home
+ }
+ 
+ internal fun NativeNavigationTab.toAppScreenTab(): AppScreenTab = when (this) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 892da4b..af3ed20 100644
+index 892da4b..13b57f0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -1,3 +1,7 @@
-+import com.nuvio.app.features.downloads.DownloadsScreen
-+import androidx.compose.material.icons.rounded.FileDownload
-+import com.nuvio.app.features.livetv.LiveTvScreen
-+import androidx.compose.material.icons.rounded.LiveTv
+@@ -1,5 +1,9 @@
  package com.nuvio.app
  
++import com.nuvio.app.features.downloads.DownloadsScreen
++import com.nuvio.app.features.livetv.LiveTvScreen
++import androidx.compose.material.icons.rounded.LiveTv
++import androidx.compose.material.icons.rounded.FileDownload
  import androidx.compose.foundation.clickable
-@@ -176,6 +180,20 @@ internal fun AppTabHost(
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+@@ -176,6 +180,19 @@ internal fun AppTabHost(
                      )
                  }
  
-+                AppScreenTab.LiveTv -> {
++                                AppScreenTab.LiveTv -> {
 +                    LiveTvScreen(
 +                        modifier = Modifier.fillMaxSize(),
 +                    )
 +                }
 +
-+                                AppScreenTab.Downloads -> {
++                AppScreenTab.Downloads -> {
 +                    DownloadsScreen(
 +                        onBack = { onTabSelected(AppScreenTab.Home) },
 +                        onOpenDownload = { /* handle download item */ },
-+                        onOpenDownloadsDirectory = { /* open directory */ },
 +                    )
 +                }
 +
                  AppScreenTab.Library -> {
                      LibraryScreen(
                          modifier = Modifier.fillMaxSize(),
-@@ -245,6 +263,23 @@ internal fun TabletFloatingTopBar(
+@@ -245,6 +262,23 @@ internal fun TabletFloatingTopBar(
                  horizontalArrangement = Arrangement.spacedBy(tokens.spacing.controlGap),
                  verticalAlignment = Alignment.CenterVertically,
              ) {
@@ -168,16 +181,30 @@ index 892da4b..af3ed20 100644
                  TabletTopPillItem(
                      label = stringResource(Res.string.compose_nav_home),
                      selected = selectedTab == AppScreenTab.Home,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index 80d543f..07bf6e4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -352,6 +352,7 @@ internal fun MainAppContent(
+             }
+             AppScreenTab.Library -> libraryScrollToTopRequests.tryEmit(Unit)
+             AppScreenTab.Settings -> settingsRootActionRequests.tryEmit(Unit)
++            else -> {}
+         }
+     }
+ 
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 2d6219a..3ca2f74 100644
+index 2d6219a..4fca0f2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -1,3 +1,5 @@
-+import androidx.compose.material.icons.rounded.FileDownload
-+import androidx.compose.material.icons.rounded.LiveTv
+@@ -1,5 +1,7 @@
  package com.nuvio.app
  
++import androidx.compose.material.icons.rounded.LiveTv
++import androidx.compose.material.icons.rounded.FileDownload
  import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.WindowInsets
 @@ -93,6 +95,18 @@ internal fun MainTabsDestination(
                              icon = Res.drawable.sidebar_search,
                              contentDescription = stringResource(Res.string.compose_nav_search),
@@ -925,7 +952,7 @@ index cb5a98f..f5ac204 100644
                              val result = JsonObject(currentSettings.toMap())
                              PluginStorage.saveScraperSettings(scraperId, result.toString())
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
-index ecb386a..96a9da6 100644
+index ecb386a..df9faf5 100644
 --- a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
 @@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
@@ -966,7 +993,7 @@ index ecb386a..96a9da6 100644
          modifier = modifier,
          verticalArrangement = Arrangement.spacedBy(12.dp),
      ) {
-+        CloudStreamSettingsSection()
++        
 +        HorizontalDivider(
 +            modifier = Modifier.padding(vertical = 8.dp),
 +            color = MaterialTheme.colorScheme.outlineVariant,
@@ -1011,8 +1038,8 @@ index ecb386a..96a9da6 100644
 +                        if (sortedScrapers.any { it.repositoryUrl == repo.manifestUrl && it.code.isBlank() }) {
 +                            NuvioInfoBadge(
 +                                text = "Cloudstream",
-+                                backgroundColor = Color(0xFF2D0A4E),
-+                                contentColor = Color(0xFFD8B4FE),
++                                
++                                
 +                            )
 +                        }
                          if (repo.isRefreshing) {
@@ -1088,7 +1115,7 @@ index fc014ee..38c9efa 100644
      }
  
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/network/FetchBridge.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/network/FetchBridge.kt
-index 22216c5..47a2205 100644
+index 22216c5..52d2ae3 100644
 --- a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/network/FetchBridge.kt
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/network/FetchBridge.kt
 @@ -5,6 +5,7 @@ import com.dokar.quickjs.QuickJs
@@ -1099,22 +1126,19 @@ index 22216c5..47a2205 100644
  import kotlinx.coroutines.runBlocking
  import kotlinx.serialization.json.Json
  import kotlinx.serialization.json.JsonObject
-@@ -52,7 +53,14 @@ internal class FetchBridge : HostModule {
+@@ -51,10 +52,11 @@ internal class FetchBridge : HostModule {
+         body: String,
          followRedirects: Boolean,
      ): String {
-         val headers = parseHeaders(headersJson).toMutableMap()
--        if (!headers.containsKey("User-Agent")) {
-+        val netSettings = globalNetworkSettingsRepository
-+        val customUA = netSettings?.customUserAgent?.value
-+        val shouldOverride = netSettings?.overrideForPlugins?.value == true || netSettings?.overrideForBoth?.value == true
-+        if (customUA != null && customUA.isNotBlank() && shouldOverride) {
-+            headers["User-Agent"] = customUA
-+        } else if (customUA != null && customUA.isNotBlank() && !headers.containsKey("User-Agent")) {
-+            headers["User-Agent"] = customUA
-+        } else if (!headers.containsKey("User-Agent")) {
+-        val headers = parseHeaders(headersJson).toMutableMap()
++                val headers = parseHeaders(headersJson).toMutableMap()
+         if (!headers.containsKey("User-Agent")) {
              headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
          }
++        }
  
+         val response = runBlocking {
+             httpRequestRaw(
 diff --git a/composeApp/src/iosFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.ios.kt b/composeApp/src/iosFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.ios.kt
 index a359eea..1a8ddaa 100644
 --- a/composeApp/src/iosFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.ios.kt
