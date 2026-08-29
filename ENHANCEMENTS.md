@@ -28,6 +28,10 @@ Questo documento riassume tutte le funzionalità e personalizzazioni avanzate in
 ### 5. Cataloghi TOP 10 Numerati
 - Righe configurabili nella Home che mostrano poster con badge numerato da 1 a 10 con design graduato, evidenziando i contenuti in tendenza o più popolari.
 
+### 6. Tab Download Diretta nella Barra di Navigazione (Navbar)
+- Accesso rapido e diretto a tutti i media scaricati offline tramite pulsante dedicato nella barra inferiore (tra *Live TV* e *Profilo/Impostazioni*).
+- Supporta layout sia mobile (Navbar classica e Glass) sia tablet/desktop (Floating Top Bar).
+
 ---
 
 ## 🎬 Player & Esperienza di Visione
