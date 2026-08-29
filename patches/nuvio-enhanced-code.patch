@@ -1210,6 +1210,39 @@ index 613f767..fc91c4d 100644
 -internal fun currentEpochMillis(): Long = System.currentTimeMillis()
 +internal fun currentEpochMillis(): Long = System.currentTimeMillis()
 \ No newline at end of file
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index e4ebddb..ce0b8a5 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -2240,4 +2240,28 @@
+         <item quantity="one">%d title</item>
+         <item quantity="other">%d titles</item>
+     </plurals>
++
++    <!-- Live TV -->
++    <string name="live_tv_title">Live TV</string>
++    <string name="live_tv_search">Search channels…</string>
++    <string name="live_tv_add_source">Add Source</string>
++    <string name="live_tv_refresh">Refresh</string>
++    <string name="live_tv_all_channels">All Channels</string>
++    <string name="live_tv_favorites">Favorites</string>
++    <string name="live_tv_choose_category">Categories</string>
++    <string name="live_tv_categories">Categories</string>
++    <string name="live_tv_channels">Channels</string>
++    <string name="live_tv_channel_count">%1$d channels</string>
++    <string name="live_tv_favorite">Favorite</string>
++    <string name="live_tv_disconnect">Disconnect</string>
++    <string name="live_tv_empty_title">No channels loaded</string>
++    <string name="live_tv_empty_description">Add an M3U source to get started</string>
++    <string name="live_tv_load">Load</string>
++    <string name="live_tv_source_title">M3U Source</string>
++    <string name="live_tv_source_hint">Enter M3U URL…</string>
++    <string name="live_tv_recent_channel_title">Recently Watched</string>
++    <string name="live_tv_recent_channel_cta">Continue Watching</string>
++
++    <!-- Top 10 -->
++    <string name="top10_header">Top 10</string>
+ </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
 index 76a862a..6157acc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
