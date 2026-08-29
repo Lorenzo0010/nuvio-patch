@@ -193,7 +193,8 @@ jobs:
         run: |
           TIMESTAMP=$(date +'%Y%m%d-%H%M')
           SHORT_SHA=$(echo "${{ steps.check_upstream.outputs.target_sha }}" | cut -c1-7)
-          RELEASE_TAG="v-enhanced-${TIMESTAMP}-${SHORT_SHA}"
+          VERSION_NAME=$(grep -o '"version": *"[^"]*"' version.json | cut -d '"' -f 4 || echo "0.4.11")
+          RELEASE_TAG="v${VERSION_NAME}-enhanced-${SHORT_SHA}"
           
           # Cerca l'APK generato
           APK_FILE=$(find composeApp/build/outputs/apk -name "*.apk" -not -name "*unaligned*" | head -n 1)
