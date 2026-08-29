@@ -1,6 +1,12 @@
 name: Auto-Sync Upstream & Build Enhanced APK
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'patches/**'
+      - '.github/workflows/**'
   schedule:
     # Controlla gli aggiornamenti ogni 6 ore
     - cron: '0 */6 * * *'
@@ -62,7 +68,7 @@ jobs:
           fi
           echo "Ultimo commit compilato precedentemente: $LAST_BUILT_SHA"
           
-          if [ "$LATEST_SHA" != "$LAST_BUILT_SHA" ] || [ "${{ github.event.inputs.force_build }}" == "true" ]; then
+          if [ "$LATEST_SHA" != "$LAST_BUILT_SHA" ] || [ "${{ github.event.inputs.force_build }}" == "true" ] || [ "$GITHUB_EVENT_NAME" == "push" ]; then
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
             echo "target_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
             echo "Nuovo aggiornamento rilevato! Avvio compilazione."
