@@ -124,7 +124,7 @@ index 76a862a..6157acc 100644
  
  internal fun NativeNavigationTab.toAppScreenTab(): AppScreenTab = when (this) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 892da4b..13b57f0 100644
+index 892da4b..293b387 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -1,5 +1,9 @@
@@ -149,8 +149,8 @@ index 892da4b..13b57f0 100644
 +
 +                AppScreenTab.Downloads -> {
 +                    DownloadsScreen(
-+                        onBack = { onTabSelected(AppScreenTab.Home) },
-+                        onOpenDownload = { /* handle download item */ },
++                        onBack = {},
++                        onOpenDownload = {},
 +                    )
 +                }
 +
@@ -952,7 +952,7 @@ index cb5a98f..f5ac204 100644
                              val result = JsonObject(currentSettings.toMap())
                              PluginStorage.saveScraperSettings(scraperId, result.toString())
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
-index ecb386a..df9faf5 100644
+index ecb386a..9cf94ad 100644
 --- a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/PluginsSettingsScreen.kt
 @@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
@@ -1031,21 +1031,19 @@ index ecb386a..df9faf5 100644
                      }
                  },
              )
-@@ -339,6 +356,13 @@ fun PluginsSettingsPageContent(
+@@ -339,6 +356,11 @@ fun PluginsSettingsPageContent(
                          horizontalArrangement = Arrangement.spacedBy(10.dp),
                      ) {
                          NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_providers, repo.scraperCount))
 +                        if (sortedScrapers.any { it.repositoryUrl == repo.manifestUrl && it.code.isBlank() }) {
 +                            NuvioInfoBadge(
 +                                text = "Cloudstream",
-+                                
-+                                
 +                            )
 +                        }
                          if (repo.isRefreshing) {
                              NuvioInfoBadge(text = stringResource(Res.string.plugins_badge_refreshing))
                          }
-@@ -446,7 +470,9 @@ fun PluginsSettingsPageContent(
+@@ -446,7 +468,9 @@ fun PluginsSettingsPageContent(
                          horizontalArrangement = Arrangement.spacedBy(10.dp),
                      ) {
                          NuvioInfoBadge(text = scraper.supportedTypes.joinToString(" | "))
@@ -1056,7 +1054,7 @@ index ecb386a..df9faf5 100644
                          if (!scraper.manifestEnabled) {
                              NuvioInfoBadge(text = stringResource(Res.string.plugins_provider_disabled_by_repo))
                          }
-@@ -547,4 +573,4 @@ private fun String.fallbackRepositoryLabel(fallback: String): String {
+@@ -547,4 +571,4 @@ private fun String.fallbackRepositoryLabel(fallback: String): String {
      return host.ifBlank {
          withoutManifest.substringAfterLast('/').ifBlank { fallback }
      }
