@@ -185029,7 +185029,7 @@ index 4c98f47..2b13757 100644
  import kotlinx.atomicfu.locks.synchronized
  import kotlinx.serialization.Serializable
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..6854144 100644
+index d0b40fc..d4f0573 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -1,15 +1,45 @@
@@ -185085,12 +185085,12 @@ index d0b40fc..6854144 100644
  import org.jetbrains.compose.resources.getString
 +import org.jetbrains.compose.resources.stringResource
  
--private const val gitHubOwner = "Lorenzo0010"
--private const val gitHubRepo = "nuvio-patch"
+-private const val gitHubOwner = "NuvioMedia"
+-private const val gitHubRepo = "NuvioMobile"
 +private const val gitHubOwner = "Lorenzo0010"
 +private const val gitHubRepo = "nuvio-patch"
  private const val gitHubApiBase = "https://api.github.com"
--private const val releaseChannelBranch = "main"
+-private const val releaseChannelBranch = "cmp-rewrite"
 +private const val releaseChannelBranch = "main"
  
  data class AppUpdate(
