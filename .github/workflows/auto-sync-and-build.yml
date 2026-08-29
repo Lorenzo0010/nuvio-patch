@@ -179,10 +179,10 @@ jobs:
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           if [ "$BUILD_TYPE" == "debug" ]; then
             echo "Compilazione APK Debug (Full)..."
-            ./gradlew :composeApp:assembleDebug -Pnuvio.android.distribution=full --stacktrace
+            ./gradlew :androidApp:assembleFullDebug --stacktrace
           else
             echo "Compilazione APK Release (Full)..."
-            ./gradlew :composeApp:assembleRelease -Pnuvio.android.distribution=full --stacktrace
+            ./gradlew :androidApp:assembleFullRelease --stacktrace
           fi
 
       # 6. Preparazione artefatto APK
@@ -197,7 +197,7 @@ jobs:
           RELEASE_TAG="v${VERSION_NAME}-enhanced-${SHORT_SHA}"
           
           # Cerca l'APK generato
-          APK_FILE=$(find composeApp/build/outputs/apk -name "*.apk" -not -name "*unaligned*" | head -n 1)
+          APK_FILE=$(find androidApp/build/outputs/apk composeApp/build/outputs/apk -name "*.apk" -not -name "*unaligned*" 2>/dev/null | head -n 1)
           
           if [ -z "$APK_FILE" ]; then
             echo "::error::Nessun file APK trovato dopo la compilazione!"
