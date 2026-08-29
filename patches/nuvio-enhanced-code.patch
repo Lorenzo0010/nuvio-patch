@@ -13,17 +13,16 @@ index dfacfd6..8f33c53 100644
                      implementation(libs.ksoup)
 diff --git a/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/CloudStreamApp.kt b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/CloudStreamApp.kt
 new file mode 100644
-index 0000000..c0a7998
+index 0000000..7b3fae3
 --- /dev/null
 +++ b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/CloudStreamApp.kt
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,34 @@
 +package com.lagradost.cloudstream3
 +
 +import android.app.Activity
 +import android.content.Context
 +import android.content.ContextWrapper
 +import java.lang.ref.WeakReference
-+import com.lagradost.cloudstream3.utils.DataStore
 +
 +const val USER_AGENT: String =
 +    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -47,44 +46,8 @@ index 0000000..c0a7998
 +            else -> null
 +        }
 +
-+        fun <T : Any> getKeyClass(path: String, valueType: Class<T>): T? {
-+            val json = sharedPreferences()?.getString(path, null) ?: return null
-+            return runCatching { mapper.readValue(json, valueType) }.getOrNull()
-+        }
-+
-+        fun <T : Any> setKeyClass(path: String, value: T) = setKey(path, value)
-+
-+        fun <T> setKey(path: String, value: T) {
-+            val preferences = sharedPreferences() ?: return
-+            preferences.edit().apply {
-+                if (value == null) remove(path) else putString(path, mapper.writeValueAsString(value))
-+            }.apply()
-+        }
-+
-+        fun <T> setKey(folder: String, path: String, value: T) =
-+            setKey(DataStore.getFolderName(folder, path), value)
-+
-+        fun removeKey(path: String) {
-+            sharedPreferences()?.edit()?.remove(path)?.apply()
-+        }
-+
-+        fun removeKey(folder: String, path: String) = removeKey(DataStore.getFolderName(folder, path))
-+
-+        fun removeKeys(folder: String): Int? {
-+            val preferences = sharedPreferences() ?: return null
-+            val keys = getKeys(folder).orEmpty()
-+            preferences.edit().apply { keys.forEach(::remove) }.apply()
-+            return keys.size
-+        }
-+
-+        fun getKeys(folder: String): List<String>? {
-+            val preferences = sharedPreferences() ?: return null
-+            val prefix = folder.trimEnd('/') + "/"
-+            return preferences.all.keys.filter { it.startsWith(prefix) }
-+        }
-+
-+        private fun sharedPreferences() = context?.let { currentContext ->
-+            with(DataStore) { currentContext.getSharedPrefs() }
++        fun init(context: Context) {
++            Companion.context = context
 +        }
 +    }
 +}
@@ -159,163 +122,6 @@ index 0000000..20a0f1f
 +
 +object VideoClickActionHolder {
 +    val allVideoClickActions: MutableList<VideoClickAction> = mutableListOf()
-+}
-diff --git a/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/CloudflareKiller.kt b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/CloudflareKiller.kt
-new file mode 100644
-index 0000000..dac1eac
---- /dev/null
-+++ b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/CloudflareKiller.kt
-@@ -0,0 +1,103 @@
-+package com.lagradost.cloudstream3.network
-+
-+import android.util.Log
-+import android.webkit.CookieManager
-+import androidx.annotation.AnyThread
-+import com.lagradost.cloudstream3.app
-+import com.lagradost.cloudstream3.mvvm.debugWarning
-+import com.lagradost.cloudstream3.mvvm.safe
-+import com.lagradost.nicehttp.Requests.Companion.await
-+import com.lagradost.nicehttp.cookies
-+import java.net.URI
-+import kotlinx.coroutines.runBlocking
-+import okhttp3.Headers
-+import okhttp3.Interceptor
-+import okhttp3.Request
-+import okhttp3.Response
-+
-+/**
-+ * Binary-compatible CloudStream interceptor used by providers protected by Cloudflare.
-+ *
-+ * This follows CloudStream's host behaviour: ordinary responses stay on the caller's
-+ * chain, while a 403/503 Cloudflare response is retried after obtaining cf_clearance
-+ * cookies through the shared WebView resolver.
-+ */
-+@AnyThread
-+class CloudflareKiller : Interceptor {
-+    companion object {
-+        const val TAG = "CloudflareKiller"
-+        private val errorCodes = setOf(403, 503)
-+        private val cloudflareServers = setOf("cloudflare-nginx", "cloudflare")
-+
-+        fun parseCookieMap(cookie: String): Map<String, String> =
-+            cookie.split(';').mapNotNull { entry ->
-+                val separator = entry.indexOf('=')
-+                if (separator <= 0) return@mapNotNull null
-+                val key = entry.substring(0, separator).trim()
-+                val value = entry.substring(separator + 1).trim()
-+                (key to value).takeIf { key.isNotBlank() && value.isNotBlank() }
-+            }.toMap()
-+    }
-+
-+    init {
-+        safe { CookieManager.getInstance().removeAllCookies(null) }
-+    }
-+
-+    val savedCookies: MutableMap<String, Map<String, String>> = mutableMapOf()
-+
-+    fun getCookieHeaders(url: String): Headers {
-+        val userAgentHeaders = WebViewResolver.webViewUserAgent?.let { mapOf("user-agent" to it) }.orEmpty()
-+        return getHeaders(userAgentHeaders, savedCookies[URI(url).host].orEmpty())
-+    }
-+
-+    override fun intercept(chain: Interceptor.Chain): Response = runBlocking {
-+        val request = chain.request()
-+        savedCookies[request.url.host]?.let { return@runBlocking proceed(request, it) }
-+
-+        val response = chain.proceed(request)
-+        if (response.header("Server") !in cloudflareServers || response.code !in errorCodes) {
-+            return@runBlocking response
-+        }
-+        response.close()
-+        bypassCloudflare(request)?.let {
-+            Log.d(TAG, "Succeeded bypassing Cloudflare: ${request.url}")
-+            return@runBlocking it
-+        }
-+
-+        debugWarning({ true }) { "Failed Cloudflare challenge at: ${request.url}" }
-+        chain.proceed(request)
-+    }
-+
-+    private fun getWebViewCookie(url: String): String? = safe {
-+        CookieManager.getInstance()?.getCookie(url)
-+    }
-+
-+    private fun trySolveWithSavedCookies(request: Request): Boolean =
-+        getWebViewCookie(request.url.toString())?.let { cookie ->
-+            cookie.contains("cf_clearance").also { solved ->
-+                if (solved) savedCookies[request.url.host] = parseCookieMap(cookie)
-+            }
-+        } ?: false
-+
-+    private suspend fun proceed(request: Request, cookies: Map<String, String>): Response {
-+        val userAgentHeaders = WebViewResolver.getWebViewUserAgent()?.let {
-+            mapOf("user-agent" to it)
-+        }.orEmpty()
-+        val headers = getHeaders(request.headers.toMap() + userAgentHeaders, cookies + request.cookies)
-+        return app.baseClient.newCall(request.newBuilder().headers(headers).build()).await()
-+    }
-+
-+    private suspend fun bypassCloudflare(request: Request): Response? {
-+        if (!trySolveWithSavedCookies(request)) {
-+            WebViewResolver(
-+                interceptUrl = Regex(".^"),
-+                userAgent = null,
-+                useOkhttp = false,
-+                additionalUrls = listOf(Regex(".")),
-+            ).resolveUsingWebView(request.url.toString()) {
-+                trySolveWithSavedCookies(request)
-+            }
-+        }
-+        return savedCookies[request.url.host]?.let { proceed(request, it) }
-+    }
-+}
-diff --git a/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/DdosGuardKiller.kt b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/DdosGuardKiller.kt
-new file mode 100644
-index 0000000..7514908
---- /dev/null
-+++ b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/DdosGuardKiller.kt
-@@ -0,0 +1,42 @@
-+package com.lagradost.cloudstream3.network
-+
-+import androidx.annotation.AnyThread
-+import com.lagradost.cloudstream3.app
-+import com.lagradost.nicehttp.Requests
-+import com.lagradost.nicehttp.cookies
-+import kotlinx.coroutines.runBlocking
-+import okhttp3.Interceptor
-+import okhttp3.Request
-+import okhttp3.Response
-+
-+/** Binary-compatible DDoS-Guard interceptor expected by standard CloudStream plugins. */
-+@AnyThread
-+class DdosGuardKiller(private val alwaysBypass: Boolean) : Interceptor {
-+    val savedCookiesMap: MutableMap<String, Map<String, String>> = mutableMapOf()
-+    private var ddosBypassPath: String? = null
-+
-+    override fun intercept(chain: Interceptor.Chain): Response = runBlocking {
-+        val request = chain.request()
-+        if (alwaysBypass) return@runBlocking bypassDdosGuard(request)
-+        val response = chain.proceed(request)
-+        if (response.code == 403) {
-+            response.close()
-+            bypassDdosGuard(request)
-+        } else {
-+            response
-+        }
-+    }
-+
-+    private suspend fun bypassDdosGuard(request: Request): Response {
-+        ddosBypassPath = ddosBypassPath ?: Regex("'(.*?)'").find(
-+            app.get("https://check.ddos-guard.net/check.js").text,
-+        )?.groupValues?.getOrNull(1)
-+
-+        val cookies = savedCookiesMap[request.url.host]
-+            ?: Requests().get(
-+                request.url.scheme + "://" + request.url.host + ddosBypassPath.orEmpty(),
-+            ).cookies.also { savedCookiesMap[request.url.host] = it }
-+        val headers = getHeaders(request.headers.toMap(), cookies + request.cookies)
-+        return app.baseClient.newCall(request.newBuilder().headers(headers).build()).execute()
-+    }
 +}
 diff --git a/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/RequestsHelper.kt b/composeApp/src/androidFull/kotlin/com/lagradost/cloudstream3/network/RequestsHelper.kt
 new file mode 100644
@@ -1985,6 +1791,19 @@ index 0000000..6b826dc
 +    }
 +
 +    private fun localizedString(resource: StringResource): String = runBlocking { getString(resource) }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/AniListConfig.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/AniListConfig.kt
+new file mode 100644
+index 0000000..fba4efe
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/AniListConfig.kt
+@@ -0,0 +1,7 @@
++package com.nuvio.app.features.anilist
++
++internal object AniListConfig {
++    const val CLIENT_ID: String = "19231"
++    const val CLIENT_SECRET: String = ""
++    const val REDIRECT_URI: String = "nuvio://anilist-auth"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/AniListLibraryMenuPrefs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/AniListLibraryMenuPrefs.kt
 new file mode 100644
@@ -4372,7 +4191,7 @@ index 0000000..89f5c2f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/components/AniListLibraryContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/components/AniListLibraryContent.kt
 new file mode 100644
-index 0000000..2f43df4
+index 0000000..16e940f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/anilist/components/AniListLibraryContent.kt
 @@ -0,0 +1,132 @@
@@ -4419,7 +4238,7 @@ index 0000000..2f43df4
 +            items(3) {
 +                HomeSkeletonRow(
 +                    modifier = Modifier.padding(horizontal = 16.dp),
-+                    showHeaderAccent = true
++                    
 +                )
 +            }
 +        }
@@ -7725,6 +7544,18 @@ index 0000000..022fece
 +    fun loadPayload(): String?
 +    fun savePayload(payload: String)
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mal/MalConfig.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mal/MalConfig.kt
+new file mode 100644
+index 0000000..2fea62a
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mal/MalConfig.kt
+@@ -0,0 +1,6 @@
++package com.nuvio.app.features.mal
++
++internal object MalConfig {
++    const val CLIENT_ID: String = "e305e55ffdf96d67b36f73ea7ffbfbf5"
++    const val REDIRECT_URI: String = "nuvio://mal-auth"
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mal/MalLibraryRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/mal/MalLibraryRepository.kt
 new file mode 100644
 index 0000000..f8f235b
@@ -8161,13 +7992,13 @@ index 0000000..f09a020
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesApiClient.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesApiClient.kt
 new file mode 100644
-index 0000000..f459e18
+index 0000000..95b9627
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesApiClient.kt
 @@ -0,0 +1,85 @@
 +package com.nuvio.app.features.opensubtitles
 +
-+import com.nuvio.app.core.logging.InAppLogger
++import co.touchlab.kermit.Logger
 +import com.nuvio.app.features.addons.httpGetTextWithHeaders
 +import com.nuvio.app.features.addons.httpPostJsonWithHeaders
 +import kotlinx.serialization.json.Json
@@ -8206,7 +8037,7 @@ index 0000000..f459e18
 +        val responseBody = httpGetTextWithHeaders(url, authHeaders(apiKey))
 +        val result = json.decodeFromString<OpenSubtitlesSearchResponse>(responseBody)
 +        println("[OpenSubtitles] searchSubtitles: imdbId=$imdbId type=$type languages=$languages → ${result.totalCount} total, ${result.data.size} items")
-+        InAppLogger.info("OpenSubtitles", "searchSubtitles: imdbId=$imdbId type=$type languages=$languages → ${result.totalCount} total, ${result.data.size} items")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchSubtitles: imdbId=$imdbId type=$type languages=$languages → ${result.totalCount} total, ${result.data.size} items")
 +        return result
 +    }
 +
@@ -8233,7 +8064,7 @@ index 0000000..f459e18
 +        val responseBody = httpGetTextWithHeaders(url, authHeaders(apiKey))
 +        val result = json.decodeFromString<OpenSubtitlesSearchResponse>(responseBody)
 +        println("[OpenSubtitles] searchSubtitlesByQuery: query=$query languages=$languages → ${result.totalCount} total, ${result.data.size} items")
-+        InAppLogger.info("OpenSubtitles", "searchSubtitlesByQuery: query=$query languages=$languages → ${result.totalCount} total, ${result.data.size} items")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchSubtitlesByQuery: query=$query languages=$languages → ${result.totalCount} total, ${result.data.size} items")
 +        return result
 +    }
 +
@@ -8246,7 +8077,7 @@ index 0000000..f459e18
 +        val responseBody = httpPostJsonWithHeaders(url, body, authHeaders(apiKey))
 +        val result = json.decodeFromString<OpenSubtitlesDownloadResponse>(responseBody)
 +        println("[OpenSubtitles] downloadSubtitle: fileId=$fileId → link=${result.link != null} remaining=${result.remaining}")
-+        InAppLogger.info("OpenSubtitles", "downloadSubtitle: fileId=$fileId → link=${result.link != null} remaining=${result.remaining}")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "downloadSubtitle: fileId=$fileId → link=${result.link != null} remaining=${result.remaining}")
 +        return result
 +    }
 +}
@@ -8371,13 +8202,13 @@ index 0000000..5ed8f30
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesRepository.kt
 new file mode 100644
-index 0000000..8c2fe6d
+index 0000000..5f7c0d1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/opensubtitles/OpenSubtitlesRepository.kt
 @@ -0,0 +1,255 @@
 +package com.nuvio.app.features.opensubtitles
 +
-+import com.nuvio.app.core.logging.InAppLogger
++import co.touchlab.kermit.Logger
 +import com.nuvio.app.features.streams.StreamSubtitle
 +
 +object OpenSubtitlesRepository {
@@ -8398,7 +8229,7 @@ index 0000000..8c2fe6d
 +    ): List<StreamSubtitle> {
 +        if (!shouldSearch()) {
 +            println("[OpenSubtitles] searchAndPrepareSubtitles: skipped (not configured)")
-+            InAppLogger.debug("OpenSubtitles", "searchAndPrepareSubtitles: skipped (not configured)")
++            Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "searchAndPrepareSubtitles: skipped (not configured)")
 +            return emptyList()
 +        }
 +
@@ -8407,12 +8238,12 @@ index 0000000..8c2fe6d
 +
 +        if (preferredLanguages.isEmpty()) {
 +            println("[OpenSubtitles] searchAndPrepareSubtitles: no preferred languages")
-+            InAppLogger.debug("OpenSubtitles", "searchAndPrepareSubtitles: no preferred languages")
++            Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "searchAndPrepareSubtitles: no preferred languages")
 +            return emptyList()
 +        }
 +
 +        println("[OpenSubtitles] searchAndPrepareSubtitles: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
-+        InAppLogger.info("OpenSubtitles", "searchAndPrepareSubtitles: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchAndPrepareSubtitles: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
 +
 +        val response = apiClient.searchSubtitles(
 +            apiKey = settings.apiKey,
@@ -8425,7 +8256,7 @@ index 0000000..8c2fe6d
 +
 +        val results = processSearchResponse(response, settings.apiKey, preferredLanguages)
 +        println("[OpenSubtitles] searchAndPrepareSubtitles: returning ${results.size} subtitles")
-+        InAppLogger.info("OpenSubtitles", "searchAndPrepareSubtitles: returning ${results.size} subtitles")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchAndPrepareSubtitles: returning ${results.size} subtitles")
 +        return results
 +    }
 +
@@ -8461,7 +8292,7 @@ index 0000000..8c2fe6d
 +    ): List<StreamSubtitle> {
 +        if (response.data.isEmpty()) {
 +            println("[OpenSubtitles] processSearchResponse: no data in response")
-+            InAppLogger.debug("OpenSubtitles", "processSearchResponse: no data in response")
++            Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "processSearchResponse: no data in response")
 +            return emptyList()
 +        }
 +
@@ -8479,7 +8310,7 @@ index 0000000..8c2fe6d
 +            )
 +
 +        println("[OpenSubtitles] processSearchResponse: ${sorted.size} candidates after sorting")
-+        InAppLogger.debug("OpenSubtitles", "processSearchResponse: ${sorted.size} candidates after sorting")
++        Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "processSearchResponse: ${sorted.size} candidates after sorting")
 +
 +        val results = mutableListOf<StreamSubtitle>()
 +        val seenLanguages = mutableSetOf<String>()
@@ -8500,7 +8331,7 @@ index 0000000..8c2fe6d
 +                val downloadUrl = downloadResponse.link
 +                if (downloadUrl == null) {
 +                    println("[OpenSubtitles] processSearchResponse: download returned no link for lang=$langCode fileId=$fileId")
-+                    InAppLogger.warn("OpenSubtitles", "download returned no link for lang=$langCode fileId=$fileId")
++                    Logger.withTag("OpenSubtitles").warn("OpenSubtitles", "download returned no link for lang=$langCode fileId=$fileId")
 +                    continue
 +                }
 +                val label = buildString {
@@ -8510,7 +8341,7 @@ index 0000000..8c2fe6d
 +                }
 +
 +                println("[OpenSubtitles] processSearchResponse: added lang=$langCode label='$label' fileId=$fileId")
-+                InAppLogger.info("OpenSubtitles", "processSearchResponse: added lang=$langCode label='$label' fileId=$fileId")
++                Logger.withTag("OpenSubtitles").info("OpenSubtitles", "processSearchResponse: added lang=$langCode label='$label' fileId=$fileId")
 +
 +                results.add(
 +                    StreamSubtitle(
@@ -8521,13 +8352,13 @@ index 0000000..8c2fe6d
 +                )
 +            } catch (e: Exception) {
 +                println("[OpenSubtitles] processSearchResponse: download failed for lang=$langCode fileId=$fileId: ${e.message}")
-+                InAppLogger.warn("OpenSubtitles", "download failed for lang=$langCode fileId=$fileId: ${e.message}")
++                Logger.withTag("OpenSubtitles").warn("OpenSubtitles", "download failed for lang=$langCode fileId=$fileId: ${e.message}")
 +                continue
 +            }
 +        }
 +
 +        println("[OpenSubtitles] processSearchResponse: returning ${results.size} subtitles for languages: ${results.map { it.language }}")
-+        InAppLogger.info("OpenSubtitles", "processSearchResponse: returning ${results.size} subtitles for languages: ${results.map { it.language }}")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "processSearchResponse: returning ${results.size} subtitles for languages: ${results.map { it.language }}")
 +        return results
 +    }
 +
@@ -8539,7 +8370,7 @@ index 0000000..8c2fe6d
 +    ): List<OpenSubtitlesSubtitleItem> {
 +        if (!isConfigured()) {
 +            println("[OpenSubtitles] searchManual: skipped (not configured)")
-+            InAppLogger.debug("OpenSubtitles", "searchManual: skipped (not configured)")
++            Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "searchManual: skipped (not configured)")
 +            return emptyList()
 +        }
 +
@@ -8547,12 +8378,12 @@ index 0000000..8c2fe6d
 +        val preferredLanguages = settings.languages.toList()
 +        if (preferredLanguages.isEmpty()) {
 +            println("[OpenSubtitles] searchManual: no preferred languages")
-+            InAppLogger.debug("OpenSubtitles", "searchManual: no preferred languages")
++            Logger.withTag("OpenSubtitles").debug("OpenSubtitles", "searchManual: no preferred languages")
 +            return emptyList()
 +        }
 +
 +        println("[OpenSubtitles] searchManual: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
-+        InAppLogger.info("OpenSubtitles", "searchManual: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchManual: imdbId=$imdbId type=$type S${seasonNumber}E${episodeNumber} languages=$preferredLanguages")
 +
 +        val response = apiClient.searchSubtitles(
 +            apiKey = settings.apiKey,
@@ -8587,7 +8418,7 @@ index 0000000..8c2fe6d
 +            }
 +
 +        println("[OpenSubtitles] searchManual: returning ${items.size} items")
-+        InAppLogger.info("OpenSubtitles", "searchManual: returning ${items.size} items")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "searchManual: returning ${items.size} items")
 +        return items
 +    }
 +
@@ -8595,25 +8426,25 @@ index 0000000..8c2fe6d
 +        val settings = settingsRepository.snapshot()
 +        if (!settings.hasApiKey) {
 +            println("[OpenSubtitles] downloadItem: no API key")
-+            InAppLogger.warn("OpenSubtitles", "downloadItem: no API key")
++            Logger.withTag("OpenSubtitles").warn("OpenSubtitles", "downloadItem: no API key")
 +            return null
 +        }
 +        println("[OpenSubtitles] downloadItem: fileId=${item.fileId} language=${item.language}")
-+        InAppLogger.info("OpenSubtitles", "downloadItem: fileId=${item.fileId} language=${item.language}")
++        Logger.withTag("OpenSubtitles").info("OpenSubtitles", "downloadItem: fileId=${item.fileId} language=${item.language}")
 +        return try {
 +            val response = apiClient.downloadSubtitle(settings.apiKey, item.fileId)
 +            val link = response.link
 +            if (link != null) {
 +                println("[OpenSubtitles] downloadItem: success, link=${link.take(60)}...")
-+                InAppLogger.info("OpenSubtitles", "downloadItem: success")
++                Logger.withTag("OpenSubtitles").info("OpenSubtitles", "downloadItem: success")
 +            } else {
 +                println("[OpenSubtitles] downloadItem: response has no link")
-+                InAppLogger.warn("OpenSubtitles", "downloadItem: response has no link")
++                Logger.withTag("OpenSubtitles").warn("OpenSubtitles", "downloadItem: response has no link")
 +            }
 +            link
 +        } catch (e: Exception) {
 +            println("[OpenSubtitles] downloadItem: error: ${e.message}")
-+            InAppLogger.error("OpenSubtitles", "downloadItem error: ${e.message}")
++            Logger.withTag("OpenSubtitles").error("OpenSubtitles", "downloadItem error: ${e.message}")
 +            null
 +        }
 +    }
@@ -8930,96 +8761,6 @@ index 6db6d05..4c47d25 100644
 -}
 \ No newline at end of file
 +}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
-new file mode 100644
-index 0000000..5bad106
---- /dev/null
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
-@@ -0,0 +1,30 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.foundation.layout.fillMaxSize
-+import androidx.compose.runtime.Composable
-+import androidx.compose.ui.Modifier
-+import com.nuvio.app.core.ui.NuvioScreen
-+import com.nuvio.app.core.ui.NuvioScreenHeader
-+import com.nuvio.app.features.downloads.DownloadsSettingsRepository
-+import nuvio.composeapp.generated.resources.Res
-+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
-+import org.jetbrains.compose.resources.stringResource
-+
-+@Composable
-+fun DownloadsSettingsScreen(
-+    onBack: () -> Unit,
-+) {
-+    DownloadsSettingsRepository.ensureLoaded()
-+
-+    NuvioScreen(
-+        modifier = Modifier.fillMaxSize(),
-+    ) {
-+        stickyHeader {
-+            NuvioScreenHeader(
-+                title = stringResource(Res.string.compose_settings_root_downloads_title),
-+                onBack = onBack,
-+            )
-+        }
-+        downloadsSettingsContent(isTablet = false)
-+    }
-+}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/Top10CatalogSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/Top10CatalogSettingsScreen.kt
-new file mode 100644
-index 0000000..3b4deae
---- /dev/null
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/Top10CatalogSettingsScreen.kt
-@@ -0,0 +1,47 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.foundation.layout.fillMaxSize
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.getValue
-+import androidx.compose.runtime.remember
-+import androidx.compose.ui.Modifier
-+import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import com.nuvio.app.core.ui.NuvioScreen
-+import com.nuvio.app.core.ui.NuvioScreenHeader
-+import com.nuvio.app.features.addons.AddonRepository
-+import com.nuvio.app.features.home.Top10CatalogRepository
-+import com.nuvio.app.features.home.buildHomeCatalogDefinitions
-+import nuvio.composeapp.generated.resources.*
-+import org.jetbrains.compose.resources.stringResource
-+@Composable
-+fun Top10CatalogSettingsScreen(
-+    onBack: () -> Unit,
-+    modifier: Modifier = Modifier,
-+) {
-+    val top10UiState by Top10CatalogRepository.uiState.collectAsStateWithLifecycle()
-+    val addonsUiState by remember {
-+        AddonRepository.initialize()
-+        AddonRepository.uiState
-+    }.collectAsStateWithLifecycle()
-+
-+    val availableCatalogs = remember(addonsUiState.addons) {
-+        buildHomeCatalogDefinitions(addonsUiState.addons)
-+    }
-+
-+    NuvioScreen(
-+        modifier = modifier.fillMaxSize(),
-+    ) {
-+        stickyHeader {
-+            NuvioScreenHeader(
-+                title = stringResource(Res.string.top10_header),
-+                onBack = onBack,
-+            )
-+        }
-+
-+        top10CatalogSettingsContent(
-+            isTablet = false,
-+            uiState = top10UiState,
-+            availableCatalogs = availableCatalogs,
-+        )
-+    }
-+}
-\ No newline at end of file
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/telegram/TelegramAuthState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/telegram/TelegramAuthState.kt
 new file mode 100644
 index 0000000..c9cdc45
@@ -9641,14 +9382,13 @@ index 0000000..00be5ac
 +}
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/cloudstream/CloudStreamRepository.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/cloudstream/CloudStreamRepository.kt
 new file mode 100644
-index 0000000..dae5e86
+index 0000000..35d707f
 --- /dev/null
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/cloudstream/CloudStreamRepository.kt
-@@ -0,0 +1,632 @@
+@@ -0,0 +1,636 @@
 +package com.nuvio.app.features.cloudstream
 +
 +import co.touchlab.kermit.Logger
-+import com.nuvio.app.features.addons.httpGetBytesWithHeaders
 +import com.nuvio.app.features.addons.httpGetText
 +import com.nuvio.app.features.addons.httpRequestRaw
 +import com.nuvio.app.features.plugins.currentEpochMillis
@@ -9983,10 +9723,15 @@ index 0000000..dae5e86
 +        }
 +        markInstalling(pluginId, true, null)
 +        return runCatching {
-+            val bytes = httpGetBytesWithHeaders(
-+                item.metadata.packageUrl,
++            val raw = httpRequestRaw(
++                method = "GET",
++                url = item.metadata.packageUrl,
 +                headers = mapOf("Accept" to "application/zip, application/octet-stream"),
++                body = "",
++                maxResponseBodyBytes = 50 * 1024 * 1024,
 +            )
++            require(raw.status in 200..299) { "Failed to download package: HTTP ${raw.status}" }
++            val bytes = raw.body.encodeToByteArray()
 +            require(bytes.isNotEmpty()) { "Downloaded .cs3 package is empty" }
 +            item.metadata.fileSize?.let { expectedSize ->
 +                if (bytes.size.toLong() != expectedSize) {
@@ -10562,10 +10307,10 @@ index 0000000..fb44548
 +}
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/CloudStreamSettingsSection.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/CloudStreamSettingsSection.kt
 new file mode 100644
-index 0000000..fc9a6a0
+index 0000000..96ee877
 --- /dev/null
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/CloudStreamSettingsSection.kt
-@@ -0,0 +1,869 @@
+@@ -0,0 +1,856 @@
 +package com.nuvio.app.features.plugins
 +
 +import androidx.compose.foundation.BorderStroke
@@ -10627,8 +10372,6 @@ index 0000000..fc9a6a0
 +import com.nuvio.app.features.cloudstream.CloudStreamRepository
 +import com.nuvio.app.features.settings.AppLanguage
 +import com.nuvio.app.features.settings.ThemeSettingsRepository
-+import com.nuvio.app.features.streams.StreamSourcePreferencesRepository
-+import com.nuvio.app.features.streams.cloudStreamAddonId
 +import kotlinx.coroutines.launch
 +
 +@OptIn(ExperimentalLayoutApi::class)
@@ -10640,9 +10383,6 @@ index 0000000..fc9a6a0
 +    }
 +    val state by CloudStreamRepository.uiState.collectAsStateWithLifecycle()
 +    val selectedAppLanguage by ThemeSettingsRepository.selectedAppLanguage.collectAsStateWithLifecycle()
-+    val sourcePreferences by remember {
-+        StreamSourcePreferencesRepository.ensureLoaded()
-+        StreamSourcePreferencesRepository.uiState
 +    }.collectAsStateWithLifecycle()
 +    val effectiveLanguage = remember(selectedAppLanguage) { resolveEffectiveLanguage(selectedAppLanguage) }
 +    val copy = remember(effectiveLanguage) { CloudStreamSettingsCopy.forLanguage(effectiveLanguage) }
@@ -10684,8 +10424,6 @@ index 0000000..fc9a6a0
 +                (!item.isRunnable || item.hasUpdate || !item.isInstalled || !item.verified)
 +        }
 +    }
-+    val pinnedSourceIds = remember(sourcePreferences.pinnedSources) {
-+        sourcePreferences.pinnedSources.map { it.id }.toSet()
 +    }
 +
 +    NuvioSectionLabel(copy.sectionTitle)
@@ -10899,7 +10637,7 @@ index 0000000..fc9a6a0
 +        CloudStreamPluginCard(
 +            plugin = plugin,
 +            securityWarningAccepted = state.securityWarningAccepted,
-+            pinnedSourceIds = pinnedSourceIds,
++            
 +            copy = copy,
 +            onMessage = { message = it },
 +        )
@@ -10929,14 +10667,12 @@ index 0000000..fc9a6a0
 +private fun CloudStreamPluginCard(
 +    plugin: CloudStreamPluginItem,
 +    securityWarningAccepted: Boolean,
-+    pinnedSourceIds: Set<String>,
++    
 +    copy: CloudStreamSettingsCopy,
 +    onMessage: (String) -> Unit,
 +) {
 +    val scope = rememberCoroutineScope()
-+    val sourceId = remember(plugin.metadata.id.value) { cloudStreamAddonId(plugin.metadata.id.value) }
-+    val isPinnedSource = sourceId in pinnedSourceIds
-+    NuvioSurfaceCard {
++        NuvioSurfaceCard {
 +        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
 +            AsyncImage(
 +                model = plugin.metadata.iconUrl,
@@ -10954,9 +10690,7 @@ index 0000000..fc9a6a0
 +                )
 +            }
 +            Row(verticalAlignment = Alignment.CenterVertically) {
-+                NuvioIconActionButton(
-+                    icon = Icons.Rounded.PushPin,
-+                    contentDescription = if (isPinnedSource) copy.unpinSource else copy.pinSource,
++                copy.unpinSource else copy.pinSource,
 +                    tint = if (isPinnedSource) {
 +                        MaterialTheme.colorScheme.primary
 +                    } else {
@@ -10964,9 +10698,7 @@ index 0000000..fc9a6a0
 +                    },
 +                    onClick = {
 +                        if (isPinnedSource) {
-+                            StreamSourcePreferencesRepository.unpinSource(sourceId)
 +                        } else {
-+                            StreamSourcePreferencesRepository.pinSource(sourceId, plugin.metadata.name)
 +                        }
 +                    },
 +                )
