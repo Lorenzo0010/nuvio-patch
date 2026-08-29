@@ -6,10 +6,9 @@ Questo documento riassume tutte le funzionalità e personalizzazioni avanzate in
 
 ## 🎨 Interfaccia & Personalizzazione Visiva
 
-### 1. Barra di Navigazione GlassMorph
-- Barra di navigazione inferiore traslucida in stile "vetro smerigliato" (*Frosted Glass*).
-- Si adatta automaticamente al colore accent del tema selezionato e rispetta le aree sicure (safe insets) su schermi bordless.
-- Fluidità e feedback tattile nativo durante il cambio di tab.
+### 1. Barra di Navigazione Ufficiale con Live TV e Download
+- Utilizza la barra di navigazione ufficiale fluttuante di Nuvio (con animazione etichette, scroll state e blur Haze) e la modalità classica.
+- Include le due schede dedicate aggiuntive: **Live TV** e **Download**, per un totale di 6 tab (Home, Cerca, Libreria, Live TV, Download, Profilo/Impostazioni).
 
 ### 2. Modalità AMOLED (Nero Puro)
 - **Toggle AMOLED Base:** Imposta lo sfondo dell'app su nero assoluto (`#000000`) per massimizzare il risparmio energetico sui display OLED.

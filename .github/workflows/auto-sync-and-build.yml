@@ -151,8 +151,11 @@ jobs:
           
           # local.properties
           cat << 'EOF' > local.properties
-          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL || 'https://api.nuvio.tv' }}
+          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
+          NUVIO_SUPABASE_URL=${{ secrets.NUVIO_SUPABASE_URL || secrets.SUPABASE_URL || 'https://api.nuvio.tv' }}
+          NUVIO_SUPABASE_ANON_KEY=${{ secrets.NUVIO_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
+          NUVIO_SUPABASE_FALLBACK_URL=${{ secrets.NUVIO_SUPABASE_FALLBACK_URL || 'https://api-two.nuvioapp.space' }}
           TRAKT_CLIENT_ID=${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET=${{ secrets.TRAKT_CLIENT_SECRET }}
           TRAKT_REDIRECT_URI=${{ secrets.TRAKT_REDIRECT_URI }}
