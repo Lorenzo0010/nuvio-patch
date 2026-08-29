@@ -1,0 +1,22 @@
+# Build and Gradle
+.gradle/
+build/
+**/build/
+*.apk
+*.aab
+
+# Local configuration
+local.properties
+*.keystore
+*.jks
+
+# IDE and OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Scratch and temp build files
+build_src/
+temp/
+scratch/
