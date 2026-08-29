@@ -179,10 +179,10 @@ jobs:
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           if [ "$BUILD_TYPE" == "debug" ]; then
             echo "Compilazione APK Debug (Full)..."
-            ./gradlew :composeApp:assembleFullDebug -Pnuvio.android.distribution=full --stacktrace
+            ./gradlew :composeApp:assembleDebug -Pnuvio.android.distribution=full --stacktrace
           else
             echo "Compilazione APK Release (Full)..."
-            ./gradlew :composeApp:assembleFullRelease -Pnuvio.android.distribution=full --stacktrace
+            ./gradlew :composeApp:assembleRelease -Pnuvio.android.distribution=full --stacktrace
           fi
 
       # 6. Preparazione artefatto APK

@@ -1,3 +1,16 @@
+diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
+index dfacfd6..8f33c53 100644
+--- a/composeApp/build.gradle.kts
++++ b/composeApp/build.gradle.kts
+@@ -424,7 +424,7 @@ kotlin {
+                 implementation(libs.androidx.media3.extractor)
+                 implementation(libs.mpv.android.lib)
+                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+-                implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
++                implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+                 if (androidDistribution == "full") {
+                     implementation(files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
+                     implementation(libs.ksoup)
 diff --git a/composeApp/src/androidFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.android.kt b/composeApp/src/androidFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.android.kt
 index 613f767..fc91c4d 100644
 --- a/composeApp/src/androidFull/kotlin/com/nuvio/app/features/plugins/PluginPlatform.android.kt
