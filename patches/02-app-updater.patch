@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..5d3fdf9 100644
+index d0b40fc8..936b8436 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
@@ -16,3 +16,16 @@ index d0b40fc..5d3fdf9 100644
  
  data class AppUpdate(
      val tag: String,
+@@ -90,9 +90,10 @@ private object VersionUtils {
+         val normalized = normalize(raw)
+         if (normalized.isBlank()) return null
+ 
+-        val parts = normalized.split('.', '-', '_')
++        val semverCore = normalized.substringBefore('-').substringBefore('+').trim()
++        val parts = semverCore.split('.')
+             .filter { it.isNotBlank() }
+-            .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
++            .mapNotNull { it.toIntOrNull() }
+ 
+         return parts.takeIf { it.isNotEmpty() }
+     }
