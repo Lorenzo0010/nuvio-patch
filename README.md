@@ -1,18 +1,20 @@
-# 🚀 Nuvio Mobile Enhanced — Auto-Sync & Build Pipeline
+# 🚀 Nuvio Plus — Auto-Sync & Build Pipeline
 
-Questo repository mantiene le patch e le funzionalità **Enhanced** per [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) e include una pipeline **GitHub Actions** automatizzata che:
+Questo repository mantiene le patch e le funzionalità **Plus** per [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) e include una pipeline **GitHub Actions** automatizzata che:
 1. 🔍 **Monitora continuamente** il repository ufficiale (`NuvioMedia/NuvioMobile:cmp-rewrite`).
-2. 🔄 **Sincronizza e applica le patch Enhanced** appena viene rilasciato un nuovo aggiornamento o commit.
+2. 🔄 **Sincronizza e applica le patch Plus** appena viene rilasciato un nuovo aggiornamento o commit.
 3. 🛠️ **Compila l'APK Android** (Release o Debug).
 4. 📦 **Pubblica una nuova Release su GitHub** con l'APK pronto da scaricare e installare.
-5. ⚠️ **Apre automaticamente una Issue** se un aggiornamento a monte introduce conflitti di codice.
+5. ⚡ **Isolamento Completo:** Application ID `com.nuvio.app.plus` e FileProvider indipendente per evitare conflitti con la versione ufficiale di Nuvio.
+6. ⚠️ **Apre automaticamente una Issue** se un aggiornamento a monte introduce conflitti di codice.
 
 ---
 
-## ✨ Funzionalità Enhanced Incluse
+## ✨ Funzionalità Plus Incluse
 
 Consulta il file [ENHANCEMENTS.md](ENHANCEMENTS.md) per l'elenco e la spiegazione dettagliata di tutte le caratteristiche.
 
+- ⚡ **Nuvio Plus Side-by-Side:** Package ID `com.nuvio.app.plus` installabile in parallelo all'app originale senza conflitti.
 - 📺 **Live TV (M3U / EPG):** Canali in streaming, ricerca in tempo reale, gestione preferiti e categorie.
 - 🖤 **Modalità AMOLED Puro:** Sfondi e superfici neri (`#000000`) per display OLED.
 - 🎨 **GlassMorph BottomBar:** Barra di navigazione traslucida e selettore colore HEX/HSV.

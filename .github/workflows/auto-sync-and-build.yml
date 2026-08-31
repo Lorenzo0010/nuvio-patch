@@ -170,7 +170,7 @@ jobs:
         run: |
           SHORT_SHA="${{ steps.upstream_info.outputs.short_sha }}"
           VERSION_NAME=$(grep -o '"version": *"[^"]*"' version.json | cut -d '"' -f 4 || echo "0.4.11")
-          RELEASE_TAG="v${VERSION_NAME}-enhanced-${SHORT_SHA}"
+          RELEASE_TAG="v${VERSION_NAME}-plus-${SHORT_SHA}"
           
           # Cerca l'APK generato
           APK_FILE=$(find androidApp/build/outputs/apk composeApp/build/outputs/apk -name "*.apk" -not -name "*unaligned*" 2>/dev/null | head -n 1)
@@ -180,7 +180,7 @@ jobs:
             exit 1
           fi
           
-          OUTPUT_NAME="NuvioMobile-Enhanced-${RELEASE_TAG}.apk"
+          OUTPUT_NAME="NuvioPlus-${RELEASE_TAG}.apk"
           cp "$APK_FILE" "../$OUTPUT_NAME"
           
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
@@ -193,11 +193,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.package_apk.outputs.tag }}
-          name: "Nuvio Mobile Enhanced ${{ steps.package_apk.outputs.tag }}"
+          name: "Nuvio Plus ${{ steps.package_apk.outputs.tag }}"
           draft: false
           prerelease: false
           body: |
-            ## 🚀 Nuvio Mobile Enhanced — Nuova Build
+            ## 🚀 Nuvio Plus — Nuova Build
             
             Build compilata e firmata automaticamente in seguito all'ultimo commit.
             
@@ -207,10 +207,11 @@ jobs:
             - **Versione App:** `${{ steps.package_apk.outputs.version }}`
             - **Tag Release:** `${{ steps.package_apk.outputs.tag }}`
             
-            ### ✨ Funzionalità Enhanced Incluse:
+            ### ✨ Funzionalità Plus Incluse:
             - 📺 **Live TV:** Supporto canali e playlist M3U/M3U8 con EPG, ricerca e filtri categorie.
             - 🧭 **Barra di Navigazione:** Schede dedicate per Live TV & Download.
             - 🔄 **App Updater Integrato:** Aggiornamenti automatici gestiti da questo repository.
+            - ⚡ **Package ID Indipendente:** `com.nuvio.app.plus` installabile in parallelo all'app originale.
           files: ${{ steps.package_apk.outputs.apk_path }}
         env:
           GITHUB_TOKEN: ${{ github.token }}

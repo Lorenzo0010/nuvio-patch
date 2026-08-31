@@ -1,5 +1,5 @@
 diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
-index ea9aaf3..dcd1f29 100644
+index ea9aaf39..9c80a863 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
 @@ -64,7 +64,7 @@ android {
@@ -7,7 +7,7 @@ index ea9aaf3..dcd1f29 100644
  
      defaultConfig {
 -        applicationId = "com.nuvio.app"
-+        applicationId = "com.nuvio.app.enhanced"
++        applicationId = "com.nuvio.app.plus"
          minSdk = libs.versions.android.minSdk.get().toInt()
          targetSdk = libs.versions.android.targetSdk.get().toInt()
          versionCode = releaseAppVersionCode
@@ -25,31 +25,44 @@ index ea9aaf3..dcd1f29 100644
  
 diff --git a/androidApp/src/main/res/values/strings.xml b/androidApp/src/main/res/values/strings.xml
 new file mode 100644
-index 0000000..870ab74
+index 00000000..1c978a7c
 --- /dev/null
 +++ b/androidApp/src/main/res/values/strings.xml
 @@ -0,0 +1,4 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="app_name">Nuvio Enhanced</string>
++    <string name="app_name">Nuvio Plus</string>
 +</resources>
 diff --git a/composeApp/src/androidMain/res/values-es/strings.xml b/composeApp/src/androidMain/res/values-es/strings.xml
-index f5bd09e..870ab74 100644
+index f5bd09e2..1c978a7c 100644
 --- a/composeApp/src/androidMain/res/values-es/strings.xml
 +++ b/composeApp/src/androidMain/res/values-es/strings.xml
 @@ -1,4 +1,4 @@
  <?xml version="1.0" encoding="utf-8"?>
  <resources>
 -    <string name="app_name">Nuvio</string>
-+    <string name="app_name">Nuvio Enhanced</string>
++    <string name="app_name">Nuvio Plus</string>
  </resources>
 diff --git a/composeApp/src/androidMain/res/values/strings.xml b/composeApp/src/androidMain/res/values/strings.xml
-index ca8ee55..1eeca3e 100644
+index ca8ee554..1a6cd817 100644
 --- a/composeApp/src/androidMain/res/values/strings.xml
 +++ b/composeApp/src/androidMain/res/values/strings.xml
 @@ -1,3 +1,3 @@
  <resources>
 -    <string name="app_name">Nuvio</string>
-+    <string name="app_name">Nuvio Enhanced</string>
++    <string name="app_name">Nuvio Plus</string>
  </resources>
 \ No newline at end of file
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 58d554ab..4b74cc7d 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -1622,7 +1622,7 @@
+     <string name="addon_already_installed">That addon is already installed.</string>
+     <string name="addon_invalid_url">Enter a valid addon URL</string>
+     <string name="addon_load_manifest_failed">Unable to load manifest</string>
+-    <string name="app_brand_name">Nuvio</string>
++    <string name="app_brand_name">Nuvio Plus</string>
+     <string name="auth_account_deletion_failed">Account deletion failed</string>
+     <string name="auth_sign_in_failed">Sign-in failed</string>
+     <string name="auth_sign_out_failed">Sign-out failed</string>
