@@ -19,7 +19,7 @@ index 66d6dcd..e25a64e 100644
          DownloadsLiveStatusPlatform.initialize(applicationContext)
          AndroidAppUpdaterPlatform.initialize(applicationContext)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index ce4005b..4969bd0 100644
+index ce4005b..f31cea9 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.downloads
@@ -30,7 +30,7 @@ index ce4005b..4969bd0 100644
  import androidx.core.content.FileProvider
  import kotlinx.coroutines.CancellationException
  import kotlinx.coroutines.CoroutineScope
-@@ -27,9 +28,10 @@ import javax.crypto.spec.SecretKeySpec
+@@ -27,13 +28,19 @@ import javax.crypto.spec.SecretKeySpec
  import kotlin.coroutines.coroutineContext
  
  private val downloadHttpClient = OkHttpClient.Builder()
@@ -44,18 +44,15 @@ index ce4005b..4969bd0 100644
      .followRedirects(true)
      .followSslRedirects(true)
      .build()
-@@ -41,6 +43,11 @@ internal actual object DownloadsPlatformDownloader {
-         appContext = context.applicationContext
-     }
  
-+    private fun getDownloadsDir(context: Context): File {
-+        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-+        return File(publicDownloads, "nuvio").apply { mkdirs() }
-+    }
++private fun getDownloadsDir(context: Context): File {
++    val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
++    return File(publicDownloads, "nuvio").apply { mkdirs() }
++}
 +
-     actual fun start(
-         request: DownloadPlatformRequest,
-         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
+ internal actual object DownloadsPlatformDownloader {
+     private var appContext: Context? = null
+ 
 @@ -83,100 +90,114 @@ internal actual object DownloadsPlatformDownloader {
                  return@launch
              }
