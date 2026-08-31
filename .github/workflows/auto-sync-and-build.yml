@@ -169,7 +169,10 @@ jobs:
         working-directory: build_src
         run: |
           SHORT_SHA="${{ steps.upstream_info.outputs.short_sha }}"
-          VERSION_NAME=$(grep -o '"version": *"[^"]*"' version.json | cut -d '"' -f 4 || echo "0.4.11")
+          VERSION_NAME=$(grep "MARKETING_VERSION" iosApp/Configuration/Version.xcconfig 2>/dev/null | cut -d '=' -f2 | tr -d ' ' | tr -d '\r' || echo "0.4.13")
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="0.4.13"
+          fi
           RELEASE_TAG="v${VERSION_NAME}-plus-${SHORT_SHA}"
           
           # Cerca l'APK generato
