@@ -25,10 +25,29 @@ index eb08c54..07dccf8 100644
              android:name="androidx.core.content.FileProvider"
              android:authorities="${applicationId}.fileprovider"
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index dfacfd6..881b9f9 100644
+index dfacfd6..f275df6 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -422,6 +422,10 @@ kotlin {
+@@ -286,12 +286,14 @@ fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
+ 
+ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
+     outputDir.set(generatedRuntimeConfigDir)
+-    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
++    if (rootProject.file("local.properties").exists()) {
++        localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
++    }
+     appVersionName.set(releaseAppVersionName)
+     appVersionCode.set(releaseAppVersionCode)
+-    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
+-    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
+-    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
++    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://api.nuvio.tv"))
++    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"))
++    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api-two.nuvioapp.space"))
+     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
+     sentryEnvironment.set(
+         when {
+@@ -422,6 +424,10 @@ kotlin {
                  implementation(libs.androidx.media3.common)
                  implementation(libs.androidx.media3.container)
                  implementation(libs.androidx.media3.extractor)
@@ -1824,13 +1843,128 @@ index cc827e5..b04cc03 100644
 +  <string name="downloads_save">Salva sul dispositivo</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 6fd8f8b..5693b68 100644
+index 8217022..5693b68 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -627,6 +627,27 @@
-     <string name="downloads_status_downloading">Downloading • %1$s</string>
+@@ -1,4 +1,4 @@
+-﻿<resources>
++<resources>
+     <string name="theme_gold">Gold</string>
+     <string name="theme_jade">Jade</string>
+     <string name="theme_rose_gold">Rose Gold</string>
+@@ -30,7 +30,7 @@
+     <string name="action_resume">Resume</string>
+     <string name="action_retry">Retry</string>
+     <string name="action_save">Save</string>
+-    <string name="action_saving">Savingâ€¦</string>
++    <string name="action_saving">Saving…</string>
+     <string name="action_switch">Switch</string>
+     <string name="action_validate">Validate</string>
+     <string name="addon_installing">Installing</string>
+@@ -51,7 +51,7 @@
+     <string name="addons_appstore_input_placeholder">Addon URL</string>
+     <string name="addons_appstore_install_button">Add Addon</string>
+     <string name="store_empty_unavailable_title">Nothing here yet</string>
+-    <string name="store_empty_unavailable_message">Your current addons donâ€™t have anything to show here.</string>
++    <string name="store_empty_unavailable_message">Your current addons don’t have anything to show here.</string>
+     <string name="addons_empty_subtitle">Add a manifest URL to start loading catalogs, metadata, streams or subtitles into Nuvio.</string>
+     <string name="addons_empty_title">No addons installed yet.</string>
+     <string name="addons_error_enter_url">Enter an addon URL.</string>
+@@ -126,7 +126,7 @@
+     <string name="collections_editor_show_all_tab">Show \"All\" Tab</string>
+     <string name="collections_editor_show_gif_when_configured_desc">Play the configured GIF instead of the static cover when available.</string>
+     <string name="collections_editor_show_gif_when_configured">Show GIF When Configured</string>
+-    <string name="collections_editor_source_count">%1$d source(s) Â· %2$s</string>
++    <string name="collections_editor_source_count">%1$d source(s) · %2$s</string>
+     <string name="collections_editor_tile_shape">Tile Shape</string>
+     <string name="collections_editor_view_mode_rows">Rows</string>
+     <string name="collections_editor_view_mode_tabs">Tabs</string>
+@@ -334,7 +334,7 @@
+     <string name="collections_pinned">Pinned</string>
+     <string name="collections_tab_all">All</string>
+     <string name="collections_your_collections">Your Collections</string>
+-    <string name="compose_about_made_with">Made with â¤ï¸ by Tapframe and friends</string>
++    <string name="compose_about_made_with">Made with ❤️ by Tapframe and friends</string>
+     <string name="compose_about_version_format">Version %1$s (%2$s)</string>
+     <string name="compose_action_off">Off</string>
+     <string name="compose_action_on">On</string>
+@@ -347,14 +347,14 @@
+     <string name="compose_auth_email">Email</string>
+     <string name="compose_auth_link_cancel">Cancel</string>
+     <string name="compose_auth_link_code_expired">This code expired.</string>
+-    <string name="compose_auth_link_creating_code">Creating codeâ€¦</string>
++    <string name="compose_auth_link_creating_code">Creating code…</string>
+     <string name="compose_auth_link_failed">Link sign-in failed.</string>
+     <string name="compose_auth_link_open">Open nuvio.tv/link</string>
+     <string name="compose_auth_link_open_failed">Couldn't open the link.</string>
+     <string name="compose_auth_link_sign_in">Sign In with Link</string>
+-    <string name="compose_auth_link_signing_in">Signing inâ€¦</string>
++    <string name="compose_auth_link_signing_in">Signing in…</string>
+     <string name="compose_auth_link_try_again">Try Again</string>
+-    <string name="compose_auth_link_waiting">Waiting for approvalâ€¦</string>
++    <string name="compose_auth_link_waiting">Waiting for approval…</string>
+     <string name="compose_auth_or_separator">  or  </string>
+     <string name="compose_auth_password">Password</string>
+     <string name="compose_auth_sign_in_subtitle">Sign in to access your library and progress</string>
+@@ -374,7 +374,7 @@
+     <string name="server_connect_subtitle">Enter the Backend URL provided by your server administrator.</string>
+     <string name="server_connect_url_placeholder">https://backend.example.com</string>
+     <string name="server_connect_action">Check server</string>
+-    <string name="server_connect_checking">Checkingâ€¦</string>
++    <string name="server_connect_checking">Checking…</string>
+     <string name="server_review_title">Review custom server</string>
+     <string name="server_review_description">The discovery document is valid. Connecting will sign you out of the current server and restart the app. Confirm that this is a server you own or trust.</string>
+     <string name="server_review_verified_label">Discovered backend</string>
+@@ -390,7 +390,7 @@
+     <string name="server_official_title">Use official server?</string>
+     <string name="server_official_body">You will be signed out of the custom server and the app will restart with the official service.</string>
+     <string name="server_official_action">Use official server</string>
+-    <string name="server_switching">Switchingâ€¦</string>
++    <string name="server_switching">Switching…</string>
+     <string name="server_error_invalid_url">Enter a valid HTTP or HTTPS Backend URL.</string>
+     <string name="server_error_official_active">api.nuvio.tv is the official server and is already selected.</string>
+     <string name="server_error_official_available">api.nuvio.tv is the official server. Close this dialog and choose Use official server to switch back.</string>
+@@ -425,7 +425,7 @@
+     <string name="compose_player_currently_playing">Currently playing</string>
+     <string name="compose_player_episode_code_episode_only">E%1$d</string>
+     <string name="compose_player_episode_code_full">S%1$dE%2$d</string>
+-    <string name="compose_player_episode_title_format">S%1$dE%2$d â€¢ %3$s</string>
++    <string name="compose_player_episode_title_format">S%1$dE%2$d • %3$s</string>
+     <string name="compose_player_episodes">Episodes</string>
+     <string name="compose_player_font_size">Font Size</string>
+     <string name="compose_player_font_size_value">%1$dsp</string>
+@@ -528,7 +528,7 @@
+     <string name="compose_settings_root_content_discovery_description">Manage addons and discovery sources.</string>
+     <string name="compose_settings_root_content_discovery_description_appstore">Manage addons and choose what appears in Nuvio.</string>
+     <string name="compose_settings_root_downloads_description">Manage your downloaded movies and episodes.</string>
+-    <string name="compose_settings_root_downloads_description_appstore">Manage what youâ€™ve saved on this device.</string>
++    <string name="compose_settings_root_downloads_description_appstore">Manage what you’ve saved on this device.</string>
+     <string name="compose_settings_root_downloads_title">Downloads</string>
+     <string name="compose_settings_root_general_section">GENERAL</string>
+     <string name="compose_settings_root_integrations_description">Manage available integrations</string>
+@@ -593,9 +593,9 @@
+     <string name="settings_licenses_attributions_exoplayer_title">AndroidX Media3 ExoPlayer 1.8.0</string>
+     <string name="settings_licenses_attributions_exoplayer_body">Used for playback on Android builds.</string>
+     <string name="settings_licenses_attributions_exoplayer_license">Licensed under the Apache License, Version 2.0.</string>
+-    <string name="compose_trakt_list_picker_loading">Loading your Trakt listsâ€¦</string>
++    <string name="compose_trakt_list_picker_loading">Loading your Trakt lists…</string>
+     <string name="compose_trakt_list_picker_subtitle">Choose where to save this title on Trakt</string>
+-    <string name="compose_tracking_list_picker_loading">Loading listsâ€¦</string>
++    <string name="compose_tracking_list_picker_loading">Loading lists…</string>
+     <string name="compose_tracking_list_picker_subtitle">Choose where to save this title</string>
+     <string name="action_donate">Donate</string>
+     <string name="action_support_nuvio">Support Nuvio</string>
+@@ -623,10 +623,31 @@
+     <string name="downloads_section_movies">Movies</string>
+     <string name="downloads_section_shows">Shows</string>
+     <string name="downloads_show_downloads">Show Downloads</string>
+-    <string name="downloads_status_completed">Completed â€¢ %1$s</string>
+-    <string name="downloads_status_downloading">Downloading â€¢ %1$s</string>
++    <string name="downloads_status_completed">Completed • %1$s</string>
++    <string name="downloads_status_downloading">Downloading • %1$s</string>
      <string name="downloads_status_failed">Failed</string>
-     <string name="downloads_status_paused">Paused • %1$s</string>
+-    <string name="downloads_status_paused">Paused â€¢ %1$s</string>
++    <string name="downloads_status_paused">Paused • %1$s</string>
 +    <string name="downloads_status_processing">Processing • %1$s</string>
 +    <string name="downloads_phase_remux">Remuxing</string>
 +    <string name="downloads_track_video">Video</string>
@@ -1855,6 +1989,274 @@ index 6fd8f8b..5693b68 100644
      <string name="episodes_cd_watched">Watched</string>
      <string name="episodes_season">Season %1$d</string>
      <string name="episodes_specials">Specials</string>
+@@ -680,15 +701,15 @@
+     <string name="settings_appearance_section_display">DISPLAY</string>
+     <string name="settings_appearance_section_home">HOME</string>
+     <string name="settings_appearance_section_theme">THEME</string>
+-    <string name="settings_homescreen_collection_with_addon">Collection â€¢ %1$s</string>
++    <string name="settings_homescreen_collection_with_addon">Collection • %1$s</string>
+     <string name="settings_homescreen_display_name">Display Name</string>
+     <string name="settings_homescreen_empty_message">Enable or add an addon with catalogs to configure Home.</string>
+     <string name="settings_homescreen_empty_title">No home catalogs</string>
+-    <string name="settings_homescreen_load_failed_title">Couldnâ€™t load Home catalogs</string>
++    <string name="settings_homescreen_load_failed_title">Couldn’t load Home catalogs</string>
+     <string name="settings_homescreen_hero_source">Hero source</string>
+     <string name="settings_homescreen_hidden">Hidden</string>
+     <string name="settings_homescreen_keep_home_focused">Keep Home focused</string>
+-    <string name="settings_homescreen_limit_reached">%1$s â€¢ Limit reached (max %2$d)</string>
++    <string name="settings_homescreen_limit_reached">%1$s • Limit reached (max %2$d)</string>
+     <string name="settings_homescreen_no_sources_selected">No hero sources selected</string>
+     <string name="settings_homescreen_not_in_hero">Not in hero</string>
+     <string name="settings_homescreen_pin_to_move_toast">Remove pin to top from collection to move</string>
+@@ -707,7 +728,7 @@
+     <string name="layout_hide_unreleased_sub">Hide movies and shows that haven't been released yet.</string>
+     <string name="layout_catalog_type">Show Catalog Type</string>
+     <string name="layout_catalog_type_sub">Show type suffix next to catalog name (Movie/Series).</string>
+-    <string name="settings_homescreen_summary">%1$d of %2$d catalogs visible â€¢ %3$d hero sources selected</string>
++    <string name="settings_homescreen_summary">%1$d of %2$d catalogs visible • %3$d hero sources selected</string>
+     <string name="settings_homescreen_summary_hint">Open a catalog only when you need to rename or reorder it.</string>
+     <string name="settings_homescreen_visible">Visible</string>
+     <string name="settings_hide_secret">Hide value</string>
+@@ -727,8 +748,8 @@
+     <string name="settings_card_depth_fine_tune">Fine-tune</string>
+     <string name="settings_card_depth_fine_tune_title">Fine-tune Depth</string>
+     <string name="settings_card_depth_fine_tune_hint">Drag the dot right for a brighter edge, up for more sheen. Use the slider to extend the glow around the full outline.</string>
+-    <string name="settings_card_depth_pad_edge_axis">Edge glow â†’</string>
+-    <string name="settings_card_depth_pad_sheen_axis">â†‘ Sheen</string>
++    <string name="settings_card_depth_pad_edge_axis">Edge glow →</string>
++    <string name="settings_card_depth_pad_sheen_axis">↑ Sheen</string>
+     <string name="settings_card_depth_edge_value">Edge glow</string>
+     <string name="settings_card_depth_sheen_value">Sheen</string>
+     <string name="settings_card_depth_edge_coverage">Edge coverage</string>
+@@ -737,7 +758,7 @@
+     <string name="settings_card_depth_coverage_full">Full outline</string>
+     <string name="settings_card_depth_coverage_value">Edge coverage</string>
+     <string name="settings_card_depth_preview_title">Episode Title</string>
+-    <string name="settings_card_depth_preview_meta">S1 Â· E1 Â· 45 min</string>
++    <string name="settings_card_depth_preview_meta">S1 · E1 · 45 min</string>
+     <string name="settings_card_depth_surface_posters">Posters</string>
+     <string name="settings_card_depth_surface_continue_watching">Continue Watching</string>
+     <string name="settings_card_depth_surface_episodes">Episode cards</string>
+@@ -960,7 +981,7 @@
+     <string name="community_membership_title">Nuvio Supporter Membership</string>
+     <string name="community_membership_description">Supporting Nuvio helps cover infrastructure and ongoing development while keeping the core experience free for everyone.</string>
+     <string name="community_view_supporter_membership">View Supporter Membership</string>
+-    <string name="community_membership_you_are">Youâ€™re a</string>
++    <string name="community_membership_you_are">You’re a</string>
+     <string name="community_membership_thank_you">Thank you.</string>
+     <string name="community_membership_supporter_since">Supporter since %1$s.</string>
+     <string name="community_membership_connected_title">Patreon is connected</string>
+@@ -1278,9 +1299,9 @@
+     <string name="settings_simkl_sync_info_action">How syncing works</string>
+     <string name="settings_simkl_sync_info_title">How Simkl syncing works</string>
+     <string name="settings_simkl_sync_info_description">Nuvio automatically checks Simkl at most once every %1$d minutes. Changes made through another app or the Simkl website may take that long to appear.</string>
+-    <string name="settings_simkl_sync_info_activity">Each refresh first checks whether Simkl reports any changes and downloads only the updates. This follows Simklâ€™s API rules, reduces unnecessary data use, and helps keep the service stable.</string>
++    <string name="settings_simkl_sync_info_activity">Each refresh first checks whether Simkl reports any changes and downloads only the updates. This follows Simkl’s API rules, reduces unnecessary data use, and helps keep the service stable.</string>
+     <string name="settings_simkl_sync_info_manual">Changes made in Nuvio are sent to Simkl immediately. Use Sync now whenever you want Nuvio to check for remote changes sooner.</string>
+-    <string name="settings_simkl_sync_info_library_statuses">Shows placed in Simklâ€™s On Hold or Dropped lists are hidden from Continue Watching. They remain hidden for as long as they stay in either list.</string>
++    <string name="settings_simkl_sync_info_library_statuses">Shows placed in Simkl’s On Hold or Dropped lists are hidden from Continue Watching. They remain hidden for as long as they stay in either list.</string>
+     <string name="settings_simkl_sync_info_docs">Read the Simkl sync guide</string>
+     <string name="settings_simkl_authorization_revoked">Simkl authorization was revoked. Connect again.</string>
+     <string name="tracking_source_simkl">Simkl</string>
+@@ -1332,8 +1353,8 @@
+     <string name="theme_violet">Violet</string>
+     <string name="theme_white">White</string>
+     <string name="player_next_episode">Next Episode</string>
+-    <string name="player_next_episode_finding_source">Finding sourceâ€¦</string>
+-    <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$dâ€¦</string>
++    <string name="player_next_episode_finding_source">Finding source…</string>
++    <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$d…</string>
+     <string name="player_next_episode_thumbnail">Next episode thumbnail</string>
+     <string name="player_next_episode_unaired">Unaired</string>
+     <string name="player_skip">Skip</string>
+@@ -1431,7 +1452,7 @@
+     <string name="app_exit_title">Exit app</string>
+     <string name="catalog_empty_message">This catalog did not return any items.</string>
+     <string name="catalog_empty_title">No titles found</string>
+-    <string name="catalog_load_failed_title">Couldnâ€™t load this catalog</string>
++    <string name="catalog_load_failed_title">Couldn’t load this catalog</string>
+     <string name="details_actions_menu_label">More actions</string>
+     <string name="details_check_connection">Check your Wi-Fi or mobile data connection and try again.</string>
+     <string name="details_director">Director</string>
+@@ -1445,11 +1466,11 @@
+     <string name="details_series_unpublished">Episodes have not been published by this addon yet.</string>
+     <string name="details_servers_unreachable">Your device is online, but Nuvio could not reach required servers.</string>
+     <string name="details_show_less">Show Less</string>
+-    <string name="details_show_more">Show More â–¾</string>
++    <string name="details_show_more">Show More ▾</string>
+     <string name="details_writer">Writer</string>
+     <string name="discover_all_genres">All Genres</string>
+     <string name="discover_catalog">Catalog</string>
+-    <string name="discover_catalog_context">%1$s â€¢ %2$s</string>
++    <string name="discover_catalog_context">%1$s • %2$s</string>
+     <string name="discover_empty_load_failed_message">The selected catalog failed to return discover items.</string>
+     <string name="discover_empty_load_failed_title">Could not load discover</string>
+     <string name="discover_empty_no_catalogs_message">Your enabled addons do not provide catalogs that can be shown in Discover.</string>
+@@ -1475,7 +1496,7 @@
+     <string name="home_empty_no_active_addons_message">Enable or add an addon to see catalogs on Home.</string>
+     <string name="home_empty_no_rows_message">Your enabled addons do not provide catalogs that can be shown on Home.</string>
+     <string name="home_empty_no_rows_title">No Home content available</string>
+-    <string name="home_load_failed_title">Couldnâ€™t load Home</string>
++    <string name="home_load_failed_title">Couldn’t load Home</string>
+     <string name="home_view_details">View Details</string>
+     <string name="meta_section_actions_description">Play and save controls.</string>
+     <string name="meta_section_actions_title">Actions</string>
+@@ -1552,7 +1573,7 @@
+     <string name="provider_downloaded">Downloaded</string>
+     <string name="resume_prompt_action">Resume</string>
+     <string name="streams_active_scrapers">Active scrapers</string>
+-    <string name="streams_checking_more_addons">Checking more addonsâ€¦</string>
++    <string name="streams_checking_more_addons">Checking more addons…</string>
+     <string name="streams_copy_link">Copy stream link</string>
+     <string name="streams_download_file">Download file</string>
+     <string name="streams_open_external_player">Open in external player</string>
+@@ -1566,11 +1587,11 @@
+     <string name="streams_episode_badge">S%1$d E%2$d</string>
+     <string name="streams_episode_fallback_title">Episode</string>
+     <string name="streams_episode_title_with_name">S%1$dE%2$d - %3$s</string>
+-    <string name="streams_fetching">Fetchingâ€¦</string>
+-    <string name="streams_finding_source">Finding sourceâ€¦</string>
+-    <string name="streams_loading_subtitles">Loading subtitles from addonsâ€¦</string>
+-    <string name="streams_loading_skip_segments">Loading skip segmentsâ€¦</string>
+-    <string name="streams_finding_streams">Finding streamsâ€¦</string>
++    <string name="streams_fetching">Fetching…</string>
++    <string name="streams_finding_source">Finding source…</string>
++    <string name="streams_loading_subtitles">Loading subtitles from addons…</string>
++    <string name="streams_loading_skip_segments">Loading skip segments…</string>
++    <string name="streams_finding_streams">Finding streams…</string>
+     <string name="streams_link_copied">Stream link copied</string>
+     <string name="streams_no_direct_link">No direct stream link available</string>
+     <string name="streams_no_metadata">No metadata available</string>
+@@ -1593,11 +1614,11 @@
+     <string name="tracking_lists_update_failed">Failed to update tracking lists</string>
+     <string name="tracking_list_status_rewritten">%1$s placed this title in %2$s instead of %3$s</string>
+     <string name="tracking_remove_confirmation_title">Remove from %1$s?</string>
+-    <string name="tracking_remove_confirmation_message">Removing â€œ%1$sâ€ from %2$s will also clear its %3$s there. This canâ€™t be undone.</string>
++    <string name="tracking_remove_confirmation_message">Removing “%1$s” from %2$s will also clear its %3$s there. This can’t be undone.</string>
+     <string name="tracking_removal_impact_history">watched history</string>
+     <string name="tracking_removal_impact_rating">rating</string>
+     <string name="tracking_removal_impact_history_and_rating">watched history and rating</string>
+-    <string name="updates_asset_line">%1$s â€¢ %2$s</string>
++    <string name="updates_asset_line">%1$s • %2$s</string>
+     <string name="updates_check_failed">Update check failed</string>
+     <string name="updates_download_failed">Download failed</string>
+     <string name="updates_download_empty_body">Empty download body</string>
+@@ -1629,7 +1650,7 @@
+     <string name="auth_sign_up_failed">Sign-up failed</string>
+     <string name="catalog_load_failed">Unable to load catalog items.</string>
+     <string name="continue_watching_up_next">Next Up</string>
+-    <string name="continue_watching_up_next_episode">Next Up â€¢ S%1$dE%2$d</string>
++    <string name="continue_watching_up_next_episode">Next Up • S%1$dE%2$d</string>
+     <string name="detail_logo_content_description">%1$s logo</string>
+     <string name="details_comments_load_failed">Failed to load comments</string>
+     <string name="details_load_failed_all_addons">Could not load details from any addon.</string>
+@@ -1639,8 +1660,8 @@
+     <string name="downloads_channel_description">Shows live download progress and controls.</string>
+     <string name="downloads_channel_name">Downloads</string>
+     <string name="downloads_live_completed">Download completed</string>
+-    <string name="downloads_live_downloading">Downloading %1$s â€¢ %2$s</string>
+-    <string name="downloads_live_downloading_with_total">Downloading %1$s â€¢ %2$s / %3$s</string>
++    <string name="downloads_live_downloading">Downloading %1$s • %2$s</string>
++    <string name="downloads_live_downloading_with_total">Downloading %1$s • %2$s / %3$s</string>
+     <string name="downloads_live_failed">Download failed</string>
+     <string name="downloads_live_paused">Paused %1$s</string>
+     <string name="library_remove_confirm">Remove</string>
+@@ -1768,7 +1789,7 @@
+     <string name="details_browse_load_failed">Could not load %1$s</string>
+     <string name="details_browse_rail_popular">Popular</string>
+     <string name="details_browse_rail_recent">Recent</string>
+-    <string name="details_browse_rail_title">%1$s â€¢ %2$s</string>
++    <string name="details_browse_rail_title">%1$s • %2$s</string>
+     <string name="details_browse_rail_top_rated">Top Rated</string>
+     <string name="details_certification">Certification</string>
+     <string name="details_movie_details">Movie Details</string>
+@@ -1807,8 +1828,8 @@
+     <string name="library_other">Other</string>
+     <string name="library_sort_added_asc">Oldest added</string>
+     <string name="library_sort_added_desc">Recently added</string>
+-    <string name="library_sort_title_asc">Title Aâ€“Z</string>
+-    <string name="library_sort_title_desc">Title Zâ€“A</string>
++    <string name="library_sort_title_asc">Title A–Z</string>
++    <string name="library_sort_title_desc">Title Z–A</string>
+     <string name="library_sort_provider_order">Tracker order</string>
+     <string name="library_source_cloud">Cloud</string>
+     <string name="library_source_saved">Saved</string>
+@@ -1819,7 +1840,7 @@
+     <string name="library_trakt_title">Trakt Library</string>
+     <string name="library_simkl_empty_message">Add titles to your Simkl plan-to-watch list to see them here.</string>
+     <string name="library_simkl_empty_title">Your Simkl watchlist is empty</string>
+-    <string name="library_simkl_load_failed">Couldnâ€™t load Simkl watchlist</string>
++    <string name="library_simkl_load_failed">Couldn’t load Simkl watchlist</string>
+     <string name="library_simkl_title">Simkl Watchlist</string>
+     <string name="cloud_library_connect_action">Connect account</string>
+     <string name="cloud_library_connect_message">Connect an account in Connected Services settings to browse playable files from your cloud library.</string>
+@@ -1859,7 +1880,7 @@
+     <string name="media_series">Series</string>
+     <string name="media_tv">TV</string>
+     <string name="notifications_episode_release_body_code">%1$s is out now</string>
+-    <string name="notifications_episode_release_body_code_title">%1$s â€¢ %2$s is out now</string>
++    <string name="notifications_episode_release_body_code_title">%1$s • %2$s is out now</string>
+     <string name="notifications_episode_release_body_generic">A new episode is out now</string>
+     <string name="notifications_episode_release_body_title">%1$s is out now</string>
+     <string name="notifications_channel_episode_releases_name">Episode Releases</string>
+@@ -2107,9 +2128,9 @@
+     <string name="plugins_badge_tmdb_key_missing">TMDB API key missing</string>
+     <string name="plugins_badge_tmdb_key_set">TMDB API key set</string>
+     <string name="plugins_button_install_repo">Install Plugin Repository</string>
+-    <string name="plugins_button_installing">Installingâ€¦</string>
++    <string name="plugins_button_installing">Installing…</string>
+     <string name="plugins_button_test_provider">Test Provider</string>
+-    <string name="plugins_button_testing">Testingâ€¦</string>
++    <string name="plugins_button_testing">Testing…</string>
+     <string name="plugins_cd_delete_repo">Delete plugin repository</string>
+     <string name="plugins_cd_refresh_repo">Refresh plugin repository</string>
+     <string name="plugins_empty_providers">No providers available yet.</string>
+@@ -2186,11 +2207,11 @@
+     </plurals>
+     <string name="cw_new_episode">New Episode</string>
+     <string name="cw_new_season">New Season</string>
+-    <!-- Pass 4 â€” platform stubs and dynamic title fallbacks -->
++    <!-- Pass 4 — platform stubs and dynamic title fallbacks -->
+     <string name="collections_editor_trakt_list_title_format">Trakt List %1$s</string>
+     <string name="external_player_android_system">Android system player</string>
+     <string name="p2p_consent_title">P2P Streaming</string>
+-    <string name="p2p_consent_body">This stream uses peer-to-peer (P2P) technology. By enabling P2P, you acknowledge and agree that:\n\nâ€¢ Your IP address will be visible to other peers in the network\nâ€¢ You are solely responsible for the content you access\nâ€¢ You confirm you have the legal right to stream this content in your jurisdiction\nâ€¢ Nuvio does not host, distribute, or control any P2P content\nâ€¢ Nuvio bears no liability for any legal consequences arising from your use of P2P streaming\n\nYou use this feature entirely at your own risk. P2P can be disabled anytime in Settings.</string>
++    <string name="p2p_consent_body">This stream uses peer-to-peer (P2P) technology. By enabling P2P, you acknowledge and agree that:\n\n• Your IP address will be visible to other peers in the network\n• You are solely responsible for the content you access\n• You confirm you have the legal right to stream this content in your jurisdiction\n• Nuvio does not host, distribute, or control any P2P content\n• Nuvio bears no liability for any legal consequences arising from your use of P2P streaming\n\nYou use this feature entirely at your own risk. P2P can be disabled anytime in Settings.</string>
+     <string name="p2p_consent_enable">Enable P2P</string>
+     <string name="p2p_consent_cancel">Cancel</string>
+     <string name="p2p_error_unknown">Unknown torrent error</string>
+@@ -2214,20 +2235,20 @@
+     <string name="settings_p2p_clear_cache_title">Clear torrent cache</string>
+     <string name="settings_p2p_clear_cache_usage">%1$s currently used</string>
+     <string name="settings_p2p_clear_cache_usage_pending">Usage is measured after P2P starts; tap to clear cached torrent data</string>
+-    <string name="settings_p2p_clear_cache_clearing">Clearing inactive torrent dataâ€¦</string>
++    <string name="settings_p2p_clear_cache_clearing">Clearing inactive torrent data…</string>
+     <string name="settings_p2p_clear_cache_playback_active">Stop P2P playback before clearing the cache</string>
+     <string name="settings_p2p_clear_cache_done">Cleared %1$s of inactive torrent data</string>
+     <string name="settings_p2p_clear_cache_failed">Could not clear the torrent cache</string>
+-    <string name="player_torrent_peer_info">%1$d seeds Â· %2$d peers</string>
+-    <string name="player_torrent_buffered_status">%1$s buffered Â· %2$s Â· %3$s</string>
+-    <string name="player_torrent_status">%1$s Â· %2$s</string>
+-    <string name="player_torrent_stats">%1$d peers Â· %2$d seeds Â· %3$d%%</string>
+-    <string name="player_torrent_connecting_peers">Connecting to peersâ€¦</string>
+-    <string name="player_torrent_starting_engine">Starting P2P engineâ€¦</string>
+-    <string name="player_torrent_fetching_metadata">Fetching torrent metadataâ€¦</string>
+-    <string name="player_torrent_preparing_stream">Preparing torrent streamâ€¦</string>
+-    <string name="player_torrent_connecting_status">%1$s Â· %2$s Â· %3$s</string>
+-    <string name="player_torrent_loading_status">%1$s downloaded Â· %2$s Â· %3$s</string>
++    <string name="player_torrent_peer_info">%1$d seeds · %2$d peers</string>
++    <string name="player_torrent_buffered_status">%1$s buffered · %2$s · %3$s</string>
++    <string name="player_torrent_status">%1$s · %2$s</string>
++    <string name="player_torrent_stats">%1$d peers · %2$d seeds · %3$d%%</string>
++    <string name="player_torrent_connecting_peers">Connecting to peers…</string>
++    <string name="player_torrent_starting_engine">Starting P2P engine…</string>
++    <string name="player_torrent_fetching_metadata">Fetching torrent metadata…</string>
++    <string name="player_torrent_preparing_stream">Preparing torrent stream…</string>
++    <string name="player_torrent_connecting_status">%1$s · %2$s · %3$s</string>
++    <string name="player_torrent_loading_status">%1$s downloaded · %2$s · %3$s</string>
+     <string name="player_error_failed_start_torrent">Failed to start torrent: %1$s</string>
+     <string name="player_error_torrent">Torrent error: %1$s</string>
+     <!-- Person & TMDB entity detail (pass7) -->
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 index 23c8d9b..c28280a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
