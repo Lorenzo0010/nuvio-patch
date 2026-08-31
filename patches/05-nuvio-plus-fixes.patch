@@ -294,37 +294,31 @@ index 426603f..9eb2088 100644
  
      actual fun loadFavoriteUrls(): Set<String> =
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 97c490f..9072586 100644
+index 8987c6c..3b307e0 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2276,7 +2276,11 @@
+@@ -2266,7 +2266,7 @@
      <string name="live_tv_choose_category">Categories</string>
      <string name="live_tv_categories">Categories</string>
      <string name="live_tv_channels">Channels</string>
-+<<<<<<< ours
-     <string name="live_tv_channel_count">%1$d channels</string>
-+=======
-+    <string name="live_tv_channel_count">%1 channels</string>
-+>>>>>>> theirs
+-    <string name="live_tv_channel_count">%1 channels</string>
++    <string name="live_tv_channel_count">%1$d channels</string>
      <string name="live_tv_favorite">Favorite</string>
      <string name="live_tv_disconnect">Disconnect</string>
      <string name="live_tv_empty_title">No channels loaded</string>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index f7870ad..79fd3ef 100644
+index f7870ad..d4829b5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -2,6 +2,10 @@ package com.nuvio.app
+@@ -2,6 +2,7 @@ package com.nuvio.app
  
  import com.nuvio.app.features.downloads.DownloadItem
  import com.nuvio.app.features.downloads.DownloadsScreen
-+<<<<<<< ours
 +import com.nuvio.app.features.livetv.LiveTvChannel
-+=======
-+>>>>>>> theirs
  import com.nuvio.app.features.livetv.LiveTvScreen
  import androidx.compose.material.icons.rounded.LiveTv
  import androidx.compose.material.icons.rounded.Download
-@@ -108,6 +112,7 @@ internal data class AppTabState(
+@@ -108,6 +109,7 @@ internal data class AppTabState(
  internal data class AppTabRequests(
      val homeScrollToTopRequests: Flow<Unit>,
      val searchScrollToTopRequests: Flow<Unit>,
@@ -332,26 +326,20 @@ index f7870ad..79fd3ef 100644
      val libraryScrollToTopRequests: Flow<Unit>,
      val settingsRootActionRequests: Flow<Unit>,
  )
-@@ -139,6 +144,10 @@ internal data class AppTabActions(
+@@ -139,6 +141,7 @@ internal data class AppTabActions(
      val onCollectionsSettingsClick: () -> Unit = {},
      val onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
      val onOpenDownload: ((DownloadItem) -> Unit)? = null,
-+<<<<<<< ours
 +    val onLiveTvChannelClick: ((LiveTvChannel) -> Unit)? = null,
-+=======
-+>>>>>>> theirs
      val onRequestedSettingsPageConsumed: () -> Unit = {},
      val onInitialHomeContentRendered: () -> Unit = {},
  )
-@@ -188,6 +197,11 @@ internal fun AppTabHost(
+@@ -188,6 +191,8 @@ internal fun AppTabHost(
                  AppScreenTab.LiveTv -> {
                      LiveTvScreen(
                          modifier = Modifier.fillMaxSize(),
-+<<<<<<< ours
 +                        scrollToTopRequests = requests.liveTvScrollToTopRequests,
 +                        onChannelClick = { channel -> actions.onLiveTvChannelClick?.invoke(channel) },
-+=======
-+>>>>>>> theirs
                      )
                  }
  
@@ -415,58 +403,46 @@ index 7eb0bb1..1d68730 100644
                                  onRequestedSettingsPageConsumed = {
                                      requestedSettingsPageName = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-index 7754fe2..729da7e 100644
+index 7754fe2..37a19aa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-@@ -30,7 +30,11 @@ object LiveTvRepository {
+@@ -30,7 +30,7 @@ object LiveTvRepository {
          val normalizedUrl = sourceUrl.trim()
          if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
              val error = IllegalArgumentException(
-+<<<<<<< ours
-+                "GeÃƒÂ§erli bir HTTP veya HTTPS M3U baÃ„Å¸lantÃ„Â±sÃ„Â± girin."
-+=======
-                 "Ge├âãÆ├é┬ºerli bir HTTP veya HTTPS M3U ba├âÔÇ×├à┬©lant├âÔÇ×├é┬▒s├âÔÇ×├é┬▒ girin."
-+>>>>>>> theirs
+-                "Ge├âãÆ├é┬ºerli bir HTTP veya HTTPS M3U ba├âÔÇ×├à┬©lant├âÔÇ×├é┬▒s├âÔÇ×├é┬▒ girin."
++                "Enter a valid HTTP or HTTPS M3U URL."
              )
              mutableUiState.value = mutableUiState.value.copy(errorMessage = error.message)
              return Result.failure(error)
-@@ -48,7 +52,11 @@ object LiveTvRepository {
+@@ -48,7 +48,7 @@ object LiveTvRepository {
              }
              val channels = playlist.channels
              require(channels.isNotEmpty()) {
-+<<<<<<< ours
-+                "Bu M3U listesinde oynatÃ„Â±labilir kanal bulunamadÃ„Â±."
-+=======
-                 "Bu M3U listesinde oynat├âÔÇ×├é┬▒labilir kanal bulunamad├âÔÇ×├é┬▒."
-+>>>>>>> theirs
+-                "Bu M3U listesinde oynat├âÔÇ×├é┬▒labilir kanal bulunamad├âÔÇ×├é┬▒."
++                "No playable channels found in this M3U playlist."
              }
              LiveTvStorage.saveSourceUrl(normalizedUrl)
              mutableUiState.value = LiveTvUiState(
-@@ -65,7 +73,11 @@ object LiveTvRepository {
+@@ -65,7 +65,7 @@ object LiveTvRepository {
              mutableUiState.value = mutableUiState.value.copy(
                  isLoading = false,
                  isLoaded = mutableUiState.value.channels.isNotEmpty(),
-+<<<<<<< ours
-+                errorMessage = error.message ?: "M3U listesi yÃƒÂ¼klenemedi.",
-+=======
-                 errorMessage = error.message ?: "M3U listesi y├âãÆ├é┬╝klenemedi.",
-+>>>>>>> theirs
+-                errorMessage = error.message ?: "M3U listesi y├âãÆ├é┬╝klenemedi.",
++                errorMessage = error.message ?: "Failed to load M3U playlist.",
              )
          }
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-index 15202f7..210722e 100644
+index 15202f7..bedfa00 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
-@@ -581,7 +581,11 @@ private fun LiveTvChannelRow(
+@@ -581,7 +581,7 @@ private fun LiveTvChannelRow(
                          text = buildString {
                              append(programme.title)
                              if (programme.timeLabel.isNotBlank()) {
-+<<<<<<< ours
-+                                append("  Ã¢â‚¬Â¢  ")
-+=======
-                                 append("  ├â┬ó├óÔÇÜ┬¼├é┬ó  ")
-+>>>>>>> theirs
+-                                append("  ├â┬ó├óÔÇÜ┬¼├é┬ó  ")
++                                append("  •  ")
                                  append(programme.timeLabel)
                              }
                          },
