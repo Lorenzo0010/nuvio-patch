@@ -1,0 +1,54 @@
+diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
+index ea9aaf3..dcd1f29 100644
+--- a/androidApp/build.gradle.kts
++++ b/androidApp/build.gradle.kts
+@@ -64,7 +64,7 @@ android {
+     }
+
+     defaultConfig {
+-        applicationId = "com.nuvio.app"
++        applicationId = "com.nuvio.app.enhanced"
+         minSdk = libs.versions.android.minSdk.get().toInt()
+         targetSdk = libs.versions.android.targetSdk.get().toInt()
+         versionCode = releaseAppVersionCode
+@@ -104,10 +104,7 @@ android {
+
+     splits {
+         abi {
+-            isEnable = buildsReleaseApks
+-            reset()
+-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+-            isUniversalApk = false
++            isEnable = false
+         }
+     }
+
+diff --git a/androidApp/src/main/res/values/strings.xml b/androidApp/src/main/res/values/strings.xml
+new file mode 100644
+index 0000000..870ab74
+--- /dev/null
++++ b/androidApp/src/main/res/values/strings.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="app_name">Nuvio Enhanced</string>
++</resources>
+diff --git a/composeApp/src/androidMain/res/values-es/strings.xml b/composeApp/src/androidMain/res/values-es/strings.xml
+index f5bd09e..870ab74 100644
+--- a/composeApp/src/androidMain/res/values-es/strings.xml
++++ b/composeApp/src/androidMain/res/values-es/strings.xml
+@@ -1,4 +1,4 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">Nuvio</string>
++    <string name="app_name">Nuvio Enhanced</string>
+ </resources>
+diff --git a/composeApp/src/androidMain/res/values/strings.xml b/composeApp/src/androidMain/res/values/strings.xml
+index ca8ee55..1eeca3e 100644
+--- a/composeApp/src/androidMain/res/values/strings.xml
++++ b/composeApp/src/androidMain/res/values/strings.xml
+@@ -1,3 +1,3 @@
+ <resources>
+-    <string name="app_name">Nuvio</string>
++    <string name="app_name">Nuvio Enhanced</string>
+ </resources>

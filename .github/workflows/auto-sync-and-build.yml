@@ -1,22 +1,11 @@
-name: Auto-Sync Upstream & Build Enhanced APK
+name: Build & Release Enhanced APK
 
 on:
   push:
     branches:
       - main
-    paths:
-      - 'patches/**'
-      - '.github/workflows/**'
-  schedule:
-    # Controlla gli aggiornamenti ogni 6 ore
-    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
-      force_build:
-        description: 'Forza la compilazione anche se non ci sono nuovi commit upstream'
-        required: false
-        default: false
-        type: boolean
       build_type:
         description: 'Tipo di build (release o debug)'
         required: false
@@ -35,8 +24,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check-and-build:
-    name: Check Upstream & Build Enhanced APK
+  build-and-release:
+    name: Build & Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -45,41 +34,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. Controlla l'ultimo commit del repository ufficiale
-      - name: Check upstream changes
-        id: check_upstream
+      # 1. Identifica l'ultimo commit upstream da compilare
+      - name: Fetch Upstream Info
+        id: upstream_info
         run: |
           UPSTREAM_URL="https://github.com/NuvioMedia/NuvioMobile.git"
           UPSTREAM_BRANCH="cmp-rewrite"
           
-          # Recupera l'ultimo SHA da upstream tramite git ls-remote (nessun limite API rate limit)
           LATEST_SHA=$(git ls-remote "$UPSTREAM_URL" "refs/heads/$UPSTREAM_BRANCH" | awk '{print $1}')
-          
           if [ -z "$LATEST_SHA" ]; then
-            echo "::error::Impossibile recuperare il commit SHA da $UPSTREAM_URL"
+            echo "::error::Impossibile ottenere l'ultimo SHA da $UPSTREAM_URL"
             exit 1
           fi
           
-          echo "Ultimo commit upstream ($UPSTREAM_BRANCH): $LATEST_SHA"
-          
-          LAST_BUILT_SHA=""
-          if [ -f ".last_built_upstream_sha" ]; then
-            LAST_BUILT_SHA=$(cat .last_built_upstream_sha | tr -d '[:space:]')
-          fi
-          echo "Ultimo commit compilato precedentemente: $LAST_BUILT_SHA"
-          
-          if [ "$LATEST_SHA" != "$LAST_BUILT_SHA" ] || [ "${{ github.event.inputs.force_build }}" == "true" ] || [ "$GITHUB_EVENT_NAME" == "push" ]; then
-            echo "build_needed=true" >> "$GITHUB_OUTPUT"
-            echo "target_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
-            echo "Nuovo aggiornamento rilevato! Avvio compilazione."
-          else
-            echo "build_needed=false" >> "$GITHUB_OUTPUT"
-            echo "Nessun nuovo aggiornamento. Repository allineato."
-          fi
+          SHORT_SHA=$(echo "$LATEST_SHA" | cut -c1-7)
+          echo "target_sha=$LATEST_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Target Upstream SHA: $LATEST_SHA ($SHORT_SHA)"
 
-      # 2. Clona il codice upstream e applica le patch Enhanced
-      - name: Clone Upstream and Apply Enhanced Patches
-        if: steps.check_upstream.outputs.build_needed == 'true'
+      # 2. Clona upstream e applica le patch modulari
+      - name: Clone Upstream & Apply Patches
         run: |
           export GIT_LFS_SKIP_SMUDGE=1
           git config --global user.name "github-actions[bot]"
@@ -88,30 +62,32 @@ jobs:
           echo "Clonazione di NuvioMobile (cmp-rewrite)..."
           git clone --branch cmp-rewrite https://github.com/NuvioMedia/NuvioMobile.git build_src
           cd build_src
-          git checkout ${{ steps.check_upstream.outputs.target_sha }}
+          git checkout ${{ steps.upstream_info.outputs.target_sha }}
           
-          echo "=== Applicazione delle patch Enhanced ==="
-          if [ -f "../patches/nuvio-enhanced-code.patch" ]; then
-            echo "Applicazione di nuvio-enhanced-code.patch..."
-            git apply --3way ../patches/nuvio-enhanced-code.patch || {
-              echo "::error::Conflitto di merge irrisolvibile durante l'applicazione delle patch!"
-              exit 1
-            }
-            git add -A
-            git commit -m "feat: apply enhanced patch bundle" || true
-          elif [ -d "../patches" ] && [ "$(ls -A ../patches/*.patch 2>/dev/null)" ]; then
-            git apply --3way ../patches/*.patch || {
-              echo "::error::Conflitto durante l'applicazione delle patch!"
-              exit 1
-            }
-            git add -A
-            git commit -m "feat: apply enhanced patch bundle" || true
-          else
-            echo "::error::Nessun file .patch trovato nella cartella patches/!"
+          echo "=== Applicazione delle patch modulari ==="
+          PATCH_FILES=$(find ../patches -maxdepth 1 -name "[0-9]*.patch" | sort)
+          if [ -z "$PATCH_FILES" ]; then
+            PATCH_FILES=$(find ../patches -maxdepth 1 -name "*.patch" | sort)
+          fi
+
+          if [ -z "$PATCH_FILES" ]; then
+            echo "::error::Nessuna patch trovata nella cartella patches/!"
             exit 1
           fi
+
+          for patch in $PATCH_FILES; do
+            patch_name=$(basename "$patch")
+            echo "Applicazione della patch: $patch_name..."
+            git apply --3way "$patch" || {
+              echo "::error::Conflitto durante l'applicazione di $patch_name!"
+              exit 1
+            }
+          done
+
+          git add -A
+          git commit -m "feat: apply enhanced patch bundle" || true
           
-          # Copia librerie binarie e native jniLibs
+          # Copia librerie extra / native se presenti
           if [ -d "../assets/extra_libs" ]; then
             echo "Copia librerie extra_libs..."
             mkdir -p composeApp/libs
@@ -124,38 +100,35 @@ jobs:
             cp -r ../assets/jniLibs/* composeApp/src/androidMain/jniLibs/ 2>/dev/null || true
           fi
 
-      # 3. Setup Ambiente Java & Gradle
+      # 3. Setup JDK 17 & Gradle
       - name: Set up JDK 17
-        if: steps.check_upstream.outputs.build_needed == 'true'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Gradle
-        if: steps.check_upstream.outputs.build_needed == 'true'
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
 
       # 4. Configurazione Keystore e local.properties
-      - name: Configure Keystore and local.properties
-        if: steps.check_upstream.outputs.build_needed == 'true'
+      - name: Configure Keystore and Properties
         working-directory: build_src
         run: |
-          # Keystore di firma
+          # Configurazione Keystore di firma
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "Uso del Keystore fornito dai GitHub Secrets..."
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > nuvio-release.keystore
           else
-            echo "Generazione di un Keystore di rilascio automatico..."
+            echo "Generazione di un Keystore di rilascio..."
             keytool -genkey -v -keystore nuvio-release.keystore \
               -alias nuvio-release -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass nuvio1234 -keypass nuvio1234 \
               -dname "CN=Nuvio, OU=Enhanced, O=NuvioMobile, L=Rome, S=IT, C=IT"
           fi
           
-          # local.properties
+          # Creazione local.properties con fallback
           cat << 'EOF' > local.properties
           SUPABASE_URL=${{ secrets.SUPABASE_URL || 'https://api.nuvio.tv' }}
           SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
@@ -175,30 +148,27 @@ jobs:
           DONATIONS_DONATE_URL=https://ko-fi.com/tapframe
           EOF
 
-      # 5. Compilazione dell'APK Android
+      # 5. Compilazione APK Android
       - name: Build Android APK
-        if: steps.check_upstream.outputs.build_needed == 'true'
         working-directory: build_src
         run: |
           chmod +x ./gradlew
           
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           if [ "$BUILD_TYPE" == "debug" ]; then
-            echo "Compilazione APK Debug (Full)..."
+            echo "Compilazione APK Debug..."
             ./gradlew :androidApp:assembleFullDebug --stacktrace
           else
-            echo "Compilazione APK Release (Full)..."
+            echo "Compilazione APK Release..."
             ./gradlew :androidApp:assembleFullRelease --stacktrace
           fi
 
-      # 6. Preparazione artefatto APK
+      # 6. Preparazione del file APK
       - name: Package APK for Release
-        if: steps.check_upstream.outputs.build_needed == 'true'
         id: package_apk
         working-directory: build_src
         run: |
-          TIMESTAMP=$(date +'%Y%m%d-%H%M')
-          SHORT_SHA=$(echo "${{ steps.check_upstream.outputs.target_sha }}" | cut -c1-7)
+          SHORT_SHA="${{ steps.upstream_info.outputs.short_sha }}"
           VERSION_NAME=$(grep -o '"version": *"[^"]*"' version.json | cut -d '"' -f 4 || echo "0.4.11")
           RELEASE_TAG="v${VERSION_NAME}-enhanced-${SHORT_SHA}"
           
@@ -215,12 +185,11 @@ jobs:
           
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "apk_path=$OUTPUT_NAME" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "APK preparato con successo: $OUTPUT_NAME"
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "APK preparato: $OUTPUT_NAME"
 
-      # 7. Pubblica la GitHub Release
+      # 7. Pubblicazione della GitHub Release
       - name: Create GitHub Release
-        if: steps.check_upstream.outputs.build_needed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.package_apk.outputs.tag }}
@@ -228,43 +197,28 @@ jobs:
           draft: false
           prerelease: false
           body: |
-            ## 🚀 Nuvio Mobile Enhanced — Build Automatica
+            ## 🚀 Nuvio Mobile Enhanced — Nuova Build
             
-            Build generata automaticamente applicando la suite di patch **Enhanced** sull'ultimo codice upstream ufficiale.
+            Build compilata e firmata automaticamente in seguito all'ultimo commit.
             
-            ### 📌 Dettagli Build:
-            - **Base Upstream Commit:** [NuvioMedia/NuvioMobile@${{ steps.package_apk.outputs.short_sha }}](https://github.com/NuvioMedia/NuvioMobile/commit/${{ steps.check_upstream.outputs.target_sha }})
+            ### 📌 Informazioni Build:
+            - **Base Upstream Commit:** [NuvioMedia/NuvioMobile@${{ steps.upstream_info.outputs.short_sha }}](https://github.com/NuvioMedia/NuvioMobile/commit/${{ steps.upstream_info.outputs.target_sha }})
             - **Branch Upstream:** `cmp-rewrite`
-            - **Data compilazione:** ${{ steps.package_apk.outputs.tag }}
+            - **Versione App:** `${{ steps.package_apk.outputs.version }}`
+            - **Tag Release:** `${{ steps.package_apk.outputs.tag }}`
             
             ### ✨ Funzionalità Enhanced Incluse:
-            - 📺 **Live TV:** Supporto playlist M3U/M3U8 con EPG, ricerca e filtri categorie.
-            - 🖤 **Modalità AMOLED:** Nero assoluto (`#000000`) per sfondi e superfici/schede.
-            - 🎨 **GlassMorph BottomBar & Theme Picker:** Barra di navigazione traslucida e selettore colore HEX/HSV personalizzato.
-            - 📊 **Stream Parser Animato:** Riconoscimento automatico 4K, HDR, Dolby Atmos, e stato cached/debrid.
-            - 📥 **HLS/M3U8 Downloader:** Decrittazione AES-128, segmenti fMP4 e conversione automatica in MP4.
-            - ⚡ **CloudStream 3 DEX Support:** Caricamento plugin nativi `.cs3`.
-            - 📝 **Integrazioni:** SIMKL, MyAnimeList, AniList, OpenSubtitles API sync, Calendario uscite.
-            - 🔒 **Privacy & Rete:** DNS-over-HTTPS (DoH) e User-Agent override personalizzato.
+            - 📺 **Live TV:** Supporto canali e playlist M3U/M3U8 con EPG, ricerca e filtri categorie.
+            - 🧭 **Barra di Navigazione:** Schede dedicate per Live TV & Download.
+            - 🔄 **App Updater Integrato:** Aggiornamenti automatici gestiti da questo repository.
           files: ${{ steps.package_apk.outputs.apk_path }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # 8. Salva l'ultimo commit compilato nel repository
-      - name: Save Last Built Commit SHA
-        if: steps.check_upstream.outputs.build_needed == 'true'
+      # 8. Aggiorna lo SHA nel repository
+      - name: Update Last Built Commit SHA
         run: |
-          echo "${{ steps.check_upstream.outputs.target_sha }}" > .last_built_upstream_sha
+          echo "${{ steps.upstream_info.outputs.target_sha }}" > .last_built_upstream_sha
           git add .last_built_upstream_sha
-          git commit -m "chore: record built upstream commit ${{ steps.package_apk.outputs.short_sha }} [skip ci]" || true
+          git commit -m "chore: record built upstream commit ${{ steps.upstream_info.outputs.short_sha }} [skip ci]" || true
           git push origin HEAD
-
-      # 9. Notifica/Issue automatica in caso di fallimento
-      - name: Open Issue on Failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "⚠️ Errore durante l'auto-build per upstream SHA ${{ steps.check_upstream.outputs.target_sha }}" \
-            --body "La compilazione automatica di Nuvio Enhanced è fallita. È probabile che una nuova modifica su upstream abbia generato un conflitto di codice con le patch Enhanced. Controlla il log della Action per i dettagli." || true

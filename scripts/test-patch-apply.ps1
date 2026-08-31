@@ -1,13 +1,15 @@
-# PowerShell script to test applying Enhanced patches on top of upstream cmp-rewrite
+# PowerShell script to test applying all modular patches on top of upstream cmp-rewrite
 param (
     [string]$UpstreamUrl = "https://github.com/NuvioMedia/NuvioMobile.git",
     [string]$UpstreamBranch = "cmp-rewrite",
-    [string]$PatchPath = "$PSScriptRoot\..\patches\nuvio-enhanced-code.patch",
+    [string]$PatchesDir = "$PSScriptRoot\..\patches",
     [string]$ExtraLibsDir = "$PSScriptRoot\..\assets\extra_libs",
     [string]$JniLibsDir = "$PSScriptRoot\..\assets\jniLibs"
 )
 
-Write-Host "=== Nuvio Patch Applicability Test ===" -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
+Write-Host "   Nuvio Patch Applicability Test (PS)   " -ForegroundColor Cyan
+Write-Host "=========================================" -ForegroundColor Cyan
 
 $testDir = "$env:TEMP\nuvio_patch_test_$(Get-Random)"
 New-Item -ItemType Directory -Path $testDir -Force | Out-Null
@@ -18,38 +20,57 @@ try {
     git clone --branch $UpstreamBranch $UpstreamUrl $testDir --depth 50 --quiet
     
     Push-Location $testDir
-    
-    if (-not (Test-Path $PatchPath)) {
-        Write-Error "Patch non trovata: $PatchPath"
+
+    $patchFiles = Get-ChildItem -Path $PatchesDir -Filter "*.patch" | Where-Object { $_.Name -match "^\d+-" } | Sort-Object Name
+    if ($patchFiles.Count -eq 0) {
+        $patchFiles = Get-ChildItem -Path $PatchesDir -Filter "*.patch" | Sort-Object Name
+    }
+
+    if ($patchFiles.Count -eq 0) {
+        Write-Error "Nessun file .patch trovato in $PatchesDir!"
         return
     }
-    
-    Write-Host "Applicazione patch codice ($PatchPath)..." -ForegroundColor Yellow
-    git apply --3way "$PatchPath"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ Errore durante l'applicazione della patch!" -ForegroundColor Red
+
+    Write-Host "Trovate $($patchFiles.Count) patch da testare:" -ForegroundColor Yellow
+    foreach ($p in $patchFiles) {
+        Write-Host "  - $($p.Name)" -ForegroundColor Gray
+    }
+
+    $failed = $false
+    foreach ($patch in $patchFiles) {
+        Write-Host "`nTest applicazione patch: $($patch.Name)..." -ForegroundColor Yellow
+        git apply --3way "$($patch.FullName)"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Errore durante l'applicazione di '$($patch.Name)'!" -ForegroundColor Red
+            $failed = $true
+            break
+        } else {
+            Write-Host "✅ Patch '$($patch.Name)' applicata con successo!" -ForegroundColor Green
+        }
+    }
+
+    if ($failed) {
+        Write-Host "`n❌ Test fallito: Una o più patch non sono compatibili con l'upstream attuale." -ForegroundColor Red
         return
     }
-    
-    Write-Host "✅ Patch applicata con successo!" -ForegroundColor Green
-    
+
     # Copia asset
     if (Test-Path $ExtraLibsDir) {
         if (-not (Test-Path "composeApp\libs")) { New-Item -ItemType Directory -Path "composeApp\libs" -Force | Out-Null }
-        Copy-Item "$ExtraLibsDir\*" -Destination "composeApp\libs" -Recurse -Force
+        Copy-Item "$ExtraLibsDir\*" -Destination "composeApp\libs" -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host "Librerie extra_libs verificate e copiate." -ForegroundColor Green
     }
-    
+
     if (Test-Path $JniLibsDir) {
         if (-not (Test-Path "composeApp\src\androidMain\jniLibs")) { New-Item -ItemType Directory -Path "composeApp\src\androidMain\jniLibs" -Force | Out-Null }
-        Copy-Item "$JniLibsDir\*" -Destination "composeApp\src\androidMain\jniLibs" -Recurse -Force
+        Copy-Item "$JniLibsDir\*" -Destination "composeApp\src\androidMain\jniLibs" -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host "Librerie native jniLibs verificate e copiate." -ForegroundColor Green
     }
-    
-    Write-Host "`n🎉 Test superato con successo: La patch Enhanced è 100% compatibile!" -ForegroundColor Green
-    
+
+    Write-Host "`n🎉 TEST SUPERATO: Tutte le patch sono 100% compatibili con l'upstream!" -ForegroundColor Green
+
 } finally {
     Pop-Location -ErrorAction SilentlyContinue
     Remove-Item -Path $testDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Test completato." -ForegroundColor Cyan
+    Write-Host "Pulizia cartella di test completata." -ForegroundColor Cyan
 }
