@@ -4,7 +4,7 @@ index ea9aaf3..dcd1f29 100644
 +++ b/androidApp/build.gradle.kts
 @@ -64,7 +64,7 @@ android {
      }
-
+ 
      defaultConfig {
 -        applicationId = "com.nuvio.app"
 +        applicationId = "com.nuvio.app.enhanced"
@@ -12,7 +12,7 @@ index ea9aaf3..dcd1f29 100644
          targetSdk = libs.versions.android.targetSdk.get().toInt()
          versionCode = releaseAppVersionCode
 @@ -104,10 +104,7 @@ android {
-
+ 
      splits {
          abi {
 -            isEnable = buildsReleaseApks
@@ -22,7 +22,7 @@ index ea9aaf3..dcd1f29 100644
 +            isEnable = false
          }
      }
-
+ 
 diff --git a/androidApp/src/main/res/values/strings.xml b/androidApp/src/main/res/values/strings.xml
 new file mode 100644
 index 0000000..870ab74
@@ -52,3 +52,4 @@ index ca8ee55..1eeca3e 100644
 -    <string name="app_name">Nuvio</string>
 +    <string name="app_name">Nuvio Enhanced</string>
  </resources>
+\ No newline at end of file
