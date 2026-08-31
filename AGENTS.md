@@ -35,6 +35,7 @@ Le patch si trovano nella cartella `patches/` e vanno applicate rigorosamente in
 1. `patches/01-branding-and-config.patch` (Branding, appId, config Gradle)
 2. `patches/02-app-updater.patch` (Reindirizzamento updater su `Lorenzo0010/nuvio-patch`)
 3. `patches/03-live-tv.patch` (Funzionalità Live TV, storage, parser M3U, navbar)
+4. `patches/04-plugin-hls-downloads.patch` (Sheet di selezione qualità video, traccia audio e sottotitoli per download stream HLS e plugin)
 
 Per ciascuna patch:
 ```bash

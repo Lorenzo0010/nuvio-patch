@@ -1,0 +1,3273 @@
+diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
+index dfacfd6..9fc1d3c 100644
+--- a/composeApp/build.gradle.kts
++++ b/composeApp/build.gradle.kts
+@@ -422,7 +422,11 @@ kotlin {
+                 implementation(libs.androidx.media3.common)
+                 implementation(libs.androidx.media3.container)
+                 implementation(libs.androidx.media3.extractor)
++                implementation(libs.androidx.media3.muxer)
+                 implementation(libs.mpv.android.lib)
++                implementation(libs.androidx.documentfile)
++                implementation(libs.mp4parser.isoparser)
++                implementation(libs.mp4parser.muxer)
+                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+                 implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
+                 if (androidDistribution == "full") {
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
+new file mode 100644
+index 0000000..583f826
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
+@@ -0,0 +1,67 @@
++package com.nuvio.app.features.downloads
++
++import android.content.Context
++import android.net.Uri
++import androidx.activity.compose.rememberLauncherForActivityResult
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.platform.LocalContext
++import android.util.Log
++import java.io.File
++import java.io.FileInputStream
++
++@Composable
++actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit {
++    val context = LocalContext.current
++    var pendingItem by remember { mutableStateOf<DownloadItem?>(null) }
++
++    val launcher = rememberLauncherForActivityResult(
++        contract = ActivityResultContracts.CreateDocument("video/mp4")
++    ) { uri ->
++        val item = pendingItem ?: return@rememberLauncherForActivityResult
++        pendingItem = null
++        if (uri != null) {
++            copyToDestination(context, item.localFileUri ?: "", uri)
++        }
++    }
++
++    return { item ->
++        pendingItem = item
++        val fileName = deriveSaveFileName(item)
++        launcher.launch(fileName)
++    }
++}
++
++private fun deriveSaveFileName(item: DownloadItem): String {
++    val baseName = item.fileName.substringBeforeLast('.')
++        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
++        .takeIf { it.isNotBlank() } ?: "video"
++    return "$baseName.mp4"
++}
++
++private fun copyToDestination(context: Context, sourceUri: String, destUri: Uri) {
++    try {
++        val sourceScheme = Uri.parse(sourceUri).scheme
++        if (sourceScheme == "content") {
++            context.contentResolver.openInputStream(Uri.parse(sourceUri))?.use { input ->
++                context.contentResolver.openOutputStream(destUri)?.use { output ->
++                    input.copyTo(output)
++                }
++            }
++        } else {
++            val file = File(Uri.parse(sourceUri).path ?: return)
++            val fis = FileInputStream(file)
++            fis.use { input ->
++                context.contentResolver.openOutputStream(destUri)?.use { output ->
++                    input.copyTo(output)
++                }
++            }
++        }
++    } catch (e: Exception) {
++        Log.e("DownloadFileSaver", "save failed: ${e.message}")
++    }
++}
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
+index b4bed54..9b4bb00 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
+@@ -107,7 +107,8 @@ internal actual object DownloadsLiveStatusPlatform {
+             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+ 
+         when (item.status) {
+-            DownloadStatus.Downloading -> {
++            DownloadStatus.Downloading,
++            DownloadStatus.Processing -> {
+                 notificationBuilder
+                     .setOngoing(true)
+                     .setPriority(NotificationCompat.PRIORITY_LOW)
+@@ -162,7 +163,8 @@ internal actual object DownloadsLiveStatusPlatform {
+     private fun buildSubtitle(item: DownloadItem): String {
+         val detail = item.displaySubtitle
+         return when (item.status) {
+-            DownloadStatus.Downloading -> {
++            DownloadStatus.Downloading,
++            DownloadStatus.Processing -> {
+                 val downloaded = formatBytes(item.downloadedBytes)
+                 val total = item.totalBytes?.let(::formatBytes)
+                 if (total != null) {
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
+index 8bda600..ce4005b 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
+@@ -18,8 +18,13 @@ import nuvio.composeapp.generated.resources.*
+ import org.jetbrains.compose.resources.getString
+ import java.io.File
+ import java.io.FileOutputStream
++import java.io.OutputStream
+ import java.net.URI
+ import java.util.concurrent.TimeUnit
++import javax.crypto.Cipher
++import javax.crypto.spec.IvParameterSpec
++import javax.crypto.spec.SecretKeySpec
++import kotlin.coroutines.coroutineContext
+ 
+ private val downloadHttpClient = OkHttpClient.Builder()
+     .connectTimeout(60, TimeUnit.SECONDS)
+@@ -39,11 +44,36 @@ internal actual object DownloadsPlatformDownloader {
+     actual fun start(
+         request: DownloadPlatformRequest,
+         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
+-        onSuccess: (localFileUri: String, totalBytes: Long?) -> Unit,
++        onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
+         onFailure: (message: String) -> Unit,
++        onWarning: ((message: String) -> Unit)?,
++        onPhase: ((phase: String) -> Unit)?,
++        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
+     ): DownloadsTaskHandle {
+         val job = SupervisorJob()
+         val scope = CoroutineScope(job + Dispatchers.IO)
++
++        if (request.isHlsStream) {
++            scope.launch {
++                val context = appContext
++                if (context == null) {
++                    onFailure(runBlocking { getString(Res.string.downloads_error_not_initialized) })
++                    return@launch
++                }
++                performHlsDownloadAndroid(
++                    context = context,
++                    request = request,
++                    onProgress = onProgress,
++                    onSuccess = onSuccess,
++                    onFailure = onFailure,
++                    onWarning = onWarning,
++                    onPhase = onPhase,
++                    onTrackProgress = onTrackProgress,
++                )
++            }
++            return AndroidDownloadsTaskHandle(job)
++        }
++
+         var call: Call? = null
+ 
+         scope.launch {
+@@ -58,7 +88,7 @@ internal actual object DownloadsPlatformDownloader {
+             val tempFile = File(downloadsDir, "${request.destinationFileName}.part")
+ 
+             try {
+-                var resumeFromBytes = tempFile.takeIf { it.exists() }?.length()?.coerceAtLeast(0L) ?: 0L
++                var resumeFromBytes = if (tempFile.exists()) tempFile.length() else 0L
+ 
+                 fun buildRequest(rangeStart: Long?): Request {
+                     val requestBuilder = Request.Builder().url(request.sourceUrl)
+@@ -90,16 +120,16 @@ internal actual object DownloadsPlatformDownloader {
+                     )
+                 }
+ 
+-                response.use { response ->
+-                    if (!response.isSuccessful) {
++                response.use { resp ->
++                    if (!resp.isSuccessful) {
+                         error(
+                             runBlocking {
+-                                getString(Res.string.downloads_error_http_failed, response.code)
++                                getString(Res.string.downloads_error_http_failed, resp.code)
+                             },
+                         )
+                     }
+ 
+-                    val isPartialResume = attemptedRangeRequest && response.code == 206 && resumeFromBytes > 0L
++                    val isPartialResume = attemptedRangeRequest && resp.code == 206 && resumeFromBytes > 0L
+                     val appendToTemp = isPartialResume
+                     val startingBytes = if (appendToTemp) resumeFromBytes else 0L
+ 
+@@ -107,13 +137,13 @@ internal actual object DownloadsPlatformDownloader {
+                         tempFile.delete()
+                     }
+ 
+-                    val body = response.body ?: error(
++                    val body = resp.body ?: error(
+                         runBlocking { getString(Res.string.downloads_error_empty_body) },
+                     )
+                     val totalBytes = resolveTotalBytes(
+                         startingBytes = startingBytes,
+                         isPartialResume = isPartialResume,
+-                        contentRangeHeader = response.header("Content-Range"),
++                        contentRangeHeader = resp.header("Content-Range"),
+                         contentLength = body.contentLength().takeIf { it > 0L },
+                     )
+                     var downloadedBytes = startingBytes
+@@ -143,10 +173,10 @@ internal actual object DownloadsPlatformDownloader {
+                     }
+ 
+                     val finalSize = destination.length()
+-                    onSuccess(destination.toURI().toString(), totalBytes ?: finalSize)
++                    onSuccess(destination.toURI().toString(), totalBytes ?: finalSize, null)
+                 }
+             } catch (error: Throwable) {
+-                onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
++                onFailure(error.message ?: runBlocking { getString(Res.string.downloads_status_failed) })
+             }
+         }
+ 
+@@ -189,6 +219,16 @@ internal actual object DownloadsPlatformDownloader {
+         return localFile.takeIf { it.exists() }?.toURI()?.toString()
+     }
+ 
++    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
++        return runCatching {
++            val requestBuilder = Request.Builder().url(url)
++            headers.forEach { (key, value) -> requestBuilder.header(key, value) }
++            downloadHttpClient.newCall(requestBuilder.build()).execute().use { response ->
++                if (response.isSuccessful) response.body?.string() else null
++            }
++        }.getOrNull()
++    }
++
+     actual fun openDownloadsDirectory(): Boolean {
+         val context = appContext ?: return false
+         val downloadsDir = File(context.filesDir, "downloads").apply { mkdirs() }
+@@ -226,6 +266,212 @@ internal actual object DownloadsPlatformDownloader {
+     }
+ }
+ 
++private suspend fun performHlsDownloadAndroid(
++    context: Context,
++    request: DownloadPlatformRequest,
++    onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++    onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
++    onFailure: (message: String) -> Unit,
++    onWarning: ((message: String) -> Unit)? = null,
++    onPhase: ((phase: String) -> Unit)? = null,
++    onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)? = null,
++) {
++    val downloadsDir = File(context.filesDir, "downloads").apply { mkdirs() }
++    val tempFile = File(downloadsDir, "${request.destinationFileName}.part")
++    if (tempFile.exists()) tempFile.delete()
++
++    val videoTempOut = FileOutputStream(tempFile, false)
++    val videoChannel = videoTempOut.channel
++
++    val ctx = coroutineContext
++    try {
++        val videoOutcome = downloadHlsToFile(
++            sourceUrl = request.sourceUrl,
++            httpGet = { url, range -> androidHttpGet(url, request.sourceHeaders, range) },
++            appendBytes = { bytes ->
++                videoTempOut.write(bytes)
++                videoChannel.force(false)
++            },
++            decryptAes128Cbc = ::aes128CbcDecryptAndroid,
++            onProgress = { downloaded, total ->
++                onProgress(downloaded, total)
++                onTrackProgress?.invoke("video", downloaded, total)
++            },
++            ensureActive = { ctx.ensureActive() },
++        )
++
++        videoTempOut.flush()
++        videoTempOut.close()
++
++        val finalVideoName = hlsOutputFileName(request.destinationFileName, videoOutcome.isFmp4)
++        val videoFinal = File(downloadsDir, finalVideoName)
++        if (videoFinal.exists()) videoFinal.delete()
++        if (!tempFile.renameTo(videoFinal)) {
++            tempFile.copyTo(videoFinal, overwrite = true)
++            tempFile.delete()
++        }
++
++        val videoUri = videoFinal.toURI().toString()
++        val audioUris = mutableListOf<String>()
++        val subtitleUris = mutableListOf<String>()
++
++        val audioUrls = if (request.hlsAudioUrls.isNotEmpty()) request.hlsAudioUrls
++        else listOfNotNull(request.hlsAudioUrl)
++
++        for ((index, audioUrl) in audioUrls.withIndex()) {
++            try {
++                val suffix = if (index == 0) "audio" else "audio_$index"
++                val audioFinalName = hlsCompanionFileName(finalVideoName, suffix, "mp4")
++                val audioTempName = hlsCompanionFileName(request.destinationFileName, suffix, "part")
++                val uri = downloadSingleHlsTrackAndroid(
++                    downloadsDir = downloadsDir,
++                    url = audioUrl,
++                    headers = request.sourceHeaders,
++                    finalName = audioFinalName,
++                    tempName = audioTempName,
++                    trackName = suffix,
++                    onTrackProgress = onTrackProgress,
++                    ctx = ctx,
++                )
++                audioUris.add(uri)
++            } catch (_: CancellationException) {
++                throw CancellationException()
++            } catch (_: Throwable) {
++            }
++        }
++
++        val subtitleUrls = if (request.hlsSubtitleUrls.isNotEmpty()) request.hlsSubtitleUrls
++        else listOfNotNull(request.hlsSubtitleUrl)
++
++        for ((index, subUrl) in subtitleUrls.withIndex()) {
++            try {
++                val suffix = if (index == 0) "subs" else "subs_$index"
++                val subFinalName = hlsCompanionFileName(finalVideoName, suffix, "vtt")
++                val subTempName = hlsCompanionFileName(request.destinationFileName, suffix, "part")
++                val uri = downloadSingleHlsTrackAndroid(
++                    downloadsDir = downloadsDir,
++                    url = subUrl,
++                    headers = request.sourceHeaders,
++                    finalName = subFinalName,
++                    tempName = subTempName,
++                    trackName = suffix,
++                    onTrackProgress = onTrackProgress,
++                    ctx = ctx,
++                )
++                subtitleUris.add(uri)
++            } catch (_: CancellationException) {
++                throw CancellationException()
++            } catch (_: Throwable) {
++            }
++        }
++
++        onSuccess(
++            videoUri,
++            videoOutcome.totalBytes,
++            HlsCompanionOutcome(
++                audioLocalFileUri = audioUris.firstOrNull(),
++                subtitleLocalFileUri = subtitleUris.firstOrNull(),
++                audioLocalFileUris = audioUris,
++                subtitleLocalFileUris = subtitleUris,
++            )
++        )
++    } catch (_: CancellationException) {
++        videoTempOut.closeSafe()
++        tempFile.delete()
++    } catch (error: Throwable) {
++        videoTempOut.closeSafe()
++        onFailure(error.message ?: runBlocking { getString(Res.string.downloads_status_failed) })
++    }
++}
++
++private suspend fun downloadSingleHlsTrackAndroid(
++    downloadsDir: File,
++    url: String,
++    headers: Map<String, String>,
++    finalName: String,
++    tempName: String,
++    trackName: String,
++    onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
++    ctx: kotlin.coroutines.CoroutineContext,
++): String {
++    val tempTarget = File(downloadsDir, tempName)
++    if (tempTarget.exists()) tempTarget.delete()
++
++    val out = FileOutputStream(tempTarget, false)
++    val channel = out.channel
++
++    try {
++        val outcome = downloadHlsToFile(
++            sourceUrl = url,
++            httpGet = { u, range -> androidHttpGet(u, headers, range) },
++            appendBytes = { bytes ->
++                out.write(bytes)
++                channel.force(false)
++            },
++            decryptAes128Cbc = ::aes128CbcDecryptAndroid,
++            onProgress = { downloaded, total ->
++                onTrackProgress?.invoke(trackName, downloaded, total)
++            },
++            ensureActive = { ctx.ensureActive() },
++        )
++
++        out.flush()
++        out.close()
++
++        val actualFinalName = hlsOutputFileName(finalName, outcome.isFmp4)
++        val actualFinal = File(downloadsDir, actualFinalName)
++        if (actualFinal.exists()) actualFinal.delete()
++        if (!tempTarget.renameTo(actualFinal)) {
++            tempTarget.copyTo(actualFinal, overwrite = true)
++            tempTarget.delete()
++        }
++        return actualFinal.toURI().toString()
++    } catch (e: Throwable) {
++        out.closeSafe()
++        tempTarget.delete()
++        throw e
++    }
++}
++
++private suspend fun androidHttpGet(
++    url: String,
++    headers: Map<String, String>,
++    range: HlsByteRange?,
++): HlsHttpResult {
++    val requestBuilder = Request.Builder().url(url)
++    headers.forEach { (key, value) ->
++        requestBuilder.header(key, value)
++    }
++    if (range != null) {
++        requestBuilder.header(
++            "Range",
++            "bytes=${range.offset}-${range.offset + range.length - 1}",
++        )
++    }
++
++    val response = downloadHttpClient.newCall(requestBuilder.get().build()).execute()
++    return response.use { resp ->
++        HlsHttpResult(
++            status = resp.code,
++            body = resp.body?.bytes() ?: ByteArray(0),
++            finalUrl = resp.request.url.toString(),
++        )
++    }
++}
++
++private fun aes128CbcDecryptAndroid(data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
++    if (data.isEmpty()) return ByteArray(0)
++    val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
++    val keySpec = SecretKeySpec(key, "AES")
++    val ivSpec = IvParameterSpec(iv)
++    cipher.init(Cipher.DECRYPT_MODE, keySpec, ivSpec)
++    return cipher.doFinal(data)
++}
++
++private fun OutputStream.closeSafe() {
++    try { close() } catch (_: Exception) { }
++}
++
+ private class AndroidDownloadsTaskHandle(
+     private val job: Job,
+ ) : DownloadsTaskHandle {
+@@ -268,3 +514,14 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+     if (totalPart == "*") return null
+     return totalPart.toLongOrNull()?.takeIf { it > 0L }
+ }
++
++private fun hlsOutputFileName(baseName: String, isFmp4: Boolean): String {
++    val targetExt = if (isFmp4) "mp4" else "ts"
++    val stem = baseName.substringBeforeLast('.')
++    return "$stem.$targetExt"
++}
++
++private fun hlsCompanionFileName(mainFileName: String, trackType: String, ext: String): String {
++    val stem = mainFileName.substringBeforeLast('.')
++    return "${stem}_$trackType.$ext"
++}
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
+new file mode 100644
+index 0000000..1bbed1c
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
+@@ -0,0 +1,10 @@
++package com.nuvio.app.features.downloads
++
++import android.util.Log
++
++internal object Mp4ParserRemux {
++    fun remux(videoPath: String, audioPath: String?, outputPath: String): Boolean {
++        Log.w("Mp4ParserRemux", "skipped — streaming remux not yet implemented, falling back to MediaMuxer")
++        return false
++    }
++}
+diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+index cc827e5..86331fc 100644
+--- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+@@ -1077,6 +1077,16 @@
+   <string name="downloads_error_http_failed">Richiesta fallita con HTTP %1$d</string>
+   <string name="downloads_error_not_initialized">Il sistema di download non è inizializzato</string>
+   <string name="downloads_error_request_failed">Richiesta di download fallita</string>
++  <string name="downloads_hls_quality">Qualità Video</string>
++  <string name="downloads_hls_audio">Traccia Audio</string>
++  <string name="downloads_hls_subtitles">Sottotitoli</string>
++  <string name="downloads_hls_download">Scarica</string>
++  <string name="downloads_hls_fetching">Recupero stream disponibili…</string>
++  <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
++  <string name="downloads_status_processing">Elaborazione • %1$s</string>
++  <string name="downloads_track_video">Video</string>
++  <string name="downloads_track_audio">Audio</string>
++  <string name="downloads_track_subtitles">Sottotitoli</string>
+   <string name="home_catalog_default_title">%1$s - %2$s</string>
+   <string name="library_empty_message">I titoli salvati appariranno qui dopo aver toccato Salva nella schermata dei dettagli.</string>
+   <string name="library_empty_title">La tua libreria è vuota</string>
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 6fd8f8b..97c490f 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -627,6 +627,16 @@
+     <string name="downloads_status_downloading">Downloading • %1$s</string>
+     <string name="downloads_status_failed">Failed</string>
+     <string name="downloads_status_paused">Paused • %1$s</string>
++    <string name="downloads_status_processing">Processing • %1$s</string>
++    <string name="downloads_hls_quality">Video Quality</string>
++    <string name="downloads_hls_audio">Audio Track</string>
++    <string name="downloads_hls_subtitles">Subtitles</string>
++    <string name="downloads_hls_download">Download</string>
++    <string name="downloads_hls_fetching">Fetching available streams…</string>
++    <string name="downloads_hls_select_variant">Select quality, audio &amp; subtitles</string>
++    <string name="downloads_track_video">Video</string>
++    <string name="downloads_track_audio">Audio</string>
++    <string name="downloads_track_subtitles">Subtitles</string>
+     <string name="episodes_cd_watched">Watched</string>
+     <string name="episodes_season">Season %1$d</string>
+     <string name="episodes_specials">Specials</string>
+@@ -1794,6 +1804,16 @@
+     <string name="downloads_error_partial_not_open">Partial download file is not open</string>
+     <string name="downloads_error_request_failed">Download request failed</string>
+     <string name="downloads_error_write_partial_failed">Failed to write partial download file</string>
++    <string name="downloads_hls_quality">Video Quality</string>
++    <string name="downloads_hls_audio">Audio Track</string>
++    <string name="downloads_hls_subtitles">Subtitles</string>
++    <string name="downloads_hls_download">Download</string>
++    <string name="downloads_hls_fetching">Fetching available streams…</string>
++    <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
++    <string name="downloads_status_processing">Processing • %1$s</string>
++    <string name="downloads_track_video">Video</string>
++    <string name="downloads_track_audio">Audio</string>
++    <string name="downloads_track_subtitles">Subtitles</string>
+     <string name="home_catalog_default_title">%1$s - %2$s</string>
+     <string name="library_empty_message">Saved titles will appear here after you tap Save on a details screen.</string>
+     <string name="library_empty_title">Your library is empty</string>
+@@ -2256,7 +2276,7 @@
+     <string name="live_tv_choose_category">Categories</string>
+     <string name="live_tv_categories">Categories</string>
+     <string name="live_tv_channels">Channels</string>
+-    <string name="live_tv_channel_count">%1 channels</string>
++    <string name="live_tv_channel_count">%1$d channels</string>
+     <string name="live_tv_favorite">Favorite</string>
+     <string name="live_tv_disconnect">Disconnect</string>
+     <string name="live_tv_empty_title">No channels loaded</string>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index 19efc93..7eb0bb1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -122,6 +122,7 @@ import com.nuvio.app.features.player.PlayerLaunch
+ import com.nuvio.app.features.player.PlayerLaunchStore
+ import com.nuvio.app.features.player.PlayerPlaybackSnapshot
+ import com.nuvio.app.features.player.PlayerSettingsRepository
++import com.nuvio.app.features.streams.StreamSubtitle
+ import com.nuvio.app.features.player.SubtitleLanguageOption
+ import com.nuvio.app.features.player.prepareExternalPlayerLaunch
+ import com.nuvio.app.features.player.rememberExternalPlayerLauncher
+@@ -836,13 +837,24 @@ internal fun MainAppContent(
+                 ?.let(WatchProgressRepository::progressForVideo)
+                 ?.takeIf { it.isResumable }
+ 
++            val audioSourceUrl = item.hlsAudioLocalFileUri
++                ?.let(DownloadsRepository::resolveCompanionUri)
++            val subtitleSourceUrl = item.hlsSubtitleLocalFileUri
++                ?.let(DownloadsRepository::resolveCompanionUri)
++            val externalSubtitles = if (subtitleSourceUrl != null) {
++                listOf(StreamSubtitle(url = subtitleSourceUrl, language = "", name = "Downloaded"))
++            } else {
++                emptyList()
++            }
++
+             val playerLaunch = PlayerLaunch(
+                 profileId = activePlaybackProfileId,
+                 title = item.title,
+                 sourceUrl = sourceUrl,
++                sourceAudioUrl = audioSourceUrl,
+                 sourceHeaders = emptyMap(),
+                 sourceResponseHeaders = emptyMap(),
+-                externalSubtitles = emptyList(),
++                externalSubtitles = externalSubtitles,
+                 streamType = null,
+                 logo = item.logo,
+                 poster = item.poster,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
+index 23c8d9b..e2d3305 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
+@@ -1,19 +1,22 @@
+-package com.nuvio.app.core.ui
++﻿package com.nuvio.app.core.ui
+ 
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.heightIn
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.itemsIndexed
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.rounded.Check
+ import androidx.compose.material.icons.rounded.KeyboardArrowDown
++import androidx.compose.material3.Checkbox
+ import androidx.compose.material3.ExperimentalMaterial3Api
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
+@@ -30,6 +33,7 @@ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
+ import kotlinx.coroutines.launch
+ 
+ data class NuvioDropdownOption(
+@@ -42,10 +46,13 @@ data class NuvioDropdownOption(
+ fun NuvioDropdownChip(
+     title: String,
+     label: String,
+-    selectedKey: String?,
++    selectedKey: String? = null,
+     options: List<NuvioDropdownOption>,
+     enabled: Boolean = true,
+-    onSelected: (NuvioDropdownOption) -> Unit,
++    multiple: Boolean = false,
++    selectedKeys: Set<String> = emptySet(),
++    onSelected: (NuvioDropdownOption) -> Unit = {},
++    onSelectedMultiple: (Set<String>) -> Unit = {},
+     modifier: Modifier = Modifier,
+ ) {
+     val tokens = MaterialTheme.nuvio
+@@ -84,29 +91,108 @@ fun NuvioDropdownChip(
+     }
+ 
+     if (isSheetVisible) {
+-        NuvioDropdownOptionsSheet(
+-            title = title,
+-            options = options,
+-            selectedKey = selectedKey,
+-            sheetState = sheetState,
+-            onDismiss = {
+-                coroutineScope.launch {
+-                    dismissNuvioBottomSheet(
+-                        sheetState = sheetState,
+-                        onDismiss = { isSheetVisible = false },
+-                    )
+-                }
+-            },
+-            onSelected = { option ->
+-                onSelected(option)
+-                coroutineScope.launch {
+-                    dismissNuvioBottomSheet(
+-                        sheetState = sheetState,
+-                        onDismiss = { isSheetVisible = false },
++        if (multiple) {
++            val pendingKeys = remember { mutableStateOf(selectedKeys) }
++            NuvioModalBottomSheet(
++                onDismissRequest = {
++                    coroutineScope.launch {
++                        dismissNuvioBottomSheet(
++                            sheetState = sheetState,
++                            onDismiss = { isSheetVisible = false },
++                        )
++                    }
++                },
++                sheetState = sheetState,
++            ) {
++                Column(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .padding(bottom = nuvioSafeBottomPadding(tokens.spacing.screenHorizontal)),
++                ) {
++                    Text(
++                        text = title,
++                        modifier = Modifier.padding(
++                            horizontal = tokens.spacing.screenHorizontal,
++                            vertical = NuvioTokens.Space.s14,
++                        ),
++                        style = MaterialTheme.typography.titleLarge,
++                        color = tokens.colors.textPrimary,
+                     )
++                    NuvioBottomSheetDivider()
++                    LazyColumn(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .heightIn(max = tokens.breakpoints.largePhone),
++                    ) {
++                        itemsIndexed(options) { index, option ->
++                            val isChecked = pendingKeys.value.contains(option.key)
++                            Row(
++                                modifier = Modifier
++                                    .fillMaxWidth()
++                                    .clickable {
++                                        pendingKeys.value = if (isChecked) {
++                                            pendingKeys.value - option.key
++                                        } else {
++                                            pendingKeys.value + option.key
++                                        }
++                                        onSelectedMultiple(pendingKeys.value)
++                                    }
++                                    .padding(
++                                        horizontal = tokens.spacing.screenHorizontal,
++                                        vertical = NuvioTokens.Space.s4,
++                                    ),
++                                verticalAlignment = Alignment.CenterVertically,
++                            ) {
++                                Checkbox(
++                                    checked = isChecked,
++                                    onCheckedChange = { checked ->
++                                        pendingKeys.value = if (checked) {
++                                            pendingKeys.value + option.key
++                                        } else {
++                                            pendingKeys.value - option.key
++                                        }
++                                        onSelectedMultiple(pendingKeys.value)
++                                    },
++                                )
++                                Spacer(modifier = Modifier.width(8.dp))
++                                Text(
++                                    text = option.label,
++                                    style = MaterialTheme.typography.bodyLarge,
++                                    color = tokens.colors.textPrimary,
++                                )
++                            }
++                            if (index < options.lastIndex) {
++                                NuvioBottomSheetDivider()
++                            }
++                        }
++                    }
+                 }
+-            },
+-        )
++            }
++        } else {
++            NuvioDropdownOptionsSheet(
++                title = title,
++                options = options,
++                selectedKey = selectedKey,
++                sheetState = sheetState,
++                onDismiss = {
++                    coroutineScope.launch {
++                        dismissNuvioBottomSheet(
++                            sheetState = sheetState,
++                            onDismiss = { isSheetVisible = false },
++                        )
++                    }
++                },
++                onSelected = { option ->
++                    onSelected(option)
++                    coroutineScope.launch {
++                        dismissNuvioBottomSheet(
++                            sheetState = sheetState,
++                            onDismiss = { isSheetVisible = false },
++                        )
++                    }
++                },
++            )
++        }
+     }
+ }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
+new file mode 100644
+index 0000000..1a9e985
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
+@@ -0,0 +1,6 @@
++﻿package com.nuvio.app.features.downloads
++
++import androidx.compose.runtime.Composable
++
++@Composable
++expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
+new file mode 100644
+index 0000000..4cf7e99
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
+@@ -0,0 +1,345 @@
++package com.nuvio.app.features.downloads
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.material3.rememberModalBottomSheetState
++import androidx.compose.material3.CircularProgressIndicator
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.nuvio.app.core.ui.NuvioDropdownChip
++import com.nuvio.app.core.ui.NuvioDropdownOption
++import com.nuvio.app.core.ui.NuvioModalBottomSheet
++import com.nuvio.app.core.ui.NuvioPrimaryButton
++import com.nuvio.app.core.ui.dismissNuvioBottomSheet
++import com.nuvio.app.core.ui.nuvioSafeBottomPadding
++import com.nuvio.app.features.player.getLanguageLabelForCode
++import com.nuvio.app.features.player.languageLabelForCode
++import com.nuvio.app.features.streams.StreamItem
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.downloads_hls_audio
++import nuvio.composeapp.generated.resources.downloads_hls_download
++import nuvio.composeapp.generated.resources.downloads_hls_fetching
++import nuvio.composeapp.generated.resources.downloads_hls_quality
++import nuvio.composeapp.generated.resources.downloads_hls_select_variant
++import nuvio.composeapp.generated.resources.downloads_hls_subtitles
++import nuvio.composeapp.generated.resources.downloads_status_failed
++import org.jetbrains.compose.resources.stringResource
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++fun DownloadsHlsSelectionSheet(
++    stream: StreamItem?,
++    onDismiss: () -> Unit,
++    onDownload: (HlsDownloadSelection) -> Unit,
++) {
++    if (stream == null) return
++
++    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
++    val coroutineScope = rememberCoroutineScope()
++    var hlsMetadata by remember { mutableStateOf<HlsStreamMetadata?>(null) }
++    var isFetching by remember { mutableStateOf(true) }
++    var fetchError by remember { mutableStateOf(false) }
++
++    LaunchedEffect(stream) {
++        isFetching = true
++        fetchError = false
++        val metadata = withContext(Dispatchers.Default) {
++            DownloadsRepository.fetchHlsMasterPlaylist(stream)
++        }
++        hlsMetadata = metadata
++        isFetching = false
++        if (metadata == null) {
++            fetchError = true
++        }
++    }
++
++    val playlist = hlsMetadata?.masterPlaylist
++
++    val qualityOptions = remember(playlist) {
++        playlist?.variants?.mapIndexed { _, variant ->
++            val label = buildString {
++                variant.resolution?.let { append(it) }
++                if (variant.resolution != null) append(" ÔÇó ")
++                append(formatBandwidth(variant.bandwidth))
++                variant.codecs?.let { codecs ->
++                    val codecLabel = friendlyCodec(codecs)
++                    if (codecLabel.isNotBlank()) {
++                        append(" ÔÇó ")
++                        append(codecLabel)
++                    }
++                }
++            }
++            NuvioDropdownOption(
++                key = variant.url,
++                label = label,
++            )
++        }.orEmpty()
++    }
++
++    val audioTracks = remember(playlist) {
++        playlist?.audioTracks?.filter { it.uri != null }.orEmpty()
++    }
++    val subtitleTracks = remember(playlist) {
++        playlist?.subtitleTracks?.filter { it.uri != null }.orEmpty()
++    }
++
++    var selectedQualityKey by remember(qualityOptions) {
++        mutableStateOf(qualityOptions.firstOrNull()?.key)
++    }
++    var selectedAudioKeys by remember(audioTracks) {
++        mutableStateOf(audioTracks.filter { it.isDefault }.mapNotNull { it.uri }.toSet())
++    }
++    var selectedSubtitleKeys by remember(subtitleTracks) {
++        mutableStateOf(setOf<String>())
++    }
++
++    val hasAudio = audioTracks.isNotEmpty()
++    val hasSubtitles = subtitleTracks.isNotEmpty()
++    val canDownload = qualityOptions.isNotEmpty()
++
++    NuvioModalBottomSheet(
++        onDismissRequest = {
++            coroutineScope.launch {
++                dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
++            }
++        },
++        sheetState = sheetState,
++    ) {
++        Column(
++            modifier = Modifier
++                .fillMaxWidth()
++                .padding(bottom = nuvioSafeBottomPadding(16.dp)),
++        ) {
++            Column(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .padding(horizontal = 16.dp, vertical = 14.dp),
++                verticalArrangement = Arrangement.spacedBy(4.dp),
++            ) {
++                Text(
++                    text = stream.streamLabel,
++                    style = MaterialTheme.typography.titleLarge,
++                    color = MaterialTheme.colorScheme.onSurface,
++                    fontWeight = FontWeight.SemiBold,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++                Text(
++                    text = stringResource(Res.string.downloads_hls_select_variant),
++                    style = MaterialTheme.typography.bodyMedium,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
++
++            when {
++                fetchError -> {
++                    Box(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(horizontal = 16.dp, vertical = 24.dp),
++                        contentAlignment = Alignment.Center,
++                    ) {
++                        Text(
++                            text = stringResource(Res.string.downloads_status_failed),
++                            style = MaterialTheme.typography.bodyLarge,
++                            color = MaterialTheme.colorScheme.error,
++                        )
++                    }
++                }
++                isFetching || qualityOptions.isEmpty() -> {
++                    Box(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(vertical = 32.dp),
++                        contentAlignment = Alignment.Center,
++                    ) {
++                        CircularProgressIndicator(
++                            color = MaterialTheme.colorScheme.primary,
++                            strokeWidth = 2.5.dp,
++                        )
++                        Spacer(modifier = Modifier.height(12.dp))
++                        Text(
++                            text = stringResource(Res.string.downloads_hls_fetching),
++                            style = MaterialTheme.typography.bodyLarge,
++                            color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        )
++                    }
++                }
++                else -> {
++                    Column(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .padding(horizontal = 16.dp),
++                        verticalArrangement = Arrangement.spacedBy(12.dp),
++                    ) {
++                        Text(
++                            text = stringResource(Res.string.downloads_hls_quality),
++                            style = MaterialTheme.typography.labelLarge,
++                            color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        )
++                        NuvioDropdownChip(
++                            title = stringResource(Res.string.downloads_hls_quality),
++                            label = qualityOptions.firstOrNull { it.key == selectedQualityKey }?.label.orEmpty(),
++                            selectedKey = selectedQualityKey,
++                            options = qualityOptions,
++                            onSelected = { option ->
++                                selectedQualityKey = option.key
++                            },
++                        )
++
++                        if (hasAudio) {
++                            Spacer(modifier = Modifier.height(4.dp))
++                            Text(
++                                text = stringResource(Res.string.downloads_hls_audio),
++                                style = MaterialTheme.typography.labelLarge,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                            val audioOptions = mutableListOf<NuvioDropdownOption>()
++                            val audioSelectedLabels = mutableListOf<String>()
++                            for (track in audioTracks) {
++                                val langLabel = languageLabelForCode(track.language)
++                                if (track.uri in selectedAudioKeys) {
++                                    audioSelectedLabels.add(langLabel)
++                                }
++                                audioOptions.add(
++                                    NuvioDropdownOption(
++                                        key = track.uri!!,
++                                        label = buildString {
++                                            append(langLabel)
++                                            if (track.name.isNotBlank() && !track.name.equals(track.language, ignoreCase = true) && !track.name.equals(langLabel, ignoreCase = true)) {
++                                                append(" ÔÇó ")
++                                                append(track.name)
++                                            }
++                                        },
++                                    )
++                                )
++                            }
++                            val audioChipLabel = audioSelectedLabels.joinToString(", ")
++                            NuvioDropdownChip(
++                                title = stringResource(Res.string.downloads_hls_audio),
++                                label = audioChipLabel,
++                                options = audioOptions,
++                                multiple = true,
++                                selectedKeys = selectedAudioKeys,
++                                onSelectedMultiple = { keys -> selectedAudioKeys = keys },
++                            )
++                        }
++
++                        if (hasSubtitles) {
++                            Spacer(modifier = Modifier.height(4.dp))
++                            Text(
++                                text = stringResource(Res.string.downloads_hls_subtitles),
++                                style = MaterialTheme.typography.labelLarge,
++                                color = MaterialTheme.colorScheme.onSurfaceVariant,
++                            )
++                            val subtitleOptions = mutableListOf<NuvioDropdownOption>()
++                            val subtitleSelectedLabels = mutableListOf<String>()
++                            for (track in subtitleTracks) {
++                                val langLabel = languageLabelForCode(track.language)
++                                if (track.uri in selectedSubtitleKeys) {
++                                    subtitleSelectedLabels.add(langLabel)
++                                }
++                                subtitleOptions.add(
++                                    NuvioDropdownOption(
++                                        key = track.uri!!,
++                                        label = buildString {
++                                            append(langLabel)
++                                            if (track.name.isNotBlank() && !track.name.equals(track.language, ignoreCase = true) && !track.name.equals(langLabel, ignoreCase = true)) {
++                                                append(" ÔÇó ")
++                                                append(track.name)
++                                            }
++                                        },
++                                    )
++                                )
++                            }
++                            val subtitleChipLabel = subtitleSelectedLabels.joinToString(", ")
++                            NuvioDropdownChip(
++                                title = stringResource(Res.string.downloads_hls_subtitles),
++                                label = subtitleChipLabel,
++                                options = subtitleOptions,
++                                multiple = true,
++                                selectedKeys = selectedSubtitleKeys,
++                                onSelectedMultiple = { keys -> selectedSubtitleKeys = keys },
++                            )
++                        }
++
++                        Spacer(modifier = Modifier.height(8.dp))
++
++                        NuvioPrimaryButton(
++                            text = stringResource(Res.string.downloads_hls_download),
++                            enabled = canDownload,
++                            onClick = {
++                                coroutineScope.launch {
++                                    val selectedAudioTracks = audioTracks.filter { it.uri in selectedAudioKeys }
++                                    val selectedSubtitleTracks = subtitleTracks.filter { it.uri in selectedSubtitleKeys }
++                                    val audioLabels = selectedAudioTracks.map { getLanguageLabelForCode(it.language) }
++                                    val subtitleLabels = selectedSubtitleTracks.map { getLanguageLabelForCode(it.language) }
++                                    val selectedVariant = playlist?.variants?.firstOrNull {
++                                        it.url == selectedQualityKey
++                                    }
++                                    val selection = HlsDownloadSelection(
++                                        variantUrl = selectedQualityKey.orEmpty(),
++                                        audioUrls = selectedAudioKeys.toList(),
++                                        subtitleUrls = selectedSubtitleKeys.toList(),
++                                        audioLabels = audioLabels,
++                                        subtitleLabels = subtitleLabels,
++                                        displayQuality = selectedVariant?.resolution
++                                            ?: formatBandwidth(selectedVariant?.bandwidth ?: 0L),
++                                        displayAudio = audioLabels.joinToString(", "),
++                                        displaySubtitle = subtitleLabels.joinToString(", "),
++                                    )
++                                    dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = {
++                                        onDownload(selection)
++                                    })
++                                }
++                            },
++                        )
++
++                        Spacer(modifier = Modifier.height(8.dp))
++                    }
++                }
++            }
++        }
++    }
++}
++
++private fun formatBandwidth(bandwidth: Long): String {
++    if (bandwidth <= 0L) return ""
++    val tenths = bandwidth / 100_000L
++    val integerPart = tenths / 10
++    val decimalPart = tenths % 10
++    return if (decimalPart > 0) "$integerPart.$decimalPart Mbps" else "$integerPart Mbps"
++}
++
++private fun friendlyCodec(codecs: String): String {
++    val lower = codecs.lowercase()
++    return when {
++        lower.contains("av01") || lower.contains("av1") -> "AV1"
++        lower.contains("hev1") || lower.contains("hvc1") || lower.contains("hevc") -> "HEVC"
++        lower.contains("avc1") || lower.contains("h264") -> "H.264"
++        lower.contains("vp9") -> "VP9"
++        lower.contains("vp8") -> "VP8"
++        else -> ""
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
+index 48da488..ffa2c15 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
+@@ -1,7 +1,8 @@
+-package com.nuvio.app.features.downloads
++﻿package com.nuvio.app.features.downloads
+ 
+ import kotlinx.serialization.Serializable
+ import kotlinx.coroutines.runBlocking
++import kotlinx.serialization.Transient
+ import nuvio.composeapp.generated.resources.Res
+ import nuvio.composeapp.generated.resources.downloads_enqueue_missing_url
+ import nuvio.composeapp.generated.resources.downloads_enqueue_replaced
+@@ -15,8 +16,14 @@ enum class DownloadStatus {
+     Paused,
+     Completed,
+     Failed,
++    Processing,
+ }
+ 
++data class TrackProgressState(
++    val downloadedBytes: Long = 0L,
++    val totalBytes: Long? = null,
++)
++
+ @Serializable
+ data class DownloadItem(
+     val id: String,
+@@ -47,6 +54,16 @@ data class DownloadItem(
+     val errorMessage: String? = null,
+     val createdAtEpochMs: Long,
+     val updatedAtEpochMs: Long,
++    val isHls: Boolean = false,
++    val hlsAudioUrl: String? = null,
++    val hlsSubtitleUrl: String? = null,
++    val hlsAudioUrls: List<String> = emptyList(),
++    val hlsSubtitleUrls: List<String> = emptyList(),
++    val hlsAudioLocalFileUri: String? = null,
++    val hlsSubtitleLocalFileUri: String? = null,
++    val hlsWarningMessage: String? = null,
++    @Transient
++    val trackProgress: Map<String, TrackProgressState> = emptyMap(),
+ ) {
+     val isEpisode: Boolean
+         get() = seasonNumber != null && episodeNumber != null
+@@ -87,7 +104,8 @@ enum class DownloadEnqueueResult {
+     Started,
+     Replaced,
+     MissingUrl,
+-    UnsupportedFormat;
++    UnsupportedFormat,
++    HlsNeedsSelection;
+ 
+     fun toastMessage(): String = runBlocking {
+         when (this@DownloadEnqueueResult) {
+@@ -95,10 +113,32 @@ enum class DownloadEnqueueResult {
+             Replaced -> getString(Res.string.downloads_enqueue_replaced)
+             MissingUrl -> getString(Res.string.downloads_enqueue_missing_url)
+             UnsupportedFormat -> getString(Res.string.downloads_enqueue_unsupported_format)
++            HlsNeedsSelection -> ""
+         }
+     }
+ }
+ 
++data class HlsDownloadSelection(
++    val variantUrl: String,
++    val audioUrls: List<String> = emptyList(),
++    val subtitleUrls: List<String> = emptyList(),
++    val audioLabels: List<String> = emptyList(),
++    val subtitleLabels: List<String> = emptyList(),
++    val displayQuality: String = "",
++    val displayAudio: String = "",
++    val displaySubtitle: String = "",
++) {
++    @Deprecated("Use audioUrls instead")
++    val audioUrl: String? get() = audioUrls.firstOrNull()
++    @Deprecated("Use subtitleUrls instead")
++    val subtitleUrl: String? get() = subtitleUrls.firstOrNull()
++}
++
++data class HlsStreamMetadata(
++    val masterPlaylist: HlsMasterPlaylist,
++    val baseUrl: String,
++)
++
+ internal fun List<DownloadItem>.sortedForSeriesDownloads(): List<DownloadItem> =
+     sortedWith(downloadSeriesEpisodeComparator)
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
+index 077b853..5f6d7c1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
+@@ -1,9 +1,24 @@
+-package com.nuvio.app.features.downloads
++﻿package com.nuvio.app.features.downloads
+ 
+ internal data class DownloadPlatformRequest(
++    val downloadId: String,
++    val displayTitle: String,
+     val sourceUrl: String,
+     val sourceHeaders: Map<String, String>,
+     val destinationFileName: String,
++    val isHlsStream: Boolean = false,
++    val hlsAudioUrl: String? = null,
++    val hlsSubtitleUrl: String? = null,
++    val hlsAudioUrls: List<String> = emptyList(),
++    val hlsSubtitleUrls: List<String> = emptyList(),
++)
++
++internal data class HlsCompanionOutcome(
++    val audioLocalFileUri: String?,
++    val subtitleLocalFileUri: String?,
++    val audioLocalFileUris: List<String> = emptyList(),
++    val subtitleLocalFileUris: List<String> = emptyList(),
++    val warningMessage: String? = null,
+ )
+ 
+ internal interface DownloadsTaskHandle {
+@@ -14,8 +29,11 @@ internal expect object DownloadsPlatformDownloader {
+     fun start(
+         request: DownloadPlatformRequest,
+         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
+-        onSuccess: (localFileUri: String, totalBytes: Long?) -> Unit,
++        onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
+         onFailure: (message: String) -> Unit,
++        onWarning: ((message: String) -> Unit)? = null,
++        onPhase: ((phase: String) -> Unit)? = null,
++        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)? = null,
+     ): DownloadsTaskHandle
+ 
+     fun removeFile(localFileUri: String?): Boolean
+@@ -24,5 +42,7 @@ internal expect object DownloadsPlatformDownloader {
+ 
+     fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String?
+ 
++    fun fetchUrlAsString(url: String, headers: Map<String, String>): String?
++
+     fun openDownloadsDirectory(): Boolean
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
+index b0440dc..9fb44f6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
+@@ -1,6 +1,13 @@
+ package com.nuvio.app.features.downloads
+ 
++import co.touchlab.kermit.Logger
+ import com.nuvio.app.features.streams.StreamItem
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.runBlocking
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+@@ -14,9 +21,19 @@ import nuvio.composeapp.generated.resources.*
+ import org.jetbrains.compose.resources.getString
+ 
+ object DownloadsRepository {
++    private val log = Logger.withTag("DownloadsRepo")
+     private val _uiState = MutableStateFlow(DownloadsUiState())
+     val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
+ 
++    private val _processingItemIds = MutableStateFlow<Set<String>>(emptySet())
++    val processingItemIds: StateFlow<Set<String>> = _processingItemIds.asStateFlow()
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
++    private val processingRemovalJobs = mutableMapOf<String, Job>()
++
++    private val _trackProgress = MutableStateFlow<Map<String, Map<String, TrackProgressState>>>(emptyMap())
++    val trackProgress: StateFlow<Map<String, Map<String, TrackProgressState>>> = _trackProgress.asStateFlow()
++
+     private val activeHandles = mutableMapOf<String, DownloadsTaskHandle>()
+     private var hasLoaded = false
+     private var nextDownloadOrdinal = 0L
+@@ -33,6 +50,9 @@ object DownloadsRepository {
+     fun clearLocalState() {
+         activeHandles.values.forEach(DownloadsTaskHandle::cancel)
+         activeHandles.clear()
++        processingRemovalJobs.values.forEach { it.cancel() }
++        processingRemovalJobs.clear()
++        _trackProgress.value = emptyMap()
+         hasLoaded = false
+         _uiState.value = DownloadsUiState()
+         notifyLiveStatusPlatform()
+@@ -100,6 +120,13 @@ object DownloadsRepository {
+         return resolvedUri
+     }
+ 
++    fun resolveCompanionUri(companionUri: String): String? {
++        return DownloadsPlatformDownloader.resolveLocalFileUri(
++            localFileUri = companionUri,
++            destinationFileName = companionUri.substringAfterLast('/').takeIf { it.isNotBlank() }.orEmpty(),
++        )
++    }
++
+     fun enqueueFromStream(
+         contentType: String,
+         videoId: String,
+@@ -126,6 +153,162 @@ object DownloadsRepository {
+             return DownloadEnqueueResult.UnsupportedFormat
+         }
+ 
++        if (HlsPlaylistParser.isHlsUrl(sourceUrl) || HlsPlaylistParser.isHlsStream(stream.streamType)) {
++            return DownloadEnqueueResult.HlsNeedsSelection
++        }
++
++        return enqueueDirectStream(
++            contentType = contentType,
++            videoId = videoId,
++            parentMetaId = parentMetaId,
++            parentMetaType = parentMetaType,
++            title = title,
++            logo = logo,
++            poster = poster,
++            background = background,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++            episodeTitle = episodeTitle,
++            episodeThumbnail = episodeThumbnail,
++            stream = stream,
++            sourceUrl = sourceUrl,
++        )
++    }
++
++    fun fetchHlsMasterPlaylist(stream: StreamItem): HlsStreamMetadata? {
++        val sourceUrl = stream.playableDirectUrl?.trim()?.takeIf { it.isNotBlank() } ?: return null
++        val headers = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request)
++        val content = DownloadsPlatformDownloader.fetchUrlAsString(sourceUrl, headers) ?: return null
++        val master = HlsPlaylistParser.parseMasterPlaylist(content, sourceUrl)
++        log.i { "parsed ${master.audioTracks.size} audio tracks, ${master.subtitleTracks.size} subtitle tracks" }
++        master.audioTracks.forEachIndexed { i, t ->
++            log.i { "  audio[$i]: name='${t.name}' uri='${t.uri}' lang='${t.language}'" }
++        }
++        return HlsStreamMetadata(master, sourceUrl)
++    }
++
++    fun enqueueFromHlsSelection(
++        contentType: String,
++        videoId: String,
++        parentMetaId: String,
++        parentMetaType: String,
++        title: String,
++        logo: String?,
++        poster: String?,
++        background: String?,
++        seasonNumber: Int?,
++        episodeNumber: Int?,
++        episodeTitle: String?,
++        episodeThumbnail: String?,
++        stream: StreamItem,
++        selection: HlsDownloadSelection,
++    ): DownloadEnqueueResult {
++        ensureLoaded()
++
++        val now = DownloadsClock.nowEpochMs()
++        val logicalKey = buildLogicalKey(
++            parentMetaId = parentMetaId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++        )
++
++        var replacedExisting = false
++        val currentItems = _uiState.value.items.toMutableList()
++        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
++        if (existing != null) {
++            replacedExisting = true
++            activeHandles.remove(existing.id)?.cancel()
++            processingRemovalJobs.remove(existing.id)?.cancel()
++            _trackProgress.update { it - existing.id }
++            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
++            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
++            currentItems.removeAll { it.id == existing.id }
++        }
++
++        val downloadId = nextDownloadId(now)
++        val displayInfo = buildString {
++            append(title)
++            append(" ÔÇó ")
++            append(selection.displayQuality)
++            if (selection.displayAudio.isNotBlank()) {
++                append(" ÔÇó ")
++                append(selection.displayAudio)
++            }
++        }
++        val fileName = buildHlsFileName(
++            title = title,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++            episodeTitle = episodeTitle,
++            fallbackTitle = stream.streamLabel,
++            quality = selection.displayQuality,
++            nowEpochMs = now,
++        )
++
++        val item = DownloadItem(
++            id = downloadId,
++            contentType = contentType,
++            parentMetaId = parentMetaId,
++            parentMetaType = parentMetaType,
++            videoId = videoId,
++            title = title,
++            logo = logo,
++            poster = poster,
++            background = background,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++            episodeTitle = episodeTitle,
++            episodeThumbnail = episodeThumbnail,
++            streamTitle = displayInfo,
++            streamSubtitle = stream.streamSubtitle,
++            providerName = stream.addonName,
++            providerAddonId = stream.addonId,
++            sourceUrl = selection.variantUrl,
++            sourceHeaders = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request),
++            sourceResponseHeaders = sanitizeResponseHeaders(stream.behaviorHints.proxyHeaders?.response),
++            localFileUri = null,
++            fileName = fileName,
++            status = DownloadStatus.Downloading,
++            downloadedBytes = 0L,
++            totalBytes = null,
++            errorMessage = null,
++            createdAtEpochMs = now,
++            updatedAtEpochMs = now,
++            isHls = true,
++            hlsAudioUrl = selection.audioUrls.firstOrNull(),
++            hlsSubtitleUrl = selection.subtitleUrls.firstOrNull(),
++            hlsAudioUrls = selection.audioUrls,
++            hlsSubtitleUrls = selection.subtitleUrls,
++        )
++
++        currentItems.add(0, item)
++        publish(currentItems)
++        persist()
++        startDownload(item)
++
++        return if (replacedExisting) {
++            DownloadEnqueueResult.Replaced
++        } else {
++            DownloadEnqueueResult.Started
++        }
++    }
++
++    private fun enqueueDirectStream(
++        contentType: String,
++        videoId: String,
++        parentMetaId: String,
++        parentMetaType: String,
++        title: String,
++        logo: String?,
++        poster: String?,
++        background: String?,
++        seasonNumber: Int?,
++        episodeNumber: Int?,
++        episodeTitle: String?,
++        episodeThumbnail: String?,
++        stream: StreamItem,
++        sourceUrl: String,
++    ): DownloadEnqueueResult {
+         val now = DownloadsClock.nowEpochMs()
+         val logicalKey = buildLogicalKey(
+             parentMetaId = parentMetaId,
+@@ -139,6 +322,8 @@ object DownloadsRepository {
+         if (existing != null) {
+             replacedExisting = true
+             activeHandles.remove(existing.id)?.cancel()
++            processingRemovalJobs.remove(existing.id)?.cancel()
++            _trackProgress.update { it - existing.id }
+             DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
+             DownloadsPlatformDownloader.removePartialFile(existing.fileName)
+             currentItems.removeAll { it.id == existing.id }
+@@ -152,6 +337,7 @@ object DownloadsRepository {
+             episodeTitle = episodeTitle,
+             fallbackTitle = stream.streamLabel,
+             sourceUrl = sourceUrl,
++            isHlsStream = false,
+             nowEpochMs = now,
+         )
+ 
+@@ -247,6 +433,8 @@ object DownloadsRepository {
+         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
+ 
+         activeHandles.remove(downloadId)?.cancel()
++        processingRemovalJobs.remove(downloadId)?.cancel()
++        _trackProgress.update { it - downloadId }
+         DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
+         DownloadsPlatformDownloader.removePartialFile(item.fileName)
+ 
+@@ -291,11 +479,34 @@ object DownloadsRepository {
+ 
+     private fun startDownload(item: DownloadItem) {
+         val request = DownloadPlatformRequest(
++            downloadId = item.id,
++            displayTitle = item.title,
+             sourceUrl = item.sourceUrl,
+             sourceHeaders = item.sourceHeaders,
+             destinationFileName = item.fileName,
++            isHlsStream = item.isHls,
++            hlsAudioUrl = item.hlsAudioUrl,
++            hlsSubtitleUrl = item.hlsSubtitleUrl,
++            hlsAudioUrls = item.hlsAudioUrls.ifEmpty {
++                item.hlsAudioUrl?.let { listOf(it) }.orEmpty()
++            },
++            hlsSubtitleUrls = item.hlsSubtitleUrls.ifEmpty {
++                item.hlsSubtitleUrl?.let { listOf(it) }.orEmpty()
++            },
+         )
+ 
++        if (item.isHls) {
++            val tracks = mutableMapOf<String, TrackProgressState>()
++            tracks["video"] = TrackProgressState()
++            request.hlsAudioUrls.withIndex().forEach { (i, _) ->
++                tracks["audio_$i"] = TrackProgressState()
++            }
++            request.hlsSubtitleUrls.withIndex().forEach { (i, _) ->
++                tracks["subs_$i"] = TrackProgressState()
++            }
++            _trackProgress.update { it + (item.id to tracks) }
++        }
++
+         val handle = DownloadsPlatformDownloader.start(
+             request = request,
+             onProgress = { downloadedBytes, totalBytes ->
+@@ -311,28 +522,82 @@ object DownloadsRepository {
+                         )
+                     }
+                 }
++                val currentItem = _uiState.value.items.firstOrNull { it.id == item.id }
++                if (currentItem?.status == DownloadStatus.Downloading) {
++                    _trackProgress.update { current ->
++                        val itemProgress = current[item.id]?.toMutableMap() ?: return@update current
++                        val existing = itemProgress["video"] ?: TrackProgressState()
++                        itemProgress["video"] = existing.copy(
++                            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
++                            totalBytes = totalBytes?.takeIf { it > 0L },
++                        )
++                        current + (item.id to itemProgress)
++                    }
++                }
++                notifyLiveStatusPlatform()
++            },
++            onTrackProgress = { trackName, downloadedBytes, totalBytes ->
++                val currentItem = _uiState.value.items.firstOrNull { it.id == item.id }
++                if (currentItem?.status == DownloadStatus.Downloading) {
++                    _trackProgress.update { current ->
++                        val itemProgress = current[item.id]?.toMutableMap() ?: return@update current
++                        val existing = itemProgress[trackName] ?: TrackProgressState()
++                        itemProgress[trackName] = existing.copy(
++                            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
++                            totalBytes = totalBytes?.takeIf { it > 0L },
++                        )
++                        current + (item.id to itemProgress)
++                    }
++                }
++                notifyLiveStatusPlatform()
+             },
+-            onSuccess = { localFileUri, totalBytes ->
++            onWarning = { message ->
++                mutateItem(item.id) { current ->
++                    current.copy(
++                        hlsWarningMessage = message,
++                        updatedAtEpochMs = DownloadsClock.nowEpochMs(),
++                    )
++                }
++            },
++            onSuccess = { localFileUri, totalBytes, companion ->
+                 activeHandles.remove(item.id)
++                _trackProgress.update { it - item.id }
+                 mutateItem(item.id) { current ->
+                     current.copy(
+                         status = DownloadStatus.Completed,
+                         localFileUri = localFileUri,
++                        fileName = alignFileNameExtension(current.fileName, localFileUri),
+                         downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
+                             totalBytes
+                         } else {
+                             current.downloadedBytes
+                         },
+                         totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
++                        hlsAudioLocalFileUri = companion?.audioLocalFileUri
++                            ?: companion?.audioLocalFileUris?.firstOrNull()
++                            ?: current.hlsAudioLocalFileUri,
++                        hlsSubtitleLocalFileUri = companion?.subtitleLocalFileUri
++                            ?: companion?.subtitleLocalFileUris?.firstOrNull()
++                            ?: current.hlsSubtitleLocalFileUri,
++                        hlsWarningMessage = companion?.warningMessage
++                            ?: current.hlsWarningMessage,
+                         errorMessage = null,
+                         updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+                     )
+                 }
++                processingRemovalJobs[item.id] = scope.launch {
++                    delay(1500L)
++                    _processingItemIds.update { it - item.id }
++                    processingRemovalJobs.remove(item.id)
++                }
+             },
+             onFailure = { message ->
+                 activeHandles.remove(item.id)
++                _trackProgress.update { it - item.id }
++                processingRemovalJobs.remove(item.id)?.cancel()
++                _processingItemIds.update { it - item.id }
+                 mutateItem(item.id) { current ->
+-                    if (current.status != DownloadStatus.Downloading) {
++                    if (current.status != DownloadStatus.Downloading && current.status != DownloadStatus.Processing) {
+                         current
+                     } else {
+                         current.copy(
+@@ -343,33 +608,49 @@ object DownloadsRepository {
+                     }
+                 }
+             },
++            onPhase = { phase ->
++                processingRemovalJobs.remove(item.id)?.cancel()
++                val now = DownloadsClock.nowEpochMs()
++                val prevStatus = _uiState.value.items.firstOrNull { it.id == item.id }?.status
++                log.i { "onPhase('$phase') item=${item.id} prevStatus=$prevStatus" }
++                _processingItemIds.update { it + item.id }
++                mutateItem(item.id) { current ->
++                    if (current.status != DownloadStatus.Downloading) {
++                        log.w { "onPhase: status NOT Downloading, was ${current.status}" }
++                        current
++                    } else {
++                        current.copy(
++                            status = DownloadStatus.Processing,
++                            updatedAtEpochMs = now,
++                        )
++                    }
++                }
++            },
+         )
+ 
+         activeHandles[item.id] = handle
+     }
+ 
+     private fun mutateItem(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
+-        var changed = false
+-        val updated = _uiState.value.items.map { item ->
+-            if (item.id == downloadId) {
+-                changed = true
+-                transform(item)
+-            } else {
+-                item
++        _uiState.update { state ->
++            val updated = state.items.map { item ->
++                if (item.id == downloadId) transform(item) else item
+             }
++            state.copy(items = updated)
+         }
+-
+-        if (changed) {
+-            publish(updated)
+-            persist()
+-        }
++        notifyLiveStatusPlatform()
++        persist()
+     }
+ 
+     private fun replaceItem(item: DownloadItem) {
+-        val updated = _uiState.value.items.map { existing ->
+-            if (existing.id == item.id) item else existing
++        _uiState.update { state ->
++            val updated = state.items.map { existing ->
++                if (existing.id == item.id) item else existing
++            }
++            state.copy(items = updated)
+         }
+-        publish(updated)
++        notifyLiveStatusPlatform()
++        persist()
+     }
+ 
+     private fun publish(items: List<DownloadItem>) {
+@@ -495,6 +776,7 @@ private fun buildFileName(
+     episodeTitle: String?,
+     fallbackTitle: String,
+     sourceUrl: String,
++    isHlsStream: Boolean,
+     nowEpochMs: Long,
+ ): String {
+     val baseTitle = if (seasonNumber != null && episodeNumber != null) {
+@@ -513,7 +795,7 @@ private fun buildFileName(
+         title.ifBlank { fallbackTitle }
+     }
+ 
+-    val extension = sourceUrl.fileExtensionFromUrl()
++    val extension = if (isHlsStream) "ts" else sourceUrl.fileExtensionFromUrl()
+     return buildString {
+         append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(92))
+         append('_')
+@@ -523,6 +805,44 @@ private fun buildFileName(
+     }
+ }
+ 
++private fun buildHlsFileName(
++    title: String,
++    seasonNumber: Int?,
++    episodeNumber: Int?,
++    episodeTitle: String?,
++    fallbackTitle: String,
++    quality: String,
++    nowEpochMs: Long,
++): String {
++    val baseTitle = if (seasonNumber != null && episodeNumber != null) {
++        buildString {
++            append(title)
++            append(" S")
++            append(seasonNumber.toString().padStart(2, '0'))
++            append('E')
++            append(episodeNumber.toString().padStart(2, '0'))
++            if (!episodeTitle.isNullOrBlank()) {
++                append(' ')
++                append(episodeTitle)
++            }
++        }
++    } else {
++        title.ifBlank { fallbackTitle }
++    }
++
++    val qualitySuffix = quality.sanitizeFileName().take(12)
++    return buildString {
++        append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(80))
++        if (qualitySuffix.isNotBlank()) {
++            append('_')
++            append(qualitySuffix)
++        }
++        append('_')
++        append(nowEpochMs.toString(36))
++        append(".ts")
++    }
++}
++
+ private fun String.sanitizeFileName(): String =
+     trim().replace(Regex("[^A-Za-z0-9._ -]"), "_")
+ 
+@@ -542,8 +862,22 @@ private fun String.fileExtensionFromUrl(): String {
+ private fun String.isSupportedDownloadUrl(): Boolean {
+     val normalized = trim().lowercase()
+     if (normalized.startsWith("magnet:")) return false
+-    if (normalized.endsWith(".m3u8") || normalized.contains(".m3u8?")) return false
+     if (normalized.endsWith(".mpd") || normalized.contains(".mpd?")) return false
+     if (normalized.endsWith(".torrent") || normalized.contains(".torrent?")) return false
+     return normalized.startsWith("http://") || normalized.startsWith("https://")
+ }
++
++private fun alignFileNameExtension(currentFileName: String, localFileUri: String): String {
++    val resolvedExtension = localFileUri
++        .substringBefore('?')
++        .substringBefore('#')
++        .substringAfterLast('/')
++        .substringAfterLast('.', missingDelimiterValue = "")
++        .lowercase()
++        .takeIf { it.length in 2..5 && it.all(Char::isLetterOrDigit) }
++        ?: return currentFileName
++
++    if (currentFileName.endsWith(".$resolvedExtension", ignoreCase = true)) return currentFileName
++    val stem = currentFileName.substringBeforeLast('.', missingDelimiterValue = currentFileName)
++    return "$stem.$resolvedExtension"
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+index 7019a10..b75b95f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+@@ -393,7 +393,8 @@ private fun DownloadRow(
+ 
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     when (item.status) {
+-                        DownloadStatus.Downloading -> {
++                        DownloadStatus.Downloading,
++                        DownloadStatus.Processing -> {
+                             IconButton(onClick = onPause) {
+                                 Icon(
+                                     imageVector = Icons.Rounded.Pause,
+@@ -503,6 +504,7 @@ private fun statusText(item: DownloadItem): String {
+     return when (item.status) {
+         DownloadStatus.Downloading -> stringResource(Res.string.downloads_status_downloading, size)
+         DownloadStatus.Paused -> stringResource(Res.string.downloads_status_paused, size)
++        DownloadStatus.Processing -> stringResource(Res.string.downloads_status_processing, size)
+         DownloadStatus.Completed -> stringResource(
+             Res.string.downloads_status_completed,
+             formatBytes(item.totalBytes ?: item.downloadedBytes),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
+new file mode 100644
+index 0000000..19fa0c1
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
+@@ -0,0 +1,166 @@
++﻿package com.nuvio.app.features.downloads
++
++internal class HlsHttpResult(
++    val status: Int,
++    val body: ByteArray,
++    val finalUrl: String,
++)
++
++internal class HlsDownloadOutcome(
++    val isFmp4: Boolean,
++    val totalBytes: Long,
++)
++
++internal class HlsDownloadException(message: String) : Exception(message)
++
++private const val MAX_PLAYLIST_REDIRECTS = 4
++private const val AES_128 = "AES-128"
++private const val BITRATE_WARMUP_FRACTION = 0.08
++
++private class ResolvedHlsMedia(
++    val playlist: HlsMediaPlaylist,
++    val declaredBitsPerSecond: Long?,
++)
++
++internal suspend fun downloadHlsToFile(
++    sourceUrl: String,
++    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
++    appendBytes: (ByteArray) -> Unit,
++    decryptAes128Cbc: (data: ByteArray, key: ByteArray, iv: ByteArray) -> ByteArray,
++    onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++    ensureActive: () -> Unit,
++): HlsDownloadOutcome {
++    val resolved = resolveMediaPlaylist(sourceUrl, httpGet, ensureActive)
++    val media = resolved.playlist
++    val segments = media.segments
++    if (segments.isEmpty()) {
++        throw HlsDownloadException("HLS playlist contained no segments")
++    }
++
++    onProgress(0L, null)
++    var cumulativeBytes = 0L
++    val keyCache = HashMap<String, ByteArray>()
++
++    media.initSection?.let { init ->
++        ensureActive()
++        val response = httpGet(init.url, init.byteRange)
++        if (response.status !in 200..299) {
++            throw HlsDownloadException("HLS init section failed (HTTP ${response.status})")
++        }
++        appendBytes(response.body)
++        cumulativeBytes += response.body.size.toLong()
++    }
++
++    val totalDuration = segments.sumOf { it.durationSeconds }
++    val warmupDuration = totalDuration * BITRATE_WARMUP_FRACTION
++    var totalBytesEstimate: Long? = declaredTotalBytes(resolved.declaredBitsPerSecond, totalDuration)
++    var elapsedDuration = 0.0
++    val totalSegments = segments.size
++
++    segments.forEachIndexed { index, segment ->
++        ensureActive()
++        val response = httpGet(segment.url, segment.byteRange)
++        if (response.status !in 200..299) {
++            throw HlsDownloadException(
++                "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
++            )
++        }
++
++        val payload = decryptSegmentIfNeeded(
++            data = response.body,
++            encryption = segment.encryption,
++            sequenceNumber = segment.sequenceNumber,
++            keyCache = keyCache,
++            httpGet = httpGet,
++            decryptAes128Cbc = decryptAes128Cbc,
++            ensureActive = ensureActive,
++        )
++
++        appendBytes(payload)
++        cumulativeBytes += payload.size.toLong()
++        elapsedDuration += segment.durationSeconds
++
++        if (totalBytesEstimate == null && totalDuration > 0.0 && elapsedDuration >= warmupDuration) {
++            totalBytesEstimate = (cumulativeBytes.toDouble() / elapsedDuration * totalDuration).toLong()
++        }
++        onProgress(cumulativeBytes, totalBytesEstimate?.coerceAtLeast(cumulativeBytes))
++    }
++
++    return HlsDownloadOutcome(isFmp4 = media.isFmp4, totalBytes = cumulativeBytes)
++}
++
++private suspend fun decryptSegmentIfNeeded(
++    data: ByteArray,
++    encryption: HlsSegmentEncryption?,
++    sequenceNumber: Long,
++    keyCache: MutableMap<String, ByteArray>,
++    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
++    decryptAes128Cbc: (data: ByteArray, key: ByteArray, iv: ByteArray) -> ByteArray,
++    ensureActive: () -> Unit,
++): ByteArray {
++    if (encryption == null) return data
++    if (encryption.method != AES_128) {
++        throw HlsDownloadException("Unsupported HLS encryption method: ${encryption.method}")
++    }
++
++    val key = keyCache.getOrPut(encryption.keyUrl) {
++        ensureActive()
++        val keyResponse = httpGet(encryption.keyUrl, null)
++        if (keyResponse.status !in 200..299) {
++            throw HlsDownloadException("HLS key fetch failed (HTTP ${keyResponse.status})")
++        }
++        if (keyResponse.body.size < 16) {
++            throw HlsDownloadException("HLS key was not 16 bytes")
++        }
++        keyResponse.body.copyOf(16)
++    }
++
++    val iv = encryption.iv ?: hlsSequenceIv(sequenceNumber)
++    return decryptAes128Cbc(data, key, iv)
++}
++
++private suspend fun resolveMediaPlaylist(
++    sourceUrl: String,
++    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
++    ensureActive: () -> Unit,
++): ResolvedHlsMedia {
++    var currentUrl = sourceUrl
++    var declaredBitsPerSecond: Long? = null
++    repeat(MAX_PLAYLIST_REDIRECTS) {
++        ensureActive()
++        val response = httpGet(currentUrl, null)
++        if (response.status !in 200..299) {
++            throw HlsDownloadException("HLS playlist fetch failed (HTTP ${response.status})")
++        }
++        val baseUrl = response.finalUrl.ifBlank { currentUrl }
++        when (val parsed = parseHlsPlaylist(response.body.decodeToString(), baseUrl)) {
++            is HlsPlaylist.Media -> return ResolvedHlsMedia(parsed.playlist, declaredBitsPerSecond)
++            is HlsPlaylist.Master -> {
++                val variant = parsed.variants.maxByOrNull { it.bandwidth }
++                    ?: throw HlsDownloadException("HLS master playlist contained no variants")
++                declaredBitsPerSecond = (variant.averageBandwidth ?: variant.bandwidth)
++                    .takeIf { it > 0L }
++                currentUrl = variant.url
++            }
++        }
++    }
++    throw HlsDownloadException("HLS playlist nested too deeply")
++}
++
++internal fun declaredTotalBytes(bitsPerSecond: Long?, totalDuration: Double): Long? {
++    if (bitsPerSecond == null || bitsPerSecond <= 0L || totalDuration <= 0.0) return null
++    return (bitsPerSecond.toDouble() / 8.0 * totalDuration).toLong().takeIf { it > 0L }
++}
++
++internal fun hlsOutputFileName(baseFileName: String, isFmp4: Boolean): String {
++    val extension = if (isFmp4) "mp4" else "ts"
++    val dotIndex = baseFileName.lastIndexOf('.')
++    val stem = if (dotIndex > 0) baseFileName.substring(0, dotIndex) else baseFileName
++    return "$stem.$extension"
++}
++
++internal fun hlsCompanionFileName(baseFileName: String, suffix: String, extension: String): String {
++    val dotIndex = baseFileName.lastIndexOf('.')
++    val stem = if (dotIndex > 0) baseFileName.substring(0, dotIndex) else baseFileName
++    return "${stem}_$suffix.$extension"
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
+new file mode 100644
+index 0000000..d46b163
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
+@@ -0,0 +1,462 @@
++﻿package com.nuvio.app.features.downloads
++
++internal sealed interface HlsPlaylist {
++    data class Master(val variants: List<HlsVariant>) : HlsPlaylist
++    data class Media(val playlist: HlsMediaPlaylist) : HlsPlaylist
++}
++
++data class HlsVariant(
++    val url: String,
++    val bandwidth: Long,
++    val averageBandwidth: Long? = null,
++    val resolution: String? = null,
++    val codecs: String? = null,
++)
++
++data class HlsMediaTrack(
++    val type: String,
++    val groupId: String,
++    val name: String,
++    val language: String? = null,
++    val uri: String? = null,
++    val isDefault: Boolean = false,
++    val isForced: Boolean = false,
++)
++
++data class HlsMasterPlaylist(
++    val variants: List<HlsVariant>,
++    val audioTracks: List<HlsMediaTrack>,
++    val subtitleTracks: List<HlsMediaTrack>,
++)
++
++internal data class HlsByteRange(
++    val length: Long,
++    val offset: Long,
++)
++
++internal data class HlsSegmentEncryption(
++    val method: String,
++    val keyUrl: String,
++    val iv: ByteArray?,
++) {
++    override fun equals(other: Any?): Boolean {
++        if (this === other) return true
++        if (other !is HlsSegmentEncryption) return false
++        return method == other.method &&
++            keyUrl == other.keyUrl &&
++            (iv?.toList() == other.iv?.toList())
++    }
++
++    override fun hashCode(): Int {
++        var result = method.hashCode()
++        result = 31 * result + keyUrl.hashCode()
++        result = 31 * result + (iv?.toList()?.hashCode() ?: 0)
++        return result
++    }
++}
++
++internal data class HlsSegment(
++    val url: String,
++    val sequenceNumber: Long,
++    val durationSeconds: Double = 0.0,
++    val byteRange: HlsByteRange? = null,
++    val encryption: HlsSegmentEncryption? = null,
++)
++
++internal data class HlsInitSection(
++    val url: String,
++    val byteRange: HlsByteRange? = null,
++)
++
++internal data class HlsMediaPlaylist(
++    val segments: List<HlsSegment>,
++    val initSection: HlsInitSection? = null,
++    val isFmp4: Boolean = false,
++)
++
++private const val MASTER_TAG = "#EXT-X-STREAM-INF:"
++private const val SEGMENT_TAG = "#EXTINF:"
++private const val KEY_TAG = "#EXT-X-KEY:"
++private const val MAP_TAG = "#EXT-X-MAP:"
++private const val BYTERANGE_TAG = "#EXT-X-BYTERANGE:"
++private const val MEDIA_SEQUENCE_TAG = "#EXT-X-MEDIA-SEQUENCE:"
++
++internal fun parseHlsPlaylist(text: String, baseUrl: String): HlsPlaylist {
++    val lines = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
++    val variants = parseMasterVariants(lines, baseUrl)
++    val media = parseMediaPlaylist(lines, baseUrl)
++    return when {
++        media.segments.isNotEmpty() -> HlsPlaylist.Media(media)
++        variants.isNotEmpty() -> HlsPlaylist.Master(variants)
++        else -> HlsPlaylist.Media(media)
++    }
++}
++
++private fun parseMasterVariants(lines: List<String>, baseUrl: String): List<HlsVariant> {
++    val variants = mutableListOf<HlsVariant>()
++    var pendingAttributes: Map<String, String>? = null
++    for (line in lines) {
++        when {
++            line.startsWith(MASTER_TAG) -> {
++                pendingAttributes = parseAttributeList(line.removePrefix(MASTER_TAG))
++            }
++            line.startsWith("#") -> Unit
++            else -> {
++                val attributes = pendingAttributes ?: continue
++                val averageBandwidth = attributes["AVERAGE-BANDWIDTH"]?.toLongOrNull()
++                val bandwidth = attributes["BANDWIDTH"]?.toLongOrNull() ?: averageBandwidth ?: 0L
++                variants += HlsVariant(
++                    url = resolveHlsUrl(baseUrl, line),
++                    bandwidth = bandwidth,
++                    averageBandwidth = averageBandwidth,
++                    resolution = attributes["RESOLUTION"],
++                    codecs = attributes["CODECS"],
++                )
++                pendingAttributes = null
++            }
++        }
++    }
++    return variants
++}
++
++private fun parseMediaPlaylist(lines: List<String>, baseUrl: String): HlsMediaPlaylist {
++    val segments = mutableListOf<HlsSegment>()
++    var initSection: HlsInitSection? = null
++    var currentEncryption: HlsSegmentEncryption? = null
++    var pendingByteRange: HlsByteRange? = null
++    var pendingSegment = false
++    var pendingDuration = 0.0
++    var sequenceNumber = 0L
++    var nextOffset = 0L
++    var sawFmp4Hint = false
++
++    for (line in lines) {
++        when {
++            line.startsWith(MEDIA_SEQUENCE_TAG) -> {
++                sequenceNumber = line.removePrefix(MEDIA_SEQUENCE_TAG).trim().toLongOrNull() ?: 0L
++            }
++            line.startsWith(KEY_TAG) -> {
++                currentEncryption = parseKey(line.removePrefix(KEY_TAG), baseUrl)
++            }
++            line.startsWith(MAP_TAG) -> {
++                val attributes = parseAttributeList(line.removePrefix(MAP_TAG))
++                val uri = attributes["URI"]
++                if (!uri.isNullOrBlank()) {
++                    initSection = HlsInitSection(
++                        url = resolveHlsUrl(baseUrl, uri),
++                        byteRange = attributes["BYTERANGE"]?.let { parseByteRange(it, null) },
++                    )
++                    sawFmp4Hint = true
++                }
++            }
++            line.startsWith(BYTERANGE_TAG) -> {
++                pendingByteRange = parseByteRange(line.removePrefix(BYTERANGE_TAG), nextOffset)
++            }
++            line.startsWith(SEGMENT_TAG) -> {
++                pendingSegment = true
++                pendingDuration = line.removePrefix(SEGMENT_TAG)
++                    .substringBefore(',')
++                    .trim()
++                    .toDoubleOrNull() ?: 0.0
++            }
++            line.startsWith("#") -> Unit
++            else -> {
++                if (pendingSegment) {
++                    if (!sawFmp4Hint && looksLikeFmp4Segment(line)) {
++                        sawFmp4Hint = true
++                    }
++                    segments += HlsSegment(
++                        url = resolveHlsUrl(baseUrl, line),
++                        sequenceNumber = sequenceNumber,
++                        durationSeconds = pendingDuration,
++                        byteRange = pendingByteRange,
++                        encryption = currentEncryption,
++                    )
++                    pendingByteRange?.let { nextOffset = it.offset + it.length }
++                    pendingByteRange = null
++                    pendingSegment = false
++                    pendingDuration = 0.0
++                    sequenceNumber += 1
++                }
++            }
++        }
++    }
++
++    return HlsMediaPlaylist(
++        segments = segments,
++        initSection = initSection,
++        isFmp4 = sawFmp4Hint,
++    )
++}
++
++private fun parseKey(attributesText: String, baseUrl: String): HlsSegmentEncryption? {
++    val attributes = parseAttributeList(attributesText)
++    val method = attributes["METHOD"]?.trim().orEmpty()
++    if (method.isEmpty() || method.equals("NONE", ignoreCase = true)) return null
++    val uri = attributes["URI"]?.takeIf { it.isNotBlank() } ?: return null
++    return HlsSegmentEncryption(
++        method = method.uppercase(),
++        keyUrl = resolveHlsUrl(baseUrl, uri),
++        iv = attributes["IV"]?.let { parseHexBytes(it) },
++    )
++}
++
++private fun parseByteRange(value: String, fallbackOffset: Long?): HlsByteRange? {
++    val trimmed = value.trim().substringBefore(',')
++    if (trimmed.isEmpty()) return null
++    val length = trimmed.substringBefore('@').trim().toLongOrNull() ?: return null
++    val offset = if (trimmed.contains('@')) {
++        trimmed.substringAfter('@').trim().toLongOrNull() ?: fallbackOffset ?: 0L
++    } else {
++        fallbackOffset ?: 0L
++    }
++    return HlsByteRange(length = length, offset = offset)
++}
++
++private fun looksLikeFmp4Segment(uriLine: String): Boolean {
++    val path = uriLine.substringBefore('#').substringBefore('?').lowercase()
++    return path.endsWith(".mp4") ||
++        path.endsWith(".m4s") ||
++        path.endsWith(".m4v") ||
++        path.endsWith(".cmfv") ||
++        path.endsWith(".cmfa") ||
++        path.endsWith(".fmp4")
++}
++
++internal fun hlsSequenceIv(sequenceNumber: Long): ByteArray {
++    val iv = ByteArray(16)
++    var value = sequenceNumber
++    for (i in 0 until 8) {
++        iv[15 - i] = (value and 0xFF).toByte()
++        value = value ushr 8
++    }
++    return iv
++}
++
++internal fun parseHexBytes(input: String): ByteArray? {
++    val cleaned = input.trim().removePrefix("0x").removePrefix("0X")
++    if (cleaned.isEmpty() || cleaned.length % 2 != 0) return null
++    val out = ByteArray(cleaned.length / 2)
++    for (i in out.indices) {
++        val high = cleaned[i * 2].digitToIntOrNull(16) ?: return null
++        val low = cleaned[i * 2 + 1].digitToIntOrNull(16) ?: return null
++        out[i] = ((high shl 4) or low).toByte()
++    }
++    return out
++}
++
++internal fun String.isHlsPlaylistUrl(): Boolean {
++    val normalized = trim().lowercase().substringBefore('#')
++    val path = normalized.substringBefore('?')
++    if (path.endsWith(".m3u8") || path.endsWith(".m3u")) return true
++    return normalized.contains(".m3u8")
++}
++
++internal fun resolveHlsUrl(baseUrl: String, reference: String): String {
++    val ref = reference.trim()
++    if (ref.isEmpty()) return baseUrl.trim()
++    if (ABSOLUTE_URL_REGEX.containsMatchIn(ref)) return ref
++
++    val base = baseUrl.trim()
++    val schemeSeparator = base.indexOf("://")
++    if (schemeSeparator <= 0) return ref
++
++    val scheme = base.substring(0, schemeSeparator)
++    if (ref.startsWith("//")) return "$scheme:$ref"
++
++    val afterScheme = base.substring(schemeSeparator + 3)
++    val firstSlash = afterScheme.indexOf('/')
++    val authority = if (firstSlash == -1) afterScheme else afterScheme.substring(0, firstSlash)
++    val basePath = if (firstSlash == -1) "" else afterScheme.substring(firstSlash)
++
++    val refPath = ref.substringBefore('?').substringBefore('#')
++    val refSuffix = ref.substring(refPath.length)
++
++    val resolvedPath = if (ref.startsWith("/")) {
++        normalizePathSegments(refPath)
++    } else {
++        val baseDirectory = basePath
++            .substringBefore('?')
++            .substringBefore('#')
++            .let { if (it.isEmpty()) "/" else it.substringBeforeLast('/', "") + "/" }
++        normalizePathSegments(baseDirectory + refPath)
++    }
++
++    return "$scheme://$authority$resolvedPath$refSuffix"
++}
++
++private fun normalizePathSegments(path: String): String {
++    val leadingSlash = path.startsWith("/")
++    val trailingSlash = path.endsWith("/")
++    val stack = ArrayDeque<String>()
++    for (part in path.split('/')) {
++        when (part) {
++            "", "." -> Unit
++            ".." -> if (stack.isNotEmpty()) stack.removeLast()
++            else -> stack.addLast(part)
++        }
++    }
++    val joined = stack.joinToString("/")
++    return buildString {
++        if (leadingSlash) append('/')
++        append(joined)
++        if (trailingSlash && joined.isNotEmpty()) append('/')
++    }
++}
++
++private fun parseAttributeList(input: String): Map<String, String> {
++    val result = LinkedHashMap<String, String>()
++    var index = 0
++    val length = input.length
++    while (index < length) {
++        val keyStart = index
++        while (index < length && input[index] != '=') index++
++        if (index >= length) break
++        val key = input.substring(keyStart, index).trim()
++        index++
++
++        val value: String
++        if (index < length && input[index] == '"') {
++            index++
++            val valueStart = index
++            while (index < length && input[index] != '"') index++
++            value = input.substring(valueStart, index)
++            if (index < length) index++
++        } else {
++            val valueStart = index
++            while (index < length && input[index] != ',') index++
++            value = input.substring(valueStart, index).trim()
++        }
++
++        if (key.isNotEmpty()) result[key] = value
++
++        while (index < length && input[index] != ',') index++
++        if (index < length) index++
++    }
++    return result
++}
++
++private val ABSOLUTE_URL_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.\\-]*://")
++
++object HlsPlaylistParser {
++    fun isHlsUrl(url: String): Boolean {
++        val lower = url.trim().lowercase()
++        return lower.endsWith(".m3u8") ||
++            lower.contains(".m3u8?") ||
++            lower.contains("/playlist/") ||
++            lower.contains("/master/") ||
++            lower.contains("/chunklist/")
++    }
++
++    fun isHlsStream(streamType: String?): Boolean =
++        streamType?.trim().equals("hls", ignoreCase = true)
++
++    fun parseMasterPlaylist(content: String, baseUrl: String): HlsMasterPlaylist {
++        val lines = content.lines()
++        val variants = mutableListOf<HlsVariant>()
++        val audioTracks = mutableListOf<HlsMediaTrack>()
++        val subtitleTracks = mutableListOf<HlsMediaTrack>()
++
++        var i = 0
++        while (i < lines.size) {
++            val line = lines[i].trim()
++            when {
++                line.startsWith("#EXT-X-STREAM-INF:") -> {
++                    val attrs = parseAttributes(line.removePrefix("#EXT-X-STREAM-INF:"))
++                    val bandwidth = attrs["BANDWIDTH"]?.toLongOrNull() ?: 0L
++                    val resolution = attrs["RESOLUTION"]
++                    val codecs = attrs["CODECS"]
++                    i++
++                    val urlLine = resolveUrl(lines.getOrNull(i)?.trim().orEmpty(), baseUrl)
++                    if (urlLine.isNotBlank() && !urlLine.startsWith("#")) {
++                        variants.add(HlsVariant(url = urlLine, bandwidth = bandwidth, resolution = resolution, codecs = codecs))
++                    }
++                }
++                line.startsWith("#EXT-X-MEDIA:") -> {
++                    val attrs = parseAttributes(line.removePrefix("#EXT-X-MEDIA:"))
++                    val type = attrs["TYPE"]?.trim()?.uppercase() ?: ""
++                    val groupId = attrs["GROUP-ID"]?.trim() ?: ""
++                    val name = removeQuotes(attrs["NAME"]?.trim().orEmpty())
++                    val language = attrs["LANGUAGE"]?.trim()?.let { removeQuotes(it) }
++                    val uri = attrs["URI"]?.trim()?.let { resolveUrl(removeQuotes(it), baseUrl) }
++                    val isDefault = attrs["DEFAULT"]?.trim()?.uppercase() == "YES"
++                    val isForced = attrs["FORCED"]?.trim()?.uppercase() == "YES"
++
++                    val track = HlsMediaTrack(
++                        type = type,
++                        groupId = groupId,
++                        name = name,
++                        language = language,
++                        uri = uri,
++                        isDefault = isDefault,
++                        isForced = isForced,
++                    )
++                    when (type) {
++                        "AUDIO" -> audioTracks.add(track)
++                        "SUBTITLES" -> subtitleTracks.add(track)
++                    }
++                }
++            }
++            i++
++        }
++
++        return HlsMasterPlaylist(variants, audioTracks, subtitleTracks)
++    }
++
++    private fun parseAttributes(input: String): Map<String, String> {
++        val attrs = mutableMapOf<String, String>()
++        var i = 0
++        val len = input.length
++        while (i < len) {
++            while (i < len && input[i].isWhitespace()) i++
++            if (i >= len) break
++            val eqIdx = input.indexOf('=', i)
++            if (eqIdx == -1) break
++            val key = input.substring(i, eqIdx).trim()
++            i = eqIdx + 1
++            if (i >= len) break
++            val value: String
++            if (input[i] == '"') {
++                i++
++                val closeIdx = input.indexOf('"', i)
++                if (closeIdx == -1) {
++                    value = input.substring(i)
++                    i = len
++                } else {
++                    value = input.substring(i, closeIdx)
++                    i = closeIdx + 1
++                    if (i < len && input[i] == ',') i++
++                }
++            } else {
++                val nextComma = input.indexOf(',', i)
++                if (nextComma == -1) {
++                    value = input.substring(i).trim()
++                    i = len
++                } else {
++                    value = input.substring(i, nextComma).trim()
++                    i = nextComma + 1
++                }
++            }
++            if (key.isNotBlank()) {
++                attrs[key] = value
++            }
++        }
++        return attrs
++    }
++
++    private fun removeQuotes(value: String): String =
++        value.trim().removeSurrounding("\"")
++
++    fun resolveUrl(relative: String, baseUrl: String): String {
++        val trimmed = relative.trim()
++        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
++        if (trimmed.isBlank()) return trimmed
++        val base = baseUrl.trimEnd('/')
++        val basePath = if (base.contains('/')) {
++            base.substringBeforeLast('/')
++        } else {
++            base
++        }
++        return "$basePath/$trimmed"
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
+index d6f6f98..d6e943d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
+@@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
+ import com.nuvio.app.core.ui.NuvioModalBottomSheet
+ import com.nuvio.app.core.ui.NuvioToastController
+ import com.nuvio.app.core.ui.dismissNuvioBottomSheet
++import com.nuvio.app.features.downloads.DownloadEnqueueResult
++import com.nuvio.app.features.downloads.DownloadsHlsSelectionSheet
+ import com.nuvio.app.features.downloads.DownloadsRepository
++import com.nuvio.app.features.downloads.HlsPlaylistParser
+ import com.nuvio.app.features.details.MetaScreenSettingsRepository
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.compose.material3.ExperimentalMaterial3Api
+@@ -161,6 +164,7 @@ fun StreamsScreen(
+     val streamLinkCopiedText = stringResource(Res.string.streams_link_copied)
+     val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
+     var streamActionsTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
++    var hlsDownloadTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
+     val downloadScope = rememberCoroutineScope()
+     var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
+     var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
+@@ -402,7 +406,14 @@ fun StreamsScreen(
+                 }
+             },
+             onDownload = { stream ->
+-                if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
++                val directUrl = stream.playableDirectUrl.orEmpty()
++                val isHls = directUrl.isNotBlank() && (
++                    HlsPlaylistParser.isHlsUrl(directUrl) ||
++                    HlsPlaylistParser.isHlsStream(stream.streamType)
++                )
++                if (isHls) {
++                    hlsDownloadTarget = stream
++                } else if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
+                     downloadScope.launch {
+                         val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
+                             stream = stream,
+@@ -411,22 +422,31 @@ fun StreamsScreen(
+                         )
+                         when (resolved) {
+                             is DirectDebridPlayableResult.Success -> {
+-                                val result = DownloadsRepository.enqueueFromStream(
+-                                    contentType = type,
+-                                    videoId = videoId,
+-                                    parentMetaId = parentMetaId,
+-                                    parentMetaType = parentMetaType,
+-                                    title = title,
+-                                    logo = logo,
+-                                    poster = poster,
+-                                    background = background,
+-                                    seasonNumber = seasonNumber,
+-                                    episodeNumber = episodeNumber,
+-                                    episodeTitle = episodeTitle,
+-                                    episodeThumbnail = episodeThumbnail,
+-                                    stream = resolved.stream,
+-                                )
+-                                NuvioToastController.show(result.toastMessage())
++                                val resolvedDirectUrl = resolved.stream.playableDirectUrl.orEmpty()
++                                if (HlsPlaylistParser.isHlsUrl(resolvedDirectUrl) || HlsPlaylistParser.isHlsStream(resolved.stream.streamType)) {
++                                    hlsDownloadTarget = resolved.stream
++                                } else {
++                                    val result = DownloadsRepository.enqueueFromStream(
++                                        contentType = type,
++                                        videoId = videoId,
++                                        parentMetaId = parentMetaId,
++                                        parentMetaType = parentMetaType,
++                                        title = title,
++                                        logo = logo,
++                                        poster = poster,
++                                        background = background,
++                                        seasonNumber = seasonNumber,
++                                        episodeNumber = episodeNumber,
++                                        episodeTitle = episodeTitle,
++                                        episodeThumbnail = episodeThumbnail,
++                                        stream = resolved.stream,
++                                    )
++                                    if (result == DownloadEnqueueResult.HlsNeedsSelection) {
++                                        hlsDownloadTarget = resolved.stream
++                                    } else {
++                                        NuvioToastController.show(result.toastMessage())
++                                    }
++                                }
+                             }
+                             else -> {
+                                 val message = resolved.toastMessage()
+@@ -452,7 +472,11 @@ fun StreamsScreen(
+                         episodeThumbnail = episodeThumbnail,
+                         stream = stream,
+                     )
+-                    NuvioToastController.show(result.toastMessage())
++                    if (result == DownloadEnqueueResult.HlsNeedsSelection) {
++                        hlsDownloadTarget = stream
++                    } else {
++                        NuvioToastController.show(result.toastMessage())
++                    }
+                 }
+             },
+             onOpen = { stream, openExternally ->
+@@ -464,6 +488,32 @@ fun StreamsScreen(
+                 )
+             },
+         )
++
++        DownloadsHlsSelectionSheet(
++            stream = hlsDownloadTarget,
++            onDismiss = { hlsDownloadTarget = null },
++            onDownload = { selection ->
++                val stream = hlsDownloadTarget ?: return@DownloadsHlsSelectionSheet
++                val result = DownloadsRepository.enqueueFromHlsSelection(
++                    contentType = type,
++                    videoId = videoId,
++                    parentMetaId = parentMetaId,
++                    parentMetaType = parentMetaType,
++                    title = title,
++                    logo = logo,
++                    poster = poster,
++                    background = background,
++                    seasonNumber = seasonNumber,
++                    episodeNumber = episodeNumber,
++                    episodeTitle = episodeTitle,
++                    episodeThumbnail = episodeThumbnail,
++                    stream = stream,
++                    selection = selection,
++                )
++                NuvioToastController.show(result.toastMessage())
++                hlsDownloadTarget = null
++            },
++        )
+     }
+ }
+ 
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
+new file mode 100644
+index 0000000..698fc6d
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
+@@ -0,0 +1,6 @@
++﻿package com.nuvio.app.features.downloads
++
++import androidx.compose.runtime.Composable
++
++@Composable
++actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
+new file mode 100644
+index 0000000..30e37e7
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
+@@ -0,0 +1,98 @@
++﻿package com.nuvio.app.features.downloads
++
++import java.io.File
++import java.net.HttpURLConnection
++import java.net.URI
++import java.net.URL
++import kotlin.concurrent.thread
++
++internal class DesktopDownloadsTaskHandle(private val thread: Thread) : DownloadsTaskHandle {
++    override fun cancel() {
++        thread.interrupt()
++    }
++}
++
++internal actual object DownloadsPlatformDownloader {
++    actual fun start(
++        request: DownloadPlatformRequest,
++        onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++        onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
++        onFailure: (message: String) -> Unit,
++        onWarning: ((message: String) -> Unit)?,
++        onPhase: ((phase: String) -> Unit)?,
++        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
++    ): DownloadsTaskHandle {
++        if (request.isHlsStream) {
++            onFailure("HLS download not supported on desktop yet.")
++            return DesktopDownloadsTaskHandle(Thread.currentThread())
++        }
++
++        val t = thread(name = "download-${request.destinationFileName}", isDaemon = true) {
++            try {
++                val url = URL(request.sourceUrl)
++                val conn = url.openConnection() as HttpURLConnection
++                request.sourceHeaders.forEach { (k, v) -> conn.setRequestProperty(k, v) }
++                conn.connect()
++                val totalBytes = conn.contentLengthLong.let { if (it < 0) null else it }
++                val destDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads")
++                destDir.mkdirs()
++                val destFile = File(destDir, request.destinationFileName)
++                conn.inputStream.use { input ->
++                    destFile.outputStream().use { output ->
++                        val buffer = ByteArray(8192)
++                        var bytesRead: Int
++                        var downloaded: Long = 0L
++                        while (input.read(buffer).also { bytesRead = it } != -1) {
++                            if (Thread.currentThread().isInterrupted) {
++                                onFailure("Download cancelled")
++                                return@thread
++                            }
++                            output.write(buffer, 0, bytesRead)
++                            downloaded += bytesRead
++                            onProgress(downloaded, totalBytes)
++                        }
++                    }
++                }
++                onSuccess(destFile.toURI().toString(), totalBytes, null)
++            } catch (e: Exception) {
++                if (!Thread.currentThread().isInterrupted) {
++                    onFailure(e.message ?: "Unknown error")
++                }
++            }
++        }
++        return DesktopDownloadsTaskHandle(t)
++    }
++
++    actual fun removeFile(localFileUri: String?): Boolean {
++        if (localFileUri == null) return false
++        return runCatching { File(URI(localFileUri)).delete() }.getOrElse { false }
++    }
++
++    actual fun removePartialFile(destinationFileName: String): Boolean {
++        val file = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads/$destinationFileName")
++        return file.delete()
++    }
++
++    actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {
++        return localFileUri ?: let {
++            val file = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads/$destinationFileName")
++            if (file.exists()) file.toURI().toString() else null
++        }
++    }
++
++    actual fun openDownloadsDirectory(): Boolean {
++        val dir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads")
++        return dir.exists() || dir.mkdirs()
++    }
++
++    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
++        return try {
++            val conn = URL(url).openConnection() as HttpURLConnection
++            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
++            conn.connect()
++            conn.inputStream.reader().readText()
++        } catch (_: Exception) {
++            null
++        }
++    }
++}
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
+new file mode 100644
+index 0000000..698fc6d
+--- /dev/null
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
+@@ -0,0 +1,6 @@
++﻿package com.nuvio.app.features.downloads
++
++import androidx.compose.runtime.Composable
++
++@Composable
++actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
+index dd37f8e..8d89ced 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
+@@ -1,14 +1,22 @@
+-package com.nuvio.app.features.downloads
++﻿package com.nuvio.app.features.downloads
+ 
+ import kotlinx.cinterop.ExperimentalForeignApi
+ import kotlinx.cinterop.CPointer
++import kotlinx.cinterop.ULongVar
++import kotlinx.cinterop.addressOf
++import kotlinx.cinterop.alloc
+ import kotlinx.cinterop.convert
++import kotlinx.cinterop.memScoped
++import kotlinx.cinterop.ptr
++import kotlinx.cinterop.usePinned
++import kotlinx.cinterop.value
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.CompletableDeferred
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.ensureActive
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.runBlocking
+ import nuvio.composeapp.generated.resources.Res
+@@ -19,6 +27,20 @@ import nuvio.composeapp.generated.resources.downloads_error_partial_file_not_ope
+ import nuvio.composeapp.generated.resources.downloads_error_write_partial_file_failed
+ import nuvio.composeapp.generated.resources.network_request_failed_http
+ import org.jetbrains.compose.resources.getString
++import platform.AVFoundation.AVAssetExportSession
++import platform.AVFoundation.AVAssetExportSessionStatusCompleted
++import platform.AVFoundation.AVAssetExportSessionStatusFailed
++import platform.AVFoundation.AVAssetExportPresetPassthrough
++import platform.AVFoundation.AVFileTypeMPEG4
++import platform.AVFoundation.AVMediaTypeAudio
++import platform.AVFoundation.AVMediaTypeVideo
++import platform.AVFoundation.AVMutableComposition
++import platform.AVFoundation.AVURLAsset
++import platform.CoreMedia.CMTime
++import platform.CoreMedia.CMTimeMakeWithSeconds
++import platform.CoreMedia.CMTimeRangeMake
++import platform.CoreMedia.kCMTimeZero
++import platform.CoreMedia.kCMPersistentTrackID_Invalid
+ import platform.Foundation.NSError
+ import platform.Foundation.NSDate
+ import platform.Foundation.NSData
+@@ -35,16 +57,29 @@ import platform.Foundation.NSURLSessionConfiguration
+ import platform.Foundation.NSURLSessionDataDelegateProtocol
+ import platform.Foundation.NSURLSessionDataTask
+ import platform.Foundation.NSURLSessionTask
++import platform.Foundation.NSString
++import platform.Foundation.NSUTF8StringEncoding
++import platform.Foundation.dataTaskWithRequest
+ import platform.Foundation.setHTTPMethod
+ import platform.Foundation.setValue
+ import platform.UIKit.UIApplication
+ import platform.Foundation.timeIntervalSince1970
+ import platform.darwin.NSObject
++import platform.darwin.dispatch_semaphore_create
++import platform.darwin.dispatch_semaphore_signal
++import platform.darwin.dispatch_semaphore_wait
++import platform.darwin.DISPATCH_TIME_FOREVER
+ import platform.posix.FILE
+ import platform.posix.fclose
+ import platform.posix.fflush
+ import platform.posix.fopen
+ import platform.posix.fwrite
++import platform.posix.memcpy
++import kotlin.coroutines.coroutineContext
++import com.nuvio.app.features.plugins.cryptointerop.CCCrypt
++import com.nuvio.app.features.plugins.cryptointerop.kCCAlgorithmAES
++import com.nuvio.app.features.plugins.cryptointerop.kCCDecrypt
++import com.nuvio.app.features.plugins.cryptointerop.kCCOptionPKCS7Padding
+ 
+ private const val DOWNLOAD_REQUEST_TIMEOUT_SECONDS = 60.0
+ private const val DOWNLOAD_RESOURCE_TIMEOUT_SECONDS = 24.0 * 60.0 * 60.0
+@@ -69,13 +104,30 @@ internal actual object DownloadsPlatformDownloader {
+     actual fun start(
+         request: DownloadPlatformRequest,
+         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
+-        onSuccess: (localFileUri: String, totalBytes: Long?) -> Unit,
++        onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
+         onFailure: (message: String) -> Unit,
++        onWarning: ((message: String) -> Unit)?,
++        onPhase: ((phase: String) -> Unit)?,
++        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
+     ): DownloadsTaskHandle {
+         val job = SupervisorJob()
+         val scope = CoroutineScope(job + Dispatchers.Default)
+         val handle = IosDownloadsTaskHandle(job)
+ 
++        if (request.isHlsStream) {
++            scope.launch {
++                performHlsDownloadIos(
++                    request = request,
++                    handle = handle,
++                    onProgress = onProgress,
++                    onSuccess = onSuccess,
++                    onFailure = onFailure,
++                    onWarning = onWarning,
++                )
++            }
++            return handle
++        }
++
+         scope.launch {
+             val downloadsDirectory = downloadsDirectoryPath()
+             val destinationPath = "$downloadsDirectory/${request.destinationFileName}"
+@@ -178,6 +230,36 @@ internal actual object DownloadsPlatformDownloader {
+         }
+     }
+ 
++    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
++        return try {
++            val nativeUrl = NSURL(string = url) ?: return null
++            val request = NSMutableURLRequest(
++                uRL = nativeUrl,
++                cachePolicy = NSURLRequestReloadIgnoringLocalCacheData,
++                timeoutInterval = 30.0,
++            )
++            request.setHTTPMethod("GET")
++            headers.forEach { (key, value) ->
++                request.setValue(value, forHTTPHeaderField = key)
++            }
++
++            val semaphore = dispatch_semaphore_create(0)
++            var result: String? = null
++
++            val task = NSURLSession.sharedSession.dataTaskWithRequest(request) { data, _, error ->
++                if (error == null && data != null) {
++                    result = NSString.create(data, NSUTF8StringEncoding) as? String
++                }
++                dispatch_semaphore_signal(semaphore)
++            }
++            task.resume()
++            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
++            result
++        } catch (_: Exception) {
++            null
++        }
++    }
++
+     actual fun openDownloadsDirectory(): Boolean {
+         val url = NSURL.fileURLWithPath(downloadsDirectoryPath())
+         UIApplication.sharedApplication.openURL(
+@@ -505,3 +587,373 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+     if (totalPart == "*") return null
+     return totalPart.toLongOrNull()?.takeIf { it > 0L }
+ }
++
++@OptIn(ExperimentalForeignApi::class)
++private suspend fun performHlsDownloadIos(
++    request: DownloadPlatformRequest,
++    handle: IosDownloadsTaskHandle,
++    onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++    onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
++    onFailure: (message: String) -> Unit,
++    onWarning: ((message: String) -> Unit)?,
++) {
++    val downloadsDirectory = downloadsDirectoryPath()
++    val ctx = coroutineContext
++
++    val videoPath: String
++    val videoOutcome: HlsDownloadOutcome
++    try {
++        val tmp = downloadSingleHlsTrackIos(
++            downloadsDirectory = downloadsDirectory,
++            url = request.sourceUrl,
++            headers = request.sourceHeaders,
++            handle = handle,
++            tempName = "${request.destinationFileName}.part",
++            finalName = request.destinationFileName,
++            onProgress = onProgress,
++        )
++        videoPath = tmp.first
++        videoOutcome = tmp.second
++    } catch (_: CancellationException) {
++        handle.cancelNativeTask()
++        return
++    } catch (error: Throwable) {
++        onFailure(error.message ?: runBlocking { getString(Res.string.download_failed) })
++        return
++    }
++
++    val finalVideoName = hlsOutputFileName(request.destinationFileName, videoOutcome.isFmp4)
++    val videoDestinationPath = "$downloadsDirectory/$finalVideoName"
++    val videoUri = NSURL.fileURLWithPath(videoDestinationPath).absoluteString ?: "file://$videoDestinationPath"
++
++    var audioUri: String? = null
++    var subtitleUri: String? = null
++
++    if (!request.hlsAudioUrl.isNullOrBlank()) {
++        try {
++            val audioTemp = hlsCompanionFileName(request.destinationFileName, "audio", "part")
++            val audioFinal = hlsCompanionFileName(finalVideoName, "audio", "mp4")
++            val (_, audioOutcome) = downloadSingleHlsTrackIos(
++                downloadsDirectory = downloadsDirectory,
++                url = request.hlsAudioUrl,
++                headers = request.sourceHeaders,
++                handle = handle,
++                tempName = audioTemp,
++                finalName = audioFinal,
++                onProgress = { _, _ -> },
++            )
++            val audioActual = hlsOutputFileName(audioFinal, audioOutcome.isFmp4)
++            audioUri = NSURL.fileURLWithPath("$downloadsDirectory/$audioActual").absoluteString
++                ?: "file://$downloadsDirectory/$audioActual"
++        } catch (_: CancellationException) {
++            throw CancellationException()
++        } catch (_: Throwable) {
++            onWarning?.invoke("Audio track not found")
++            audioUri = null
++        }
++    }
++
++    if (!request.hlsSubtitleUrl.isNullOrBlank()) {
++        try {
++            val subTemp = hlsCompanionFileName(request.destinationFileName, "subs", "part")
++            val subFinal = hlsCompanionFileName(finalVideoName, "subs", "vtt")
++            val (_, subOutcome) = downloadSingleHlsTrackIos(
++                downloadsDirectory = downloadsDirectory,
++                url = request.hlsSubtitleUrl,
++                headers = request.sourceHeaders,
++                handle = handle,
++                tempName = subTemp,
++                finalName = subFinal,
++                onProgress = { _, _ -> },
++            )
++            val subActual = hlsOutputFileName(subFinal, subOutcome.isFmp4)
++            subtitleUri = NSURL.fileURLWithPath("$downloadsDirectory/$subActual").absoluteString
++                ?: "file://$downloadsDirectory/$subActual"
++        } catch (_: CancellationException) {
++            throw CancellationException()
++        } catch (_: Throwable) {
++            subtitleUri = null
++        }
++    }
++
++    val remuxedUri = if (audioUri != null && videoUri.startsWith("file:")) {
++        try {
++            val videoPath = videoUri.toLocalPath() ?: error("")
++            val audioPath = audioUri.toLocalPath() ?: error("")
++            val finalMp4Name = hlsOutputFileName(request.destinationFileName, isFmp4 = true)
++            val outputPath = "$downloadsDirectory/$finalMp4Name"
++            removePathIfExists(outputPath)
++            if (remuxToMp4Ios(videoPath, audioPath, outputPath)) {
++                removePathIfExists(videoPath)
++                removePathIfExists(audioPath)
++                NSURL.fileURLWithPath(outputPath).absoluteString
++                    ?: "file://$outputPath"
++            } else null
++        } catch (_: Exception) { null }
++    } else null
++
++    val companionWarning = if (!request.hlsAudioUrl.isNullOrBlank() && audioUri == null) {
++        "Audio track not found"
++    } else null
++    if (remuxedUri != null) {
++        onSuccess(remuxedUri, videoOutcome.totalBytes, HlsCompanionOutcome(null, subtitleUri, companionWarning))
++    } else {
++        onSuccess(videoUri, videoOutcome.totalBytes, HlsCompanionOutcome(audioUri, subtitleUri, companionWarning))
++    }
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private suspend fun downloadSingleHlsTrackIos(
++    downloadsDirectory: String,
++    url: String,
++    headers: Map<String, String>,
++    handle: IosDownloadsTaskHandle,
++    tempName: String,
++    finalName: String,
++    onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++): Pair<String, HlsDownloadOutcome> {
++    val tempPath = "$downloadsDirectory/$tempName"
++    removePathIfExists(tempPath)
++
++    val outputFile: CPointer<FILE> = fopen(tempPath, "wb")
++        ?: error(runBlocking { getString(Res.string.downloads_error_open_partial_file_failed) })
++
++    var fileClosed = false
++    try {
++        val outcome = downloadHlsToFile(
++            sourceUrl = url,
++            httpGet = { u, range -> iosHttpGet(u, headers, range, handle) },
++            appendBytes = { bytes -> writeAllToFile(outputFile, bytes) },
++            decryptAes128Cbc = ::aes128CbcDecryptIos,
++            onProgress = onProgress,
++            ensureActive = { coroutineContext.ensureActive() },
++        )
++
++        fflush(outputFile)
++        fclose(outputFile)
++        fileClosed = true
++
++        val finalVideoName = hlsOutputFileName(finalName, outcome.isFmp4)
++        val destinationPath = "$downloadsDirectory/$finalVideoName"
++        removePathIfExists(destinationPath)
++        val moved = NSFileManager.defaultManager.moveItemAtPath(
++            srcPath = tempPath,
++            toPath = destinationPath,
++            error = null,
++        )
++        if (!moved) {
++            error(runBlocking { getString(Res.string.downloads_error_finalize_file_failed) })
++        }
++
++        return destinationPath to outcome
++    } finally {
++        if (!fileClosed) {
++            fflush(outputFile)
++            fclose(outputFile)
++        }
++        removePathIfExists(tempPath)
++    }
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private suspend fun iosHttpGet(
++    url: String,
++    headers: Map<String, String>,
++    range: HlsByteRange?,
++    handle: IosDownloadsTaskHandle,
++): HlsHttpResult {
++    val nativeRequest = NSMutableURLRequest(
++        uRL = NSURL(string = url),
++        cachePolicy = NSURLRequestReloadIgnoringLocalCacheData,
++        timeoutInterval = DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
++    )
++    nativeRequest.setHTTPMethod("GET")
++    headers.forEach { (key, value) ->
++        nativeRequest.setValue(value, forHTTPHeaderField = key)
++    }
++    if (range != null) {
++        nativeRequest.setValue(
++            "bytes=${range.offset}-${range.offset + range.length - 1}",
++            forHTTPHeaderField = "Range",
++        )
++    }
++
++    val configuration = NSURLSessionConfiguration.defaultSessionConfiguration().apply {
++        timeoutIntervalForRequest = DOWNLOAD_REQUEST_TIMEOUT_SECONDS
++        timeoutIntervalForResource = DOWNLOAD_RESOURCE_TIMEOUT_SECONDS
++        waitsForConnectivity = true
++    }
++    val session = NSURLSession.sessionWithConfiguration(configuration)
++    val completion = CompletableDeferred<HlsHttpResult>()
++    val task = session.dataTaskWithRequest(nativeRequest) { data: NSData?, response: NSURLResponse?, error: NSError? ->
++        if (error != null) {
++            completion.completeExceptionally(IllegalStateException(error.localizedDescription))
++        } else {
++            val httpResponse = response as? NSHTTPURLResponse
++            completion.complete(
++                HlsHttpResult(
++                    status = httpResponse?.statusCode?.toInt() ?: 0,
++                    body = data?.toByteArray() ?: ByteArray(0),
++                    finalUrl = httpResponse?.URL?.absoluteString ?: url,
++                ),
++            )
++        }
++    }
++
++    handle.attach(task, session)
++    task.resume()
++    return try {
++        completion.await()
++    } finally {
++        session.finishTasksAndInvalidate()
++    }
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private fun remuxToMp4Ios(
++    videoPath: String,
++    audioPath: String,
++    outputPath: String,
++): Boolean {
++    return try {
++        val composition = AVMutableComposition.mutableComposition()
++
++        val videoAsset = AVURLAsset.URLAssetWithURL(
++            NSURL.fileURLWithPath(videoPath),
++            null,
++        )
++        val videoTimeRange = CMTimeRangeMake(
++            kCMTimeZero,
++            videoAsset.duration,
++        )
++        val sourceVideoTracks = videoAsset.tracksWithMediaType(AVMediaTypeVideo)
++        if (sourceVideoTracks.isNotEmpty() && sourceVideoTracks.first() != null) {
++            val destVideoTrack = composition.addMutableTrackWithMediaType(
++                AVMediaTypeVideo,
++                kCMPersistentTrackID_Invalid,
++            )
++            if (destVideoTrack != null) {
++                destVideoTrack.insertTimeRange(
++                    videoTimeRange,
++                    ofTrack = sourceVideoTracks.first(),
++                    atTime = kCMTimeZero,
++                    error = null,
++                )
++            }
++        }
++
++        val audioAsset = AVURLAsset.URLAssetWithURL(
++            NSURL.fileURLWithPath(audioPath),
++            null,
++        )
++        val audioTimeRange = CMTimeRangeMake(
++            kCMTimeZero,
++            audioAsset.duration,
++        )
++        val sourceAudioTracks = audioAsset.tracksWithMediaType(AVMediaTypeAudio)
++        if (sourceAudioTracks.isNotEmpty() && sourceAudioTracks.first() != null) {
++            val destAudioTrack = composition.addMutableTrackWithMediaType(
++                AVMediaTypeAudio,
++                kCMPersistentTrackID_Invalid,
++            )
++            if (destAudioTrack != null) {
++                destAudioTrack.insertTimeRange(
++                    audioTimeRange,
++                    ofTrack = sourceAudioTracks.first(),
++                    atTime = kCMTimeZero,
++                    error = null,
++                )
++            }
++        }
++
++        val exportSession = AVAssetExportSession.exportSessionWithAsset(
++            composition,
++            presetName = AVAssetExportPresetPassthrough,
++        ) ?: return false
++
++        val semaphore = dispatch_semaphore_create(0)
++        var exportSuccess = false
++
++        removePathIfExists(outputPath)
++        exportSession.outputURL = NSURL.fileURLWithPath(outputPath)
++        exportSession.outputFileType = AVFileTypeMPEG4
++        exportSession.exportAsynchronouslyWithCompletionHandler {
++            exportSuccess = exportSession.status == AVAssetExportSessionStatusCompleted
++            dispatch_semaphore_signal(semaphore)
++        }
++
++        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
++        if (!exportSuccess) {
++            removePathIfExists(outputPath)
++            return false
++        }
++
++        val fileAttrs = NSFileManager.defaultManager.attributesOfItemAtPath(outputPath, error = null)
++        val fileSize = fileAttrs?.fileSize()?.longValue ?: 0L
++        if (fileSize < 100L) {
++            removePathIfExists(outputPath)
++            return false
++        }
++        true
++    } catch (_: Exception) {
++        removePathIfExists(outputPath)
++        false
++    }
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private fun writeAllToFile(file: CPointer<FILE>, bytes: ByteArray) {
++    if (bytes.isEmpty()) return
++    bytes.usePinned { pinned ->
++        fwrite(pinned.addressOf(0), 1.convert(), bytes.size.convert(), file)
++    }
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private fun NSData.toByteArray(): ByteArray {
++    val size = length.toInt()
++    if (size == 0) return ByteArray(0)
++    val result = ByteArray(size)
++    result.usePinned { pinned ->
++        memcpy(pinned.addressOf(0), bytes, length)
++    }
++    return result
++}
++
++@OptIn(ExperimentalForeignApi::class)
++private fun aes128CbcDecryptIos(data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
++    if (data.isEmpty()) return ByteArray(0)
++    val outputCapacity = data.size + 16
++    val output = ByteArray(outputCapacity)
++
++    val produced = memScoped {
++        val moved = alloc<ULongVar>()
++        val status = data.usePinned { dataPinned ->
++            key.usePinned { keyPinned ->
++                iv.usePinned { ivPinned ->
++                    output.usePinned { outputPinned ->
++                        CCCrypt(
++                            kCCDecrypt.convert(),
++                            kCCAlgorithmAES.convert(),
++                            kCCOptionPKCS7Padding.convert(),
++                            keyPinned.addressOf(0),
++                            key.size.convert(),
++                            ivPinned.addressOf(0),
++                            dataPinned.addressOf(0),
++                            data.size.convert(),
++                            outputPinned.addressOf(0),
++                            outputCapacity.convert(),
++                            moved.ptr,
++                        )
++                    }
++                }
++            }
++        }
++        if (status != 0) {
++            throw HlsDownloadException("AES-128 decryption failed (status=$status)")
++        }
++        moved.value.toInt()
++    }
++
++    return if (produced == outputCapacity) output else output.copyOf(produced)
++}
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 50a3d7f..3ecda69 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -33,8 +33,13 @@ reorderable = "3.0.0"
+ desugarJdkLibs = "2.1.5"
+ sentry = "8.47.0"
+ sentryGradle = "6.14.0"
++androidx-documentfile = "1.0.1"
++mp4parser = "1.9.41"
+ 
+ [libraries]
++androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }
++mp4parser-isoparser = { module = "org.mp4parser:isoparser", version.ref = "mp4parser" }
++mp4parser-muxer = { module = "org.mp4parser:muxer", version.ref = "mp4parser" }
+ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+ kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+ junit = { module = "junit:junit", version.ref = "junit" }
+@@ -80,6 +85,7 @@ androidx-media3-session = { module = "androidx.media3:media3-session", version.r
+ androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "androidx-media3" }
+ androidx-media3-container = { module = "androidx.media3:media3-container", version.ref = "androidx-media3" }
+ androidx-media3-extractor = { module = "androidx.media3:media3-extractor", version.ref = "androidx-media3" }
++androidx-media3-muxer = { module = "androidx.media3:media3-muxer", version.ref = "androidx-media3" }
+ mpv-android-lib = { module = "io.github.abdallahmehiz:mpv-android-lib", version.ref = "mpv-android-lib" }
+ supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "supabase" }
+ supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref = "supabase" }
