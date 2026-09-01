@@ -9,6 +9,7 @@ build/
 local.properties
 *.keystore
 *.jks
+!assets/keystore/*.keystore
 
 # IDE and OS
 .idea/

@@ -120,6 +120,9 @@ jobs:
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "Uso del Keystore fornito dai GitHub Secrets..."
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > nuvio-release.keystore
+          elif [ -f "../assets/keystore/nuvio-release.keystore" ]; then
+            echo "Uso del Keystore fisso del repository..."
+            cp ../assets/keystore/nuvio-release.keystore nuvio-release.keystore
           else
             echo "Generazione di un Keystore di rilascio..."
             keytool -genkey -v -keystore nuvio-release.keystore \
