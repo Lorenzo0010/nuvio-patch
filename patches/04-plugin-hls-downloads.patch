@@ -2103,7 +2103,7 @@ diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/
 index cc827e5..e85b7e4 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -1948,4 +1948,58 @@
+@@ -1948,4 +1948,59 @@
    <string name="entity_browse_about">Informazioni</string>
    <string name="player_external_loading_subtitles">Caricamento sottotitoli dagli addon...</string>
    <string name="player_external_downloading_subtitles">Download dei sottotitoli...</string>
@@ -2142,6 +2142,7 @@ index cc827e5..e85b7e4 100644
 +  <string name="live_tv_source_title">URL Sorgente</string>
 +  <string name="live_tv_categories">Categorie</string>
 +  <string name="compose_player_channels">Canali</string>
++  <string name="compose_nav_downloads">Offline</string>
 +  <!-- Downloads & HLS -->
 +  <string name="downloads_status_processing">Elaborazione • %1$s</string>
 +  <string name="downloads_track_video">Video</string>
@@ -2204,7 +2205,7 @@ index 4906650..b7259fc 100644
      <string name="episodes_cd_watched">Watched</string>
      <string name="episodes_season">Season %1$d</string>
      <string name="episodes_specials">Specials</string>
-@@ -2245,4 +2263,39 @@
+@@ -2245,4 +2263,40 @@
          <item quantity="one">%d title</item>
          <item quantity="other">%d titles</item>
      </plurals>
@@ -2243,6 +2244,7 @@ index 4906650..b7259fc 100644
 +    <string name="live_tv_source_title">Source URL</string>
 +    <string name="live_tv_categories">Categories</string>
 +    <string name="compose_player_channels">Channels</string>
++    <string name="compose_nav_downloads">Offline</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 index 892da4b..949dd33 100644
@@ -2472,19 +2474,20 @@ diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.
 index 2d6219a..dfdc529 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -40,6 +40,11 @@ import nuvio.composeapp.generated.resources.sidebar_library
+@@ -40,6 +40,12 @@ import nuvio.composeapp.generated.resources.sidebar_library
  import nuvio.composeapp.generated.resources.sidebar_search
  import org.jetbrains.compose.resources.stringResource
  
 +import androidx.compose.material.icons.rounded.Download
 +import androidx.compose.material.icons.rounded.LiveTv
++import nuvio.composeapp.generated.resources.compose_nav_downloads
 +import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
 +import nuvio.composeapp.generated.resources.live_tv_title
 +
  @Composable
  internal fun MainTabsDestination(
      selectedTab: AppScreenTab,
-@@ -93,6 +98,18 @@ internal fun MainTabsDestination(
+@@ -93,6 +99,18 @@ internal fun MainTabsDestination(
                              icon = Res.drawable.sidebar_search,
                              contentDescription = stringResource(Res.string.compose_nav_search),
                          )
@@ -2503,7 +2506,7 @@ index 2d6219a..dfdc529 100644
                          NavItem(
                              selected = selectedTab == AppScreenTab.Library,
                              onClick = { onTabSelected(AppScreenTab.Library) },
-@@ -166,6 +183,20 @@ internal fun MainTabsDestination(
+@@ -166,6 +184,20 @@ internal fun MainTabsDestination(
                              contentDescription = stringResource(Res.string.compose_nav_search),
                              label = stringResource(Res.string.compose_nav_search),
                          )
@@ -2519,12 +2522,12 @@ index 2d6219a..dfdc529 100644
 +                            onClick = { onTabSelected(AppScreenTab.Downloads) },
 +                            icon = Icons.Rounded.Download,
 +                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
-+                            label = stringResource(Res.string.compose_settings_root_downloads_title),
++                            label = stringResource(Res.string.compose_nav_downloads),
 +                        )
                          NavItem(
                              selected = selectedTab == AppScreenTab.Library,
                              onClick = { onTabSelected(AppScreenTab.Library) },
-@@ -191,3 +222,4 @@ internal fun MainTabsDestination(
+@@ -191,3 +223,4 @@ internal fun MainTabsDestination(
          }
      }
  }
