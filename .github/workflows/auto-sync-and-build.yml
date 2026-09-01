@@ -156,6 +156,14 @@ jobs:
         working-directory: build_src
         run: |
           chmod +x ./gradlew
+          SHORT_SHA="${{ steps.upstream_info.outputs.short_sha }}"
+          VERSION_NAME=$(grep "MARKETING_VERSION" iosApp/Configuration/Version.xcconfig 2>/dev/null | cut -d '=' -f2 | tr -d ' ' | tr -d '\r' || echo "0.4.13")
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="0.4.13"
+          fi
+          FULL_VERSION="${VERSION_NAME}-plus-${SHORT_SHA}"
+          echo "Impostazione versione build: $FULL_VERSION"
+          sed -i "s/MARKETING_VERSION = .*/MARKETING_VERSION = ${FULL_VERSION}/g" iosApp/Configuration/Version.xcconfig
           
           BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
           if [ "$BUILD_TYPE" == "debug" ]; then
@@ -172,11 +180,12 @@ jobs:
         working-directory: build_src
         run: |
           SHORT_SHA="${{ steps.upstream_info.outputs.short_sha }}"
-          VERSION_NAME=$(grep "MARKETING_VERSION" iosApp/Configuration/Version.xcconfig 2>/dev/null | cut -d '=' -f2 | tr -d ' ' | tr -d '\r' || echo "0.4.13")
-          if [ -z "$VERSION_NAME" ]; then
-            VERSION_NAME="0.4.13"
+          BASE_VERSION=$(grep "MARKETING_VERSION" iosApp/Configuration/Version.xcconfig 2>/dev/null | cut -d '=' -f2 | tr -d ' ' | tr -d '\r' || echo "0.4.13")
+          CLEAN_VERSION=$(echo "$BASE_VERSION" | sed 's/-plus-.*//')
+          if [ -z "$CLEAN_VERSION" ]; then
+            CLEAN_VERSION="0.4.13"
           fi
-          RELEASE_TAG="v${VERSION_NAME}-plus-${SHORT_SHA}"
+          RELEASE_TAG="v${CLEAN_VERSION}-plus-${SHORT_SHA}"
           
           # Cerca l'APK generato
           APK_FILE=$(find androidApp/build/outputs/apk composeApp/build/outputs/apk -name "*.apk" -not -name "*unaligned*" 2>/dev/null | head -n 1)
@@ -191,7 +200,7 @@ jobs:
           
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "apk_path=$OUTPUT_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=${CLEAN_VERSION}-plus-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "APK preparato: $OUTPUT_NAME"
 
       # 7. Pubblicazione della GitHub Release
@@ -200,6 +209,7 @@ jobs:
         with:
           tag_name: ${{ steps.package_apk.outputs.tag }}
           name: "Nuvio Plus ${{ steps.package_apk.outputs.tag }}"
+          target_commitish: main
           draft: false
           prerelease: false
           body: |

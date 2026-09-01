@@ -4,11 +4,8 @@ Date: Tue, 1 Sep 2026 14:44:44 +0200
 Subject: [PATCH 2/4] feat: app updater
 
 ---
- .../nuvio/app/features/updater/AppUpdater.kt  | 21 +++++++------------
- 1 file changed, 8 insertions(+), 13 deletions(-)
-
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..5f09dd5 100644
+index d0b40fc..9f9f3e0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
@@ -53,6 +50,40 @@ index d0b40fc..5f09dd5 100644
  
          val maxSize = maxOf(remoteParts.size, localParts.size)
          for (index in 0 until maxSize) {
--- 
-2.54.0.windows.1
-
+@@ -160,9 +155,14 @@ private object AppUpdaterRepository {
+             return true
+         }
+ 
+-        return listOf(tagName, name)
++        val textMatches = listOf(tagName, name)
+             .filterNotNull()
+-            .any { value -> value.contains(channel, ignoreCase = true) }
++            .any { value ->
++                value.contains(channel, ignoreCase = true) ||
++                value.contains("plus", ignoreCase = true) ||
++                value.contains("enhanced", ignoreCase = true)
++            }
++        return textMatches || targetCommitish.isNullOrBlank() || tagName?.isNotBlank() == true
+     }
+ 
+     private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
+@@ -235,8 +235,8 @@ class AppUpdaterController internal constructor(
+                 _uiState.update { state ->
+                     state.copy(
+                         isChecking = false,
+-                        update = update.takeIf { remoteNewer },
+-                        isUpdateAvailable = remoteNewer,
++                        update = if (force) update else update.takeIf { remoteNewer },
++                        isUpdateAvailable = force || remoteNewer,
+                         isDownloading = false,
+                         downloadProgress = null,
+                         downloadedApkPath = state.downloadedApkPath.takeIf { remoteNewer },
+@@ -246,7 +246,7 @@ class AppUpdaterController internal constructor(
+                     )
+                 }
+ 
+-                if (showNoUpdateFeedback && !remoteNewer) {
++                if (showNoUpdateFeedback && !remoteNewer && !force) {
+                     NuvioToastController.show(getString(Res.string.updates_latest_version))
+                 }
+             }.onFailure { error ->
