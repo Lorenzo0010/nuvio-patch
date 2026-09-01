@@ -1,4 +1,4 @@
-From 9fbae3d70f188d229b1e0eb5b35308fc829c4ee2 Mon Sep 17 00:00:00 2001
+From c084556df8b74bcfdfec2b84f0af172aff1d641c Mon Sep 17 00:00:00 2001
 From: Nuvio Bot <bot@nuvio.app>
 Date: Tue, 1 Sep 2026 15:24:08 +0200
 Subject: [PATCH 4/4] feat: plugin hls downloads feature parity with albyalex96
@@ -9,11 +9,15 @@ Subject: [PATCH 4/4] feat: plugin hls downloads feature parity with albyalex96
  .../app/core/network/AndroidDnsProvider.kt    | 127 +++++++++++++
  .../app/core/share/SharePlatform.android.kt   |  49 +++++
  .../settings/DownloadsSettingsPage.android.kt |  37 ++++
+ .../com/nuvio/app/AppShellComponents.kt       |  27 ++-
+ .../kotlin/com/nuvio/app/MainAppContent.kt    |   1 +
+ .../com/nuvio/app/MainTabsDestination.kt      |  15 ++
  .../nuvio/app/core/logging/InAppLogWriter.kt  |  28 +++
  .../com/nuvio/app/core/logging/InAppLogger.kt | 168 ++++++++++++++++++
  .../com/nuvio/app/core/share/SharePlatform.kt |   5 +
  .../com/nuvio/app/core/ui/BottomSheet.kt      |  11 ++
  .../nuvio/app/core/ui/EpisodeCodeFormat.kt    |  28 +++
+ .../downloads/DownloadsHlsSelectionSheet.kt   |   6 +-
  .../settings/DownloadsSettingsPage.kt         |  66 +++++++
  .../settings/DownloadsSettingsScreen.kt       |  30 ++++
  .../settings/NetworkSettingsRepository.kt     |  98 ++++++++++
@@ -24,7 +28,7 @@ Subject: [PATCH 4/4] feat: plugin hls downloads feature parity with albyalex96
  .../nuvio/app/core/logging/InAppLogger.ios.kt |  10 ++
  .../nuvio/app/core/share/SharePlatform.ios.kt |  31 ++++
  .../settings/DownloadsSettingsPage.ios.kt     |  16 ++
- 20 files changed, 753 insertions(+), 9 deletions(-)
+ 24 files changed, 799 insertions(+), 12 deletions(-)
  create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt
  create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt
  create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt
@@ -300,9 +304,122 @@ index 0000000..515bac4
 +    val androidUri = android.net.Uri.parse(uri)
 +    return androidUri.path?.substringAfterLast(':') ?: uri
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
+index 749214d..949dd33 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
+@@ -17,7 +17,11 @@ import androidx.compose.foundation.layout.statusBars
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Home
++import androidx.compose.material.icons.rounded.Download
+ import androidx.compose.material.icons.rounded.LiveTv
++import com.nuvio.app.features.downloads.DownloadItem
++import com.nuvio.app.features.downloads.DownloadsScreen
++import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Surface
+@@ -153,6 +157,7 @@ internal data class AppTabActions(
+     val onCollectionsSettingsClick: () -> Unit = {},
+     val onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
+     val onLiveTvChannelClick: ((LiveTvChannel) -> Unit)? = null,
++    val onOpenDownload: ((DownloadItem) -> Unit)? = null,
+     val onRequestedSettingsPageConsumed: () -> Unit = {},
+     val onInitialHomeContentRendered: () -> Unit = {},
+ )
+@@ -208,7 +213,10 @@ internal fun AppTabHost(
+                 }
+ 
+                 AppScreenTab.Downloads -> {
+-                    Box(modifier = Modifier.fillMaxSize())
++                    DownloadsScreen(
++                        onBack = {},
++                        onOpenDownload = { item -> actions.onOpenDownload?.invoke(item) },
++                    )
+                 }
+ 
+                 AppScreenTab.Library -> {
+@@ -331,6 +339,23 @@ internal fun TabletFloatingTopBar(
+                         )
+                     },
+                 )
++                TabletTopPillItem(
++                    label = stringResource(Res.string.compose_settings_root_downloads_title),
++                    selected = selectedTab == AppScreenTab.Downloads,
++                    onClick = { onTabSelected(AppScreenTab.Downloads) },
++                    icon = {
++                        Icon(
++                            imageVector = Icons.Rounded.Download,
++                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                            modifier = Modifier.size(NuvioTokens.Space.s18),
++                            tint = if (selectedTab == AppScreenTab.Downloads) {
++                                tokens.colors.textPrimary
++                            } else {
++                                tokens.colors.textMuted
++                            },
++                        )
++                    },
++                )
+                 TabletTopPillItem(
+                     label = stringResource(Res.string.compose_nav_library),
+                     selected = selectedTab == AppScreenTab.Library,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index abbf494..443cf0b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -1366,6 +1366,7 @@ internal fun MainAppContent(
+                                 onContinueWatchingClick = onContinueWatchingClick,
+                                 onContinueWatchingLongPress = onContinueWatchingLongPress,
+                                 onLiveTvChannelClick = ::openLiveTvChannel,
++                                onOpenDownload = ::openDownloadedItem,
+                                 onSwitchProfile = onSwitchProfile,
+                                 onSettingsPageClick = if (useNativeNavigation && !isTabletLayout) {
+                                     { pageName, title ->
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
+index 7edc78a..dfdc529 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
+@@ -40,7 +40,9 @@ import nuvio.composeapp.generated.resources.sidebar_library
+ import nuvio.composeapp.generated.resources.sidebar_search
+ import org.jetbrains.compose.resources.stringResource
+ 
++import androidx.compose.material.icons.rounded.Download
+ import androidx.compose.material.icons.rounded.LiveTv
++import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
+ import nuvio.composeapp.generated.resources.live_tv_title
+ 
+ @Composable
+@@ -102,6 +104,12 @@ internal fun MainTabsDestination(
+                             icon = Icons.Rounded.LiveTv,
+                             contentDescription = stringResource(Res.string.live_tv_title),
+                         )
++                        NavItem(
++                            selected = selectedTab == AppScreenTab.Downloads,
++                            onClick = { onTabSelected(AppScreenTab.Downloads) },
++                            icon = Icons.Rounded.Download,
++                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                        )
+                         NavItem(
+                             selected = selectedTab == AppScreenTab.Library,
+                             onClick = { onTabSelected(AppScreenTab.Library) },
+@@ -182,6 +190,13 @@ internal fun MainTabsDestination(
+                             contentDescription = stringResource(Res.string.live_tv_title),
+                             label = stringResource(Res.string.live_tv_title),
+                         )
++                        NavItem(
++                            selected = selectedTab == AppScreenTab.Downloads,
++                            onClick = { onTabSelected(AppScreenTab.Downloads) },
++                            icon = Icons.Rounded.Download,
++                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                            label = stringResource(Res.string.compose_settings_root_downloads_title),
++                        )
+                         NavItem(
+                             selected = selectedTab == AppScreenTab.Library,
+                             onClick = { onTabSelected(AppScreenTab.Library) },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt
 new file mode 100644
-index 0000000..797128f
+index 0000000..6cf9917
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt
 @@ -0,0 +1,28 @@
@@ -324,7 +441,7 @@ index 0000000..797128f
 +        val fullMessage = buildString {
 +            append(message)
 +            if (throwable != null) {
-+                val cause = throwable.message ?: throwable.javaClass.simpleName
++                val cause = throwable.message ?: (throwable::class.simpleName ?: "Exception")
 +                if (cause.isNotBlank()) {
 +                    append(" | ")
 +                    append(cause)
@@ -572,6 +689,23 @@ index 0000000..b271ad4
 +fun rememberEpisodeCodeFormat(): EpisodeCodeFormat {
 +    return EpisodeCodeFormat.S01E01
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
+index 79ffead..68acf39 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
+@@ -326,8 +326,10 @@ fun DownloadsHlsSelectionSheet(
+ 
+ private fun formatBandwidth(bandwidth: Long): String {
+     if (bandwidth <= 0L) return ""
+-    val mbps = bandwidth.toDouble() / 1_000_000.0
+-    return "${"%.1f".format(mbps).trimEnd('0').trimEnd('.')} Mbps"
++    val mbpsX10 = (bandwidth * 10) / 1_000_000
++    val whole = mbpsX10 / 10
++    val frac = mbpsX10 % 10
++    return if (frac > 0) "$whole.$frac Mbps" else "$whole Mbps"
+ }
+ 
+ private fun friendlyCodec(codecs: String): String {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
 new file mode 100644
 index 0000000..0870034
