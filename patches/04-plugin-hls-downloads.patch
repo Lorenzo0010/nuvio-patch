@@ -1,53 +1,88 @@
+From fa888b2d54451b5028d0bc0971ee6ef417b1ff85 Mon Sep 17 00:00:00 2001
+From: Nuvio Bot <bot@nuvio.app>
+Date: Tue, 1 Sep 2026 14:52:14 +0200
+Subject: [PATCH] feat: plugin hls downloads feature parity with albyalex96
+
+---
+ androidApp/src/main/AndroidManifest.xml       |    7 +
+ composeApp/build.gradle.kts                   |    4 +
+ .../downloads/DownloadFileSaver.android.kt    |   67 ++
+ .../downloads/DownloadsForegroundService.kt   |  266 +++++
+ .../DownloadsLiveStatusPlatform.android.kt    |   75 +-
+ .../DownloadsNotificationActionReceiver.kt    |    2 +
+ .../DownloadsPlatformDownloader.android.kt    | 1035 ++++++++++++++++-
+ .../downloads/DownloadsStorage.android.kt     |   17 +
+ .../app/features/downloads/Mp4ParserRemux.kt  |   10 +
+ .../composeResources/values-it/strings.xml    |   31 +
+ .../composeResources/values/strings.xml       |   19 +-
+ .../com/nuvio/app/core/ui/DropdownChip.kt     |  132 ++-
+ .../features/downloads/DownloadFileSaver.kt   |    6 +
+ .../downloads/DownloadsHlsSelectionSheet.kt   |  343 ++++++
+ .../app/features/downloads/DownloadsModels.kt |   42 +-
+ .../downloads/DownloadsPlatformDownloader.kt  |   22 +-
+ .../features/downloads/DownloadsRepository.kt |  373 +++++-
+ .../app/features/downloads/DownloadsScreen.kt |  245 +++-
+ .../downloads/DownloadsSettingsRepository.kt  |   28 +
+ .../features/downloads/DownloadsStorage.kt    |    2 +
+ .../features/downloads/HlsDownloadEngine.kt   |  166 +++
+ .../app/features/downloads/HlsPlaylist.kt     |  462 ++++++++
+ .../app/features/streams/StreamsScreen.kt     |   46 +-
+ .../downloads/DownloadFileSaver.desktop.kt    |    6 +
+ .../downloads/DownloadsClock.desktop.kt       |    5 +
+ .../DownloadsLiveStatusPlatform.desktop.kt    |    5 +
+ .../DownloadsPlatformDownloader.desktop.kt    |   98 ++
+ .../downloads/DownloadsStorage.desktop.kt     |   21 +
+ .../downloads/DownloadFileSaver.ios.kt        |    6 +
+ .../DownloadsLiveStatusPlatform.ios.kt        |    2 +
+ .../DownloadsPlatformDownloader.ios.kt        |  454 +++++++-
+ .../downloads/DownloadsStorage.ios.kt         |   12 +
+ gradle/libs.versions.toml                     |    6 +
+ 33 files changed, 3878 insertions(+), 137 deletions(-)
+ create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
+ create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
+ create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
+ create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
+ create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
+ create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
+ create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
+ create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
+ create mode 100644 composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
+ create mode 100644 composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
+ create mode 100644 composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
+ create mode 100644 composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
+ create mode 100644 composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
+ create mode 100644 composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
+
 diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/AndroidManifest.xml
-index eb08c54..07dccf8 100644
+index eb08c54..e536c4d 100644
 --- a/androidApp/src/main/AndroidManifest.xml
 +++ b/androidApp/src/main/AndroidManifest.xml
-@@ -6,7 +6,9 @@
-     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+@@ -7,6 +7,7 @@
      <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-+    <uses-permission android:name="android.permission.WAKE_LOCK" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
  
      <application
          android:allowBackup="false"
-@@ -173,6 +175,11 @@
-             android:name="com.nuvio.app.features.downloads.DownloadsNotificationActionReceiver"
-             android:exported="false" />
+@@ -165,6 +166,12 @@
+             android:foregroundServiceType="mediaPlayback"
+             android:stopWithTask="false" />
  
 +        <service
 +            android:name="com.nuvio.app.features.downloads.DownloadsForegroundService"
 +            android:exported="false"
-+            android:foregroundServiceType="dataSync" />
++            android:foregroundServiceType="dataSync"
++            android:stopWithTask="false" />
 +
-         <provider
-             android:name="androidx.core.content.FileProvider"
-             android:authorities="${applicationId}.fileprovider"
+         <receiver
+             android:name="com.nuvio.app.features.player.PlayerNowPlayingActionReceiver"
+             android:exported="false" />
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index dfacfd6..f275df6 100644
+index dfacfd6..881b9f9 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -286,12 +286,14 @@ fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
- 
- val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
-     outputDir.set(generatedRuntimeConfigDir)
--    localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
-+    if (rootProject.file("local.properties").exists()) {
-+        localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
-+    }
-     appVersionName.set(releaseAppVersionName)
-     appVersionCode.set(releaseAppVersionCode)
--    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
--    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
--    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
-+    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://api.nuvio.tv"))
-+    supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI"))
-+    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL", "https://api-two.nuvioapp.space"))
-     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
-     sentryEnvironment.set(
-         when {
-@@ -422,6 +424,10 @@ kotlin {
+@@ -422,6 +422,10 @@ kotlin {
                  implementation(libs.androidx.media3.common)
                  implementation(libs.androidx.media3.container)
                  implementation(libs.androidx.media3.extractor)
@@ -60,7 +95,7 @@ index dfacfd6..f275df6 100644
                  implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 new file mode 100644
-index 0000000..583f826
+index 0000000..528f4e1
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 @@ -0,0 +1,67 @@
@@ -76,7 +111,7 @@ index 0000000..583f826
 +import androidx.compose.runtime.remember
 +import androidx.compose.runtime.setValue
 +import androidx.compose.ui.platform.LocalContext
-+import android.util.Log
++import com.nuvio.app.core.logging.InAppLogger
 +import java.io.File
 +import java.io.FileInputStream
 +
@@ -128,7 +163,7 @@ index 0000000..583f826
 +            }
 +        }
 +    } catch (e: Exception) {
-+        Log.e("DownloadFileSaver", "save failed: ${e.message}")
++        InAppLogger.error("DownloadFileSaver", "save failed: ${e.message}")
 +    }
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
@@ -576,7 +611,7 @@ index be7b3c6..803b506 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 8bda600..f7c6b79 100644
+index 8bda600..45f0c72 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -2,12 +2,23 @@ package com.nuvio.app.features.downloads
@@ -603,7 +638,7 @@ index 8bda600..f7c6b79 100644
  import kotlinx.coroutines.ensureActive
  import kotlinx.coroutines.launch
  import kotlinx.coroutines.runBlocking
-@@ -18,11 +29,20 @@ import nuvio.composeapp.generated.resources.*
+@@ -18,11 +29,22 @@ import nuvio.composeapp.generated.resources.*
  import org.jetbrains.compose.resources.getString
  import java.io.File
  import java.io.FileOutputStream
@@ -616,16 +651,18 @@ index 8bda600..f7c6b79 100644
 +import javax.crypto.spec.IvParameterSpec
 +import javax.crypto.spec.SecretKeySpec
 +import android.util.Log as AndroidLog
++import com.nuvio.app.core.logging.InAppLogger
 +import kotlin.coroutines.coroutineContext
 +import kotlinx.coroutines.withContext
  
  private val downloadHttpClient = OkHttpClient.Builder()
 -    .connectTimeout(60, TimeUnit.SECONDS)
++    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
 +    .connectTimeout(30, TimeUnit.SECONDS)
      .readTimeout(60, TimeUnit.SECONDS)
      .writeTimeout(60, TimeUnit.SECONDS)
      .followRedirects(true)
-@@ -32,6 +52,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
+@@ -32,6 +54,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
  internal actual object DownloadsPlatformDownloader {
      private var appContext: Context? = null
  
@@ -647,7 +684,7 @@ index 8bda600..f7c6b79 100644
      fun initialize(context: Context) {
          appContext = context.applicationContext
      }
-@@ -39,26 +74,79 @@ internal actual object DownloadsPlatformDownloader {
+@@ -39,26 +76,79 @@ internal actual object DownloadsPlatformDownloader {
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -733,7 +770,7 @@ index 8bda600..f7c6b79 100644
  
                  fun buildRequest(rangeStart: Long?): Request {
                      val requestBuilder = Request.Builder().url(request.sourceUrl)
-@@ -120,7 +208,7 @@ internal actual object DownloadsPlatformDownloader {
+@@ -120,7 +210,7 @@ internal actual object DownloadsPlatformDownloader {
                      onProgress(downloadedBytes, totalBytes)
  
                      body.byteStream().use { input ->
@@ -742,7 +779,7 @@ index 8bda600..f7c6b79 100644
                              val buffer = ByteArray(16 * 1024)
                              while (true) {
                                  ensureActive()
-@@ -138,20 +226,23 @@ internal actual object DownloadsPlatformDownloader {
+@@ -138,20 +228,23 @@ internal actual object DownloadsPlatformDownloader {
                          destination.delete()
                      }
                      if (!tempFile.renameTo(destination)) {
@@ -769,7 +806,7 @@ index 8bda600..f7c6b79 100644
          }
  
          return AndroidDownloadsTaskHandle(job)
-@@ -159,34 +250,72 @@ internal actual object DownloadsPlatformDownloader {
+@@ -159,34 +252,72 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -859,7 +896,7 @@ index 8bda600..f7c6b79 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -234,14 +363,94 @@ private class AndroidDownloadsTaskHandle(
+@@ -234,14 +365,94 @@ private class AndroidDownloadsTaskHandle(
      }
  }
  
@@ -960,7 +997,7 @@ index 8bda600..f7c6b79 100644
  }
  
  private fun resolveTotalBytes(
-@@ -268,3 +477,759 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -268,3 +479,759 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -1069,7 +1106,7 @@ index 8bda600..f7c6b79 100644
 +                    } catch (e: Throwable) {
 +                        val audioErrMsg = "audio[$audioIndex] download failed: ${e::class.simpleName} ${e.message}"
 +                        AndroidLog.e("Remux", audioErrMsg)
-+                        AndroidLog.e("Remux", audioErrMsg)
++                        InAppLogger.error("Remux", audioErrMsg)
 +                        null
 +                    }
 +                }
@@ -1120,33 +1157,33 @@ index 8bda600..f7c6b79 100644
 +        val subtitleUri = subtitleUris.firstOrNull()
 +
 +        AndroidLog.i("Remux", "hlsAudioUrl='${request.hlsAudioUrl}' audioUri=$audioUri subtitleUri=$subtitleUri isFmp4=${videoOutcome.isFmp4}")
-+        AndroidLog.i("Remux", "hlsAudioUrl='${request.hlsAudioUrl}' audioUri=$audioUri subtitleUri=$subtitleUri isFmp4=${videoOutcome.isFmp4}")
-+        AndroidLog.i("Remux", "onPhase?.invoke('remux') about to be called")
++        InAppLogger.info("Remux", "hlsAudioUrl='${request.hlsAudioUrl}' audioUri=$audioUri subtitleUri=$subtitleUri isFmp4=${videoOutcome.isFmp4}")
++        InAppLogger.info("Remux", "onPhase?.invoke('remux') about to be called")
 +        onPhase?.invoke("remux")
-+        AndroidLog.i("Remux", "onPhase?.invoke('remux') completed")
++        InAppLogger.info("Remux", "onPhase?.invoke('remux') completed")
 +        withContext(Dispatchers.Main) { /* force UI to process Processing status before remux */ }
 +        val canRemux = videoUri.startsWith("file:")
 +        val remuxedUri = if (canRemux) {
 +            AndroidLog.i("Remux", "remux attempt videoUri=$videoUri audioUri=$audioUri")
-+            AndroidLog.i("Remux", "remux attempt videoUri=$videoUri audioUri=$audioUri")
++            InAppLogger.info("Remux", "remux attempt videoUri=$videoUri audioUri=$audioUri")
 +            try {
 +                val videoPath = File(URI(videoUri)).absolutePath
 +                val audioPath = audioUri?.let { File(URI(it)).absolutePath }
 +                AndroidLog.i("Remux", "videoPath=$videoPath audioPath=$audioPath")
-+                AndroidLog.i("Remux", "videoPath=$videoPath audioPath=$audioPath")
++                InAppLogger.info("Remux", "videoPath=$videoPath audioPath=$audioPath")
 +                val videoFile = File(videoPath)
-+                if (!videoFile.exists()) AndroidLog.w("Remux", "video FILE NOT FOUND")
++                if (!videoFile.exists()) InAppLogger.warn("Remux", "video FILE NOT FOUND")
 +                val destMp4Name = hlsOutputFileName(request.destinationFileName, isFmp4 = true)
 +                val destFile = if (customLocationUri != null && customLocationUri.scheme == "content") {
 +                    File(context.cacheDir, destMp4Name)
 +                } else {
 +                    File(context.filesDir, "downloads/$destMp4Name")
 +                }
-+                AndroidLog.i("Remux", "destMp4Name=$destMp4Name")
++                InAppLogger.info("Remux", "destMp4Name=$destMp4Name")
 +                val remuxTmpPath = destFile.absolutePath + ".remux_tmp"
 +                val remuxResult = remuxToMp4(context, videoPath, audioPath, remuxTmpPath)
 +                AndroidLog.i("Remux", "remuxToMp4 returned $remuxResult")
-+                AndroidLog.i("Remux", "remuxToMp4 returned $remuxResult")
++                InAppLogger.info("Remux", "remuxToMp4 returned $remuxResult")
 +                if (remuxResult != RemuxResult.FAILED) {
 +                    val videoDeleted = File(videoPath).delete()
 +                    val audioDeleted = if (remuxResult == RemuxResult.FULL) {
@@ -1156,10 +1193,10 @@ index 8bda600..f7c6b79 100644
 +                        false
 +                    }
 +                    AndroidLog.i("Remux", "videoDeleted=$videoDeleted audioDeleted=$audioDeleted")
-+                    AndroidLog.i("Remux", "videoDeleted=$videoDeleted audioDeleted=$audioDeleted")
++                    InAppLogger.info("Remux", "videoDeleted=$videoDeleted audioDeleted=$audioDeleted")
 +                    if (destFile.exists()) destFile.delete()
 +                    val renamed = File(remuxTmpPath).renameTo(destFile)
-+                    AndroidLog.i("Remux", "tmpRenamedToFinal=$renamed finalExists=${destFile.exists()}")
++                    InAppLogger.info("Remux", "tmpRenamedToFinal=$renamed finalExists=${destFile.exists()}")
 +                    if (customLocationUri != null && customLocationUri.scheme == "content") {
 +                        val safTarget = resolveHlsTarget(context, customLocationUri, destMp4Name)
 +                        if (safTarget.exists()) safTarget.delete()
@@ -1176,13 +1213,13 @@ index 8bda600..f7c6b79 100644
 +                    null
 +                }
 +            } catch (e: Exception) {
-+                AndroidLog.e("Remux", "remux block exception: ${e.message}")
++                InAppLogger.error("Remux", "remux block exception: ${e.message}")
 +                null
 +            }
 +        } else {
 +            val skipMsg = "skipped — canRemux=$canRemux videoUri.startsWith(file:)=${videoUri.startsWith("file:")} isFmp4=${videoOutcome.isFmp4}"
 +            AndroidLog.i("Remux", skipMsg)
-+            AndroidLog.i("Remux", skipMsg)
++            InAppLogger.info("Remux", skipMsg)
 +            null
 +        }
 +
@@ -1252,7 +1289,7 @@ index 8bda600..f7c6b79 100644
 +        }
 +        return actualFinal.toUriString()
 +    } catch (e: Throwable) {
-+        AndroidLog.e("Remux", "downloadSingleHlsTrackAndroid error: ${e::class.simpleName} ${e.message}")
++        InAppLogger.error("Remux", "downloadSingleHlsTrackAndroid error: ${e::class.simpleName} ${e.message}")
 +        out.closeSafe()
 +        tempTarget.delete()
 +        throw e
@@ -1338,20 +1375,20 @@ index 8bda600..f7c6b79 100644
 +): RemuxResult {
 +    if (Mp4ParserRemux.remux(videoPath, audioPath, outputPath)) {
 +        AndroidLog.i("Remux", "mp4parser remux succeeded (full audio+video)")
-+        AndroidLog.i("Remux", "mp4parser remux succeeded (full audio+video)")
++        InAppLogger.info("Remux", "mp4parser remux succeeded (full audio+video)")
 +        return RemuxResult.FULL
 +    }
 +    File(outputPath).delete()
 +    if (remuxToMp4Impl(videoPath, audioPath, outputPath)) {
 +        AndroidLog.i("Remux", "MediaMuxer remux succeeded (full audio+video)")
-+        AndroidLog.i("Remux", "MediaMuxer remux succeeded (full audio+video)")
++        InAppLogger.info("Remux", "MediaMuxer remux succeeded (full audio+video)")
 +        return RemuxResult.FULL
 +    }
 +    if (audioPath != null) {
 +        File(outputPath).delete()
-+        AndroidLog.w("Remux", "full remux failed, retrying video-only")
++        InAppLogger.warn("Remux", "full remux failed, retrying video-only")
 +        if (remuxToMp4Impl(videoPath, null, outputPath)) {
-+            AndroidLog.w("Remux", "video-only remux succeeded (audio companion kept separately)")
++            InAppLogger.warn("Remux", "video-only remux succeeded (audio companion kept separately)")
 +            return RemuxResult.VIDEO_ONLY
 +        }
 +    }
@@ -1369,14 +1406,14 @@ index 8bda600..f7c6b79 100644
 +    var outputStream: FileOutputStream? = null
 +    return try {
 +        AndroidLog.i("Remux", "remuxToMp4 videoPath=$videoPath audioPath=$audioPath outputPath=$outputPath")
-+        AndroidLog.d("Remux", "remuxToMp4 start")
++        InAppLogger.debug("Remux", "remuxToMp4 start")
 +        videoExtractor = MediaExtractor()
 +        videoExtractor.setDataSource(videoPath)
-+        AndroidLog.d("Remux", "videoExtractor trackCount=${videoExtractor.trackCount}")
++        InAppLogger.debug("Remux", "videoExtractor trackCount=${videoExtractor.trackCount}")
 +
 +        if (audioPath != null) {
 +            audioExtractor = MediaExtractor().apply { setDataSource(audioPath) }.also {
-+                AndroidLog.d("Remux", "audioExtractor trackCount=${it.trackCount}")
++                InAppLogger.debug("Remux", "audioExtractor trackCount=${it.trackCount}")
 +            }
 +        }
 +
@@ -1385,9 +1422,9 @@ index 8bda600..f7c6b79 100644
 +        val audioTrackId = audioExtractor?.let { findMediaTrack(it, "audio/") } ?: -1
 +        val effectiveAudioTrackId = if (audioTrackId >= 0) audioTrackId else videoAudioTrackId
 +        AndroidLog.i("Remux", "videoTrackId=$videoTrackId videoAudioTrackId=$videoAudioTrackId audioTrackId=$audioTrackId effectiveAudioTrackId=$effectiveAudioTrackId")
-+        AndroidLog.d("Remux", "videoTrackId=$videoTrackId videoAudioTrackId=$videoAudioTrackId audioTrackId=$audioTrackId effectiveAudioTrackId=$effectiveAudioTrackId")
++        InAppLogger.debug("Remux", "videoTrackId=$videoTrackId videoAudioTrackId=$videoAudioTrackId audioTrackId=$audioTrackId effectiveAudioTrackId=$effectiveAudioTrackId")
 +        if (videoTrackId < 0) {
-+            AndroidLog.w("Remux", "no video track found, aborting")
++            InAppLogger.warn("Remux", "no video track found, aborting")
 +            return false
 +        }
 +
@@ -1431,7 +1468,7 @@ index 8bda600..f7c6b79 100644
 +            .build()
 +
 +        val videoMuxerTrack = muxer.addTrack(videoFormat)
-+        AndroidLog.d("Remux", "added video track index=$videoMuxerTrack")
++        InAppLogger.debug("Remux", "added video track index=$videoMuxerTrack")
 +        var audioMuxerTrack = -1
 +        if (effectiveAudioTrackId >= 0) {
 +            val audioSource = if (audioTrackId >= 0) audioExtractor!! else videoExtractor
@@ -1456,7 +1493,7 @@ index 8bda600..f7c6b79 100644
 +                }.build()
 +
 +            audioMuxerTrack = muxer.addTrack(audioFormat)
-+            AndroidLog.d("Remux", "added audio track index=$audioMuxerTrack")
++            InAppLogger.debug("Remux", "added audio track index=$audioMuxerTrack")
 +        }
 +
 +        val buffer = ByteBuffer.allocateDirect(1024 * 1024)
@@ -1464,27 +1501,27 @@ index 8bda600..f7c6b79 100644
 +        val videoSamples: Int
 +        val audioSamples: Int
 +        if (audioTrackId >= 0) {
-+            AndroidLog.d("Remux", "copying video samples (separate extractor)...")
++            InAppLogger.debug("Remux", "copying video samples (separate extractor)...")
 +            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
-+            AndroidLog.d("Remux", "video samples done: $videoSamples")
-+            AndroidLog.d("Remux", "copying audio samples (separate extractor)...")
++            InAppLogger.debug("Remux", "video samples done: $videoSamples")
++            InAppLogger.debug("Remux", "copying audio samples (separate extractor)...")
 +            audioSamples = copyTrack(audioExtractor!!, muxer, audioMuxerTrack, buffer, trackIndex = effectiveAudioTrackId, tag = "audio")
-+            AndroidLog.d("Remux", "audio samples done: $audioSamples")
++            InAppLogger.debug("Remux", "audio samples done: $audioSamples")
 +        } else if (effectiveAudioTrackId >= 0) {
-+            AndroidLog.d("Remux", "copying all tracks (same extractor)...")
++            InAppLogger.debug("Remux", "copying all tracks (same extractor)...")
 +            val counts = copyAllTracks(videoExtractor, muxer, videoMuxerTrack, audioMuxerTrack, videoTrackId, effectiveAudioTrackId, buffer)
 +            videoSamples = counts.first
 +            audioSamples = counts.second
-+            AndroidLog.d("Remux", "all tracks done: videoSamples=$videoSamples audioSamples=$audioSamples")
++            InAppLogger.debug("Remux", "all tracks done: videoSamples=$videoSamples audioSamples=$audioSamples")
 +        } else {
-+            AndroidLog.d("Remux", "copying video samples (no audio)...")
++            InAppLogger.debug("Remux", "copying video samples (no audio)...")
 +            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
 +            audioSamples = 0
-+            AndroidLog.d("Remux", "video samples done: $videoSamples")
++            InAppLogger.debug("Remux", "video samples done: $videoSamples")
 +        }
 +
 +        if (videoSamples == 0 && audioSamples == 0) {
-+            AndroidLog.e("Remux", "no samples written to any track, aborting")
++            InAppLogger.error("Remux", "no samples written to any track, aborting")
 +            return false
 +        }
 +
@@ -1492,7 +1529,7 @@ index 8bda600..f7c6b79 100644
 +            muxer.close()
 +        } catch (e: Exception) {
 +            AndroidLog.e("Remux", "muxer.close() FAILED: ${e::class.simpleName} msg='${e.message}'")
-+            AndroidLog.e("Remux", "muxer.close() FAILED: ${e::class.simpleName} ${e.message}")
++            InAppLogger.error("Remux", "muxer.close() FAILED: ${e::class.simpleName} ${e.message}")
 +            throw e
 +        }
 +        muxer = null
@@ -1504,17 +1541,17 @@ index 8bda600..f7c6b79 100644
 +        audioExtractor = null
 +
 +        if (!isValidMp4File(outputPath)) {
-+            AndroidLog.e("Remux", "output file is not a valid MP4 (missing moov)")
++            InAppLogger.error("Remux", "output file is not a valid MP4 (missing moov)")
 +            File(outputPath).delete()
 +            return false
 +        }
 +
 +        AndroidLog.i("Remux", "remuxToMp4 SUCCEEDED (videoSamples=$videoSamples audioSamples=$audioSamples)")
-+        AndroidLog.d("Remux", "remuxToMp4 SUCCEEDED")
++        InAppLogger.debug("Remux", "remuxToMp4 SUCCEEDED")
 +        true
 +    } catch (e: Exception) {
 +        AndroidLog.e("Remux", "remuxToMp4 exception: ${e::class.simpleName} msg='${e.message}' ${e.stackTraceToString().take(500)}")
-+        AndroidLog.e("Remux", "remuxToMp4 exception: ${e::class.simpleName} ${e.message}")
++        InAppLogger.error("Remux", "remuxToMp4 exception: ${e::class.simpleName} ${e.message}")
 +        try { muxer?.close() } catch (_: Exception) {}
 +        try { outputStream?.closeSafe() } catch (_: Exception) {}
 +        try { videoExtractor?.release() } catch (_: Exception) {}
@@ -1617,7 +1654,7 @@ index 8bda600..f7c6b79 100644
 +    return try {
 +        val file = File(path)
 +        AndroidLog.i("Remux", "isValidMp4File fileSize=${file.length()} path=$path")
-+        AndroidLog.d("Remux", "isValidMp4File fileSize=${file.length()}")
++        InAppLogger.debug("Remux", "isValidMp4File fileSize=${file.length()}")
 +        if (!file.exists() || file.length() < 100) return false
 +        java.io.RandomAccessFile(file, "r").use { raf ->
 +            val hdr = ByteArray(8)
@@ -1631,13 +1668,13 @@ index 8bda600..f7c6b79 100644
 +            val hasMoov = tail.decodeToString().contains("moov")
 +            if (!hasMoov) {
 +                AndroidLog.w("Remux", "moov not found in last $searchLen bytes, scanning full file...")
-+                AndroidLog.w("Remux", "moov not found in last $searchLen bytes, scanning full file...")
++                InAppLogger.warn("Remux", "moov not found in last $searchLen bytes, scanning full file...")
 +                raf.seek(0)
 +                val full = ByteArray(raf.length().toInt().coerceAtMost(5_242_880))
 +                raf.read(full)
 +                val fullHasMoov = full.decodeToString().contains("moov")
 +                AndroidLog.i("Remux", "full scan hasMoov=$fullHasMoov")
-+                AndroidLog.d("Remux", "full scan hasMoov=$fullHasMoov")
++                InAppLogger.debug("Remux", "full scan hasMoov=$fullHasMoov")
 +                fullHasMoov
 +            } else {
 +                true
@@ -1755,206 +1792,65 @@ index 01ad328..fcd0f5d 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 new file mode 100644
-index 0000000..1bbed1c
+index 0000000..4a2954a
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 @@ -0,0 +1,10 @@
 +package com.nuvio.app.features.downloads
 +
-+import android.util.Log
++import com.nuvio.app.core.logging.InAppLogger
 +
 +internal object Mp4ParserRemux {
 +    fun remux(videoPath: String, audioPath: String?, outputPath: String): Boolean {
-+        Log.w("Mp4ParserRemux", "skipped — streaming remux not yet implemented, falling back to MediaMuxer")
++        InAppLogger.warn("Mp4ParserRemux", "skipped — streaming remux not yet implemented, falling back to MediaMuxer")
 +        return false
 +    }
 +}
-diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
-new file mode 100644
-index 0000000..515bac4
---- /dev/null
-+++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
-@@ -0,0 +1,37 @@
-+package com.nuvio.app.features.settings
-+
-+import android.content.Intent
-+import androidx.activity.compose.rememberLauncherForActivityResult
-+import androidx.activity.result.contract.ActivityResultContracts
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.LaunchedEffect
-+import androidx.compose.ui.platform.LocalContext
-+
-+@Composable
-+internal actual fun DownloadLocationPicker(
-+    onLocationSelected: (uri: String) -> Unit,
-+    onDismiss: () -> Unit,
-+) {
-+    val context = LocalContext.current
-+    val launcher = rememberLauncherForActivityResult(
-+        contract = ActivityResultContracts.OpenDocumentTree()
-+    ) { uri ->
-+        if (uri != null) {
-+            context.contentResolver.takePersistableUriPermission(
-+                uri,
-+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-+            )
-+            onLocationSelected(uri.toString())
-+        }
-+        onDismiss()
-+    }
-+
-+    LaunchedEffect(Unit) {
-+        launcher.launch(null)
-+    }
-+}
-+
-+internal actual fun formatUriForDisplay(uri: String): String {
-+    val androidUri = android.net.Uri.parse(uri)
-+    return androidUri.path?.substringAfterLast(':') ?: uri
-+}
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index cc827e5..b04cc03 100644
+index 026b64d..37f8ed0 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -1948,4 +1948,25 @@
-   <string name="entity_browse_about">Informazioni</string>
-   <string name="player_external_loading_subtitles">Caricamento sottotitoli dagli addon...</string>
-   <string name="player_external_downloading_subtitles">Download dei sottotitoli...</string>
+@@ -1983,4 +1983,35 @@
+   <string name="live_tv_source_title">URL Sorgente</string>
+   <string name="live_tv_categories">Categorie</string>
+   <string name="compose_player_channels">Canali</string>
++  <!-- Downloads & HLS -->
++  <string name="downloads_empty_episodes">Nessun episodio completato</string>
++  <string name="downloads_empty_title">Nessun download presente</string>
++  <string name="downloads_episode_count">%1$d episodio/i scaricato/i</string>
++  <string name="downloads_open_directory">Apri cartella download</string>
++  <string name="downloads_open_directory_failed">Impossibile aprire la cartella download</string>
++  <string name="downloads_section_active">Attivi</string>
++  <string name="downloads_section_movies">Film</string>
++  <string name="downloads_section_shows">Serie TV</string>
++  <string name="downloads_show_downloads">Download serie</string>
++  <string name="downloads_status_completed">Completato • %1$s</string>
++  <string name="downloads_status_downloading">Download in corso • %1$s</string>
++  <string name="downloads_status_failed">Fallito</string>
++  <string name="downloads_status_paused">In pausa • %1$s</string>
 +  <string name="downloads_status_processing">Elaborazione • %1$s</string>
-+  <string name="downloads_phase_remux">Remuxing</string>
 +  <string name="downloads_track_video">Video</string>
 +  <string name="downloads_track_audio">Audio</string>
 +  <string name="downloads_track_subtitles">Sottotitoli</string>
-+  <string name="downloads_foreground_title">Download contenuti</string>
-+  <string name="downloads_foreground_subtitle">Download in corso…</string>
-+  <string name="settings_downloads_location_title">Cartella di download</string>
-+  <string name="settings_downloads_location_private">Memoria interna predefinita</string>
-+  <string name="settings_downloads_location_reset">Ripristina predefinita</string>
-+  <string name="downloads_error_cannot_write_location">Impossibile scrivere nella cartella selezionata</string>
-+  <string name="downloads_hls_quality">Qualità</string>
-+  <string name="downloads_hls_audio">Audio</string>
-+  <string name="downloads_hls_subtitles">Sottotitoli</string>
-+  <string name="downloads_hls_none">Nessuno</string>
-+  <string name="downloads_hls_action_download">Scarica</string>
-+  <string name="downloads_hls_download">Scarica</string>
-+  <string name="downloads_hls_fetching">Recupero informazioni stream…</string>
-+  <string name="downloads_hls_select_variant">Seleziona Stream</string>
 +  <string name="downloads_share">Condividi</string>
-+  <string name="downloads_save">Salva sul dispositivo</string>
++  <string name="downloads_save">Salva</string>
++  <string name="download_failed">Download fallito</string>
++  <string name="downloads_hls_quality">Qualità Video</string>
++  <string name="downloads_hls_audio">Traccia Audio</string>
++  <string name="downloads_hls_subtitles">Sottotitoli</string>
++  <string name="downloads_hls_download">Scarica</string>
++  <string name="downloads_hls_fetching">Recupero stream disponibili…</string>
++  <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
++  <string name="downloads_enqueue_started">Download avviato</string>
++  <string name="downloads_enqueue_replaced">Download riavviato</string>
++  <string name="downloads_enqueue_missing_url">URL stream mancante</string>
++  <string name="downloads_enqueue_unsupported_format">Formato stream non supportato</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 8217022..5693b68 100644
+index 8b05dbd..3651ea6 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -1,4 +1,4 @@
--﻿<resources>
-+<resources>
-     <string name="theme_gold">Gold</string>
-     <string name="theme_jade">Jade</string>
-     <string name="theme_rose_gold">Rose Gold</string>
-@@ -30,7 +30,7 @@
-     <string name="action_resume">Resume</string>
-     <string name="action_retry">Retry</string>
-     <string name="action_save">Save</string>
--    <string name="action_saving">Savingâ€¦</string>
-+    <string name="action_saving">Saving…</string>
-     <string name="action_switch">Switch</string>
-     <string name="action_validate">Validate</string>
-     <string name="addon_installing">Installing</string>
-@@ -51,7 +51,7 @@
-     <string name="addons_appstore_input_placeholder">Addon URL</string>
-     <string name="addons_appstore_install_button">Add Addon</string>
-     <string name="store_empty_unavailable_title">Nothing here yet</string>
--    <string name="store_empty_unavailable_message">Your current addons donâ€™t have anything to show here.</string>
-+    <string name="store_empty_unavailable_message">Your current addons don’t have anything to show here.</string>
-     <string name="addons_empty_subtitle">Add a manifest URL to start loading catalogs, metadata, streams or subtitles into Nuvio.</string>
-     <string name="addons_empty_title">No addons installed yet.</string>
-     <string name="addons_error_enter_url">Enter an addon URL.</string>
-@@ -126,7 +126,7 @@
-     <string name="collections_editor_show_all_tab">Show \"All\" Tab</string>
-     <string name="collections_editor_show_gif_when_configured_desc">Play the configured GIF instead of the static cover when available.</string>
-     <string name="collections_editor_show_gif_when_configured">Show GIF When Configured</string>
--    <string name="collections_editor_source_count">%1$d source(s) Â· %2$s</string>
-+    <string name="collections_editor_source_count">%1$d source(s) · %2$s</string>
-     <string name="collections_editor_tile_shape">Tile Shape</string>
-     <string name="collections_editor_view_mode_rows">Rows</string>
-     <string name="collections_editor_view_mode_tabs">Tabs</string>
-@@ -334,7 +334,7 @@
-     <string name="collections_pinned">Pinned</string>
-     <string name="collections_tab_all">All</string>
-     <string name="collections_your_collections">Your Collections</string>
--    <string name="compose_about_made_with">Made with â¤ï¸ by Tapframe and friends</string>
-+    <string name="compose_about_made_with">Made with ❤️ by Tapframe and friends</string>
-     <string name="compose_about_version_format">Version %1$s (%2$s)</string>
-     <string name="compose_action_off">Off</string>
-     <string name="compose_action_on">On</string>
-@@ -347,14 +347,14 @@
-     <string name="compose_auth_email">Email</string>
-     <string name="compose_auth_link_cancel">Cancel</string>
-     <string name="compose_auth_link_code_expired">This code expired.</string>
--    <string name="compose_auth_link_creating_code">Creating codeâ€¦</string>
-+    <string name="compose_auth_link_creating_code">Creating code…</string>
-     <string name="compose_auth_link_failed">Link sign-in failed.</string>
-     <string name="compose_auth_link_open">Open nuvio.tv/link</string>
-     <string name="compose_auth_link_open_failed">Couldn't open the link.</string>
-     <string name="compose_auth_link_sign_in">Sign In with Link</string>
--    <string name="compose_auth_link_signing_in">Signing inâ€¦</string>
-+    <string name="compose_auth_link_signing_in">Signing in…</string>
-     <string name="compose_auth_link_try_again">Try Again</string>
--    <string name="compose_auth_link_waiting">Waiting for approvalâ€¦</string>
-+    <string name="compose_auth_link_waiting">Waiting for approval…</string>
-     <string name="compose_auth_or_separator">  or  </string>
-     <string name="compose_auth_password">Password</string>
-     <string name="compose_auth_sign_in_subtitle">Sign in to access your library and progress</string>
-@@ -374,7 +374,7 @@
-     <string name="server_connect_subtitle">Enter the Backend URL provided by your server administrator.</string>
-     <string name="server_connect_url_placeholder">https://backend.example.com</string>
-     <string name="server_connect_action">Check server</string>
--    <string name="server_connect_checking">Checkingâ€¦</string>
-+    <string name="server_connect_checking">Checking…</string>
-     <string name="server_review_title">Review custom server</string>
-     <string name="server_review_description">The discovery document is valid. Connecting will sign you out of the current server and restart the app. Confirm that this is a server you own or trust.</string>
-     <string name="server_review_verified_label">Discovered backend</string>
-@@ -390,7 +390,7 @@
-     <string name="server_official_title">Use official server?</string>
-     <string name="server_official_body">You will be signed out of the custom server and the app will restart with the official service.</string>
-     <string name="server_official_action">Use official server</string>
--    <string name="server_switching">Switchingâ€¦</string>
-+    <string name="server_switching">Switching…</string>
-     <string name="server_error_invalid_url">Enter a valid HTTP or HTTPS Backend URL.</string>
-     <string name="server_error_official_active">api.nuvio.tv is the official server and is already selected.</string>
-     <string name="server_error_official_available">api.nuvio.tv is the official server. Close this dialog and choose Use official server to switch back.</string>
-@@ -425,7 +425,7 @@
-     <string name="compose_player_currently_playing">Currently playing</string>
-     <string name="compose_player_episode_code_episode_only">E%1$d</string>
-     <string name="compose_player_episode_code_full">S%1$dE%2$d</string>
--    <string name="compose_player_episode_title_format">S%1$dE%2$d â€¢ %3$s</string>
-+    <string name="compose_player_episode_title_format">S%1$dE%2$d • %3$s</string>
-     <string name="compose_player_episodes">Episodes</string>
-     <string name="compose_player_font_size">Font Size</string>
-     <string name="compose_player_font_size_value">%1$dsp</string>
-@@ -528,7 +528,7 @@
-     <string name="compose_settings_root_content_discovery_description">Manage addons and discovery sources.</string>
-     <string name="compose_settings_root_content_discovery_description_appstore">Manage addons and choose what appears in Nuvio.</string>
-     <string name="compose_settings_root_downloads_description">Manage your downloaded movies and episodes.</string>
--    <string name="compose_settings_root_downloads_description_appstore">Manage what youâ€™ve saved on this device.</string>
-+    <string name="compose_settings_root_downloads_description_appstore">Manage what you’ve saved on this device.</string>
-     <string name="compose_settings_root_downloads_title">Downloads</string>
-     <string name="compose_settings_root_general_section">GENERAL</string>
-     <string name="compose_settings_root_integrations_description">Manage available integrations</string>
-@@ -593,9 +593,9 @@
-     <string name="settings_licenses_attributions_exoplayer_title">AndroidX Media3 ExoPlayer 1.8.0</string>
-     <string name="settings_licenses_attributions_exoplayer_body">Used for playback on Android builds.</string>
-     <string name="settings_licenses_attributions_exoplayer_license">Licensed under the Apache License, Version 2.0.</string>
--    <string name="compose_trakt_list_picker_loading">Loading your Trakt listsâ€¦</string>
-+    <string name="compose_trakt_list_picker_loading">Loading your Trakt lists…</string>
-     <string name="compose_trakt_list_picker_subtitle">Choose where to save this title on Trakt</string>
--    <string name="compose_tracking_list_picker_loading">Loading listsâ€¦</string>
-+    <string name="compose_tracking_list_picker_loading">Loading lists…</string>
-     <string name="compose_tracking_list_picker_subtitle">Choose where to save this title</string>
-     <string name="action_donate">Donate</string>
-     <string name="action_support_nuvio">Support Nuvio</string>
-@@ -623,10 +623,31 @@
+@@ -623,10 +623,23 @@
      <string name="downloads_section_movies">Movies</string>
      <string name="downloads_section_shows">Shows</string>
      <string name="downloads_show_downloads">Show Downloads</string>
@@ -1966,297 +1862,21 @@ index 8217022..5693b68 100644
 -    <string name="downloads_status_paused">Paused â€¢ %1$s</string>
 +    <string name="downloads_status_paused">Paused • %1$s</string>
 +    <string name="downloads_status_processing">Processing • %1$s</string>
-+    <string name="downloads_phase_remux">Remuxing</string>
 +    <string name="downloads_track_video">Video</string>
 +    <string name="downloads_track_audio">Audio</string>
 +    <string name="downloads_track_subtitles">Subtitles</string>
-+    <string name="downloads_foreground_title">Downloading media</string>
-+    <string name="downloads_foreground_subtitle">Download in progress…</string>
-+    <string name="settings_downloads_location_title">Download location</string>
-+    <string name="settings_downloads_location_private">Default internal storage</string>
-+    <string name="settings_downloads_location_reset">Reset to default</string>
-+    <string name="downloads_error_cannot_write_location">Cannot write to selected download location</string>
-+    <string name="downloads_hls_quality">Quality</string>
-+    <string name="downloads_hls_audio">Audio</string>
-+    <string name="downloads_hls_subtitles">Subtitles</string>
-+    <string name="downloads_hls_none">None</string>
-+    <string name="downloads_hls_action_download">Download</string>
-+    <string name="downloads_hls_download">Download</string>
-+    <string name="downloads_hls_fetching">Fetching stream info…</string>
-+    <string name="downloads_hls_select_variant">Select Streams</string>
 +    <string name="downloads_share">Share</string>
-+    <string name="downloads_save">Save to device</string>
++    <string name="downloads_save">Save</string>
++    <string name="download_failed">Download failed</string>
++    <string name="downloads_hls_quality">Video Quality</string>
++    <string name="downloads_hls_audio">Audio Track</string>
++    <string name="downloads_hls_subtitles">Subtitles</string>
++    <string name="downloads_hls_download">Download</string>
++    <string name="downloads_hls_fetching">Fetching available streams…</string>
++    <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
      <string name="episodes_cd_watched">Watched</string>
      <string name="episodes_season">Season %1$d</string>
      <string name="episodes_specials">Specials</string>
-@@ -680,15 +701,15 @@
-     <string name="settings_appearance_section_display">DISPLAY</string>
-     <string name="settings_appearance_section_home">HOME</string>
-     <string name="settings_appearance_section_theme">THEME</string>
--    <string name="settings_homescreen_collection_with_addon">Collection â€¢ %1$s</string>
-+    <string name="settings_homescreen_collection_with_addon">Collection • %1$s</string>
-     <string name="settings_homescreen_display_name">Display Name</string>
-     <string name="settings_homescreen_empty_message">Enable or add an addon with catalogs to configure Home.</string>
-     <string name="settings_homescreen_empty_title">No home catalogs</string>
--    <string name="settings_homescreen_load_failed_title">Couldnâ€™t load Home catalogs</string>
-+    <string name="settings_homescreen_load_failed_title">Couldn’t load Home catalogs</string>
-     <string name="settings_homescreen_hero_source">Hero source</string>
-     <string name="settings_homescreen_hidden">Hidden</string>
-     <string name="settings_homescreen_keep_home_focused">Keep Home focused</string>
--    <string name="settings_homescreen_limit_reached">%1$s â€¢ Limit reached (max %2$d)</string>
-+    <string name="settings_homescreen_limit_reached">%1$s • Limit reached (max %2$d)</string>
-     <string name="settings_homescreen_no_sources_selected">No hero sources selected</string>
-     <string name="settings_homescreen_not_in_hero">Not in hero</string>
-     <string name="settings_homescreen_pin_to_move_toast">Remove pin to top from collection to move</string>
-@@ -707,7 +728,7 @@
-     <string name="layout_hide_unreleased_sub">Hide movies and shows that haven't been released yet.</string>
-     <string name="layout_catalog_type">Show Catalog Type</string>
-     <string name="layout_catalog_type_sub">Show type suffix next to catalog name (Movie/Series).</string>
--    <string name="settings_homescreen_summary">%1$d of %2$d catalogs visible â€¢ %3$d hero sources selected</string>
-+    <string name="settings_homescreen_summary">%1$d of %2$d catalogs visible • %3$d hero sources selected</string>
-     <string name="settings_homescreen_summary_hint">Open a catalog only when you need to rename or reorder it.</string>
-     <string name="settings_homescreen_visible">Visible</string>
-     <string name="settings_hide_secret">Hide value</string>
-@@ -727,8 +748,8 @@
-     <string name="settings_card_depth_fine_tune">Fine-tune</string>
-     <string name="settings_card_depth_fine_tune_title">Fine-tune Depth</string>
-     <string name="settings_card_depth_fine_tune_hint">Drag the dot right for a brighter edge, up for more sheen. Use the slider to extend the glow around the full outline.</string>
--    <string name="settings_card_depth_pad_edge_axis">Edge glow â†’</string>
--    <string name="settings_card_depth_pad_sheen_axis">â†‘ Sheen</string>
-+    <string name="settings_card_depth_pad_edge_axis">Edge glow →</string>
-+    <string name="settings_card_depth_pad_sheen_axis">↑ Sheen</string>
-     <string name="settings_card_depth_edge_value">Edge glow</string>
-     <string name="settings_card_depth_sheen_value">Sheen</string>
-     <string name="settings_card_depth_edge_coverage">Edge coverage</string>
-@@ -737,7 +758,7 @@
-     <string name="settings_card_depth_coverage_full">Full outline</string>
-     <string name="settings_card_depth_coverage_value">Edge coverage</string>
-     <string name="settings_card_depth_preview_title">Episode Title</string>
--    <string name="settings_card_depth_preview_meta">S1 Â· E1 Â· 45 min</string>
-+    <string name="settings_card_depth_preview_meta">S1 · E1 · 45 min</string>
-     <string name="settings_card_depth_surface_posters">Posters</string>
-     <string name="settings_card_depth_surface_continue_watching">Continue Watching</string>
-     <string name="settings_card_depth_surface_episodes">Episode cards</string>
-@@ -960,7 +981,7 @@
-     <string name="community_membership_title">Nuvio Supporter Membership</string>
-     <string name="community_membership_description">Supporting Nuvio helps cover infrastructure and ongoing development while keeping the core experience free for everyone.</string>
-     <string name="community_view_supporter_membership">View Supporter Membership</string>
--    <string name="community_membership_you_are">Youâ€™re a</string>
-+    <string name="community_membership_you_are">You’re a</string>
-     <string name="community_membership_thank_you">Thank you.</string>
-     <string name="community_membership_supporter_since">Supporter since %1$s.</string>
-     <string name="community_membership_connected_title">Patreon is connected</string>
-@@ -1278,9 +1299,9 @@
-     <string name="settings_simkl_sync_info_action">How syncing works</string>
-     <string name="settings_simkl_sync_info_title">How Simkl syncing works</string>
-     <string name="settings_simkl_sync_info_description">Nuvio automatically checks Simkl at most once every %1$d minutes. Changes made through another app or the Simkl website may take that long to appear.</string>
--    <string name="settings_simkl_sync_info_activity">Each refresh first checks whether Simkl reports any changes and downloads only the updates. This follows Simklâ€™s API rules, reduces unnecessary data use, and helps keep the service stable.</string>
-+    <string name="settings_simkl_sync_info_activity">Each refresh first checks whether Simkl reports any changes and downloads only the updates. This follows Simkl’s API rules, reduces unnecessary data use, and helps keep the service stable.</string>
-     <string name="settings_simkl_sync_info_manual">Changes made in Nuvio are sent to Simkl immediately. Use Sync now whenever you want Nuvio to check for remote changes sooner.</string>
--    <string name="settings_simkl_sync_info_library_statuses">Shows placed in Simklâ€™s On Hold or Dropped lists are hidden from Continue Watching. They remain hidden for as long as they stay in either list.</string>
-+    <string name="settings_simkl_sync_info_library_statuses">Shows placed in Simkl’s On Hold or Dropped lists are hidden from Continue Watching. They remain hidden for as long as they stay in either list.</string>
-     <string name="settings_simkl_sync_info_docs">Read the Simkl sync guide</string>
-     <string name="settings_simkl_authorization_revoked">Simkl authorization was revoked. Connect again.</string>
-     <string name="tracking_source_simkl">Simkl</string>
-@@ -1332,8 +1353,8 @@
-     <string name="theme_violet">Violet</string>
-     <string name="theme_white">White</string>
-     <string name="player_next_episode">Next Episode</string>
--    <string name="player_next_episode_finding_source">Finding sourceâ€¦</string>
--    <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$dâ€¦</string>
-+    <string name="player_next_episode_finding_source">Finding source…</string>
-+    <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$d…</string>
-     <string name="player_next_episode_thumbnail">Next episode thumbnail</string>
-     <string name="player_next_episode_unaired">Unaired</string>
-     <string name="player_skip">Skip</string>
-@@ -1431,7 +1452,7 @@
-     <string name="app_exit_title">Exit app</string>
-     <string name="catalog_empty_message">This catalog did not return any items.</string>
-     <string name="catalog_empty_title">No titles found</string>
--    <string name="catalog_load_failed_title">Couldnâ€™t load this catalog</string>
-+    <string name="catalog_load_failed_title">Couldn’t load this catalog</string>
-     <string name="details_actions_menu_label">More actions</string>
-     <string name="details_check_connection">Check your Wi-Fi or mobile data connection and try again.</string>
-     <string name="details_director">Director</string>
-@@ -1445,11 +1466,11 @@
-     <string name="details_series_unpublished">Episodes have not been published by this addon yet.</string>
-     <string name="details_servers_unreachable">Your device is online, but Nuvio could not reach required servers.</string>
-     <string name="details_show_less">Show Less</string>
--    <string name="details_show_more">Show More â–¾</string>
-+    <string name="details_show_more">Show More ▾</string>
-     <string name="details_writer">Writer</string>
-     <string name="discover_all_genres">All Genres</string>
-     <string name="discover_catalog">Catalog</string>
--    <string name="discover_catalog_context">%1$s â€¢ %2$s</string>
-+    <string name="discover_catalog_context">%1$s • %2$s</string>
-     <string name="discover_empty_load_failed_message">The selected catalog failed to return discover items.</string>
-     <string name="discover_empty_load_failed_title">Could not load discover</string>
-     <string name="discover_empty_no_catalogs_message">Your enabled addons do not provide catalogs that can be shown in Discover.</string>
-@@ -1475,7 +1496,7 @@
-     <string name="home_empty_no_active_addons_message">Enable or add an addon to see catalogs on Home.</string>
-     <string name="home_empty_no_rows_message">Your enabled addons do not provide catalogs that can be shown on Home.</string>
-     <string name="home_empty_no_rows_title">No Home content available</string>
--    <string name="home_load_failed_title">Couldnâ€™t load Home</string>
-+    <string name="home_load_failed_title">Couldn’t load Home</string>
-     <string name="home_view_details">View Details</string>
-     <string name="meta_section_actions_description">Play and save controls.</string>
-     <string name="meta_section_actions_title">Actions</string>
-@@ -1552,7 +1573,7 @@
-     <string name="provider_downloaded">Downloaded</string>
-     <string name="resume_prompt_action">Resume</string>
-     <string name="streams_active_scrapers">Active scrapers</string>
--    <string name="streams_checking_more_addons">Checking more addonsâ€¦</string>
-+    <string name="streams_checking_more_addons">Checking more addons…</string>
-     <string name="streams_copy_link">Copy stream link</string>
-     <string name="streams_download_file">Download file</string>
-     <string name="streams_open_external_player">Open in external player</string>
-@@ -1566,11 +1587,11 @@
-     <string name="streams_episode_badge">S%1$d E%2$d</string>
-     <string name="streams_episode_fallback_title">Episode</string>
-     <string name="streams_episode_title_with_name">S%1$dE%2$d - %3$s</string>
--    <string name="streams_fetching">Fetchingâ€¦</string>
--    <string name="streams_finding_source">Finding sourceâ€¦</string>
--    <string name="streams_loading_subtitles">Loading subtitles from addonsâ€¦</string>
--    <string name="streams_loading_skip_segments">Loading skip segmentsâ€¦</string>
--    <string name="streams_finding_streams">Finding streamsâ€¦</string>
-+    <string name="streams_fetching">Fetching…</string>
-+    <string name="streams_finding_source">Finding source…</string>
-+    <string name="streams_loading_subtitles">Loading subtitles from addons…</string>
-+    <string name="streams_loading_skip_segments">Loading skip segments…</string>
-+    <string name="streams_finding_streams">Finding streams…</string>
-     <string name="streams_link_copied">Stream link copied</string>
-     <string name="streams_no_direct_link">No direct stream link available</string>
-     <string name="streams_no_metadata">No metadata available</string>
-@@ -1593,11 +1614,11 @@
-     <string name="tracking_lists_update_failed">Failed to update tracking lists</string>
-     <string name="tracking_list_status_rewritten">%1$s placed this title in %2$s instead of %3$s</string>
-     <string name="tracking_remove_confirmation_title">Remove from %1$s?</string>
--    <string name="tracking_remove_confirmation_message">Removing â€œ%1$sâ€ from %2$s will also clear its %3$s there. This canâ€™t be undone.</string>
-+    <string name="tracking_remove_confirmation_message">Removing “%1$s” from %2$s will also clear its %3$s there. This can’t be undone.</string>
-     <string name="tracking_removal_impact_history">watched history</string>
-     <string name="tracking_removal_impact_rating">rating</string>
-     <string name="tracking_removal_impact_history_and_rating">watched history and rating</string>
--    <string name="updates_asset_line">%1$s â€¢ %2$s</string>
-+    <string name="updates_asset_line">%1$s • %2$s</string>
-     <string name="updates_check_failed">Update check failed</string>
-     <string name="updates_download_failed">Download failed</string>
-     <string name="updates_download_empty_body">Empty download body</string>
-@@ -1629,7 +1650,7 @@
-     <string name="auth_sign_up_failed">Sign-up failed</string>
-     <string name="catalog_load_failed">Unable to load catalog items.</string>
-     <string name="continue_watching_up_next">Next Up</string>
--    <string name="continue_watching_up_next_episode">Next Up â€¢ S%1$dE%2$d</string>
-+    <string name="continue_watching_up_next_episode">Next Up • S%1$dE%2$d</string>
-     <string name="detail_logo_content_description">%1$s logo</string>
-     <string name="details_comments_load_failed">Failed to load comments</string>
-     <string name="details_load_failed_all_addons">Could not load details from any addon.</string>
-@@ -1639,8 +1660,8 @@
-     <string name="downloads_channel_description">Shows live download progress and controls.</string>
-     <string name="downloads_channel_name">Downloads</string>
-     <string name="downloads_live_completed">Download completed</string>
--    <string name="downloads_live_downloading">Downloading %1$s â€¢ %2$s</string>
--    <string name="downloads_live_downloading_with_total">Downloading %1$s â€¢ %2$s / %3$s</string>
-+    <string name="downloads_live_downloading">Downloading %1$s • %2$s</string>
-+    <string name="downloads_live_downloading_with_total">Downloading %1$s • %2$s / %3$s</string>
-     <string name="downloads_live_failed">Download failed</string>
-     <string name="downloads_live_paused">Paused %1$s</string>
-     <string name="library_remove_confirm">Remove</string>
-@@ -1768,7 +1789,7 @@
-     <string name="details_browse_load_failed">Could not load %1$s</string>
-     <string name="details_browse_rail_popular">Popular</string>
-     <string name="details_browse_rail_recent">Recent</string>
--    <string name="details_browse_rail_title">%1$s â€¢ %2$s</string>
-+    <string name="details_browse_rail_title">%1$s • %2$s</string>
-     <string name="details_browse_rail_top_rated">Top Rated</string>
-     <string name="details_certification">Certification</string>
-     <string name="details_movie_details">Movie Details</string>
-@@ -1807,8 +1828,8 @@
-     <string name="library_other">Other</string>
-     <string name="library_sort_added_asc">Oldest added</string>
-     <string name="library_sort_added_desc">Recently added</string>
--    <string name="library_sort_title_asc">Title Aâ€“Z</string>
--    <string name="library_sort_title_desc">Title Zâ€“A</string>
-+    <string name="library_sort_title_asc">Title A–Z</string>
-+    <string name="library_sort_title_desc">Title Z–A</string>
-     <string name="library_sort_provider_order">Tracker order</string>
-     <string name="library_source_cloud">Cloud</string>
-     <string name="library_source_saved">Saved</string>
-@@ -1819,7 +1840,7 @@
-     <string name="library_trakt_title">Trakt Library</string>
-     <string name="library_simkl_empty_message">Add titles to your Simkl plan-to-watch list to see them here.</string>
-     <string name="library_simkl_empty_title">Your Simkl watchlist is empty</string>
--    <string name="library_simkl_load_failed">Couldnâ€™t load Simkl watchlist</string>
-+    <string name="library_simkl_load_failed">Couldn’t load Simkl watchlist</string>
-     <string name="library_simkl_title">Simkl Watchlist</string>
-     <string name="cloud_library_connect_action">Connect account</string>
-     <string name="cloud_library_connect_message">Connect an account in Connected Services settings to browse playable files from your cloud library.</string>
-@@ -1859,7 +1880,7 @@
-     <string name="media_series">Series</string>
-     <string name="media_tv">TV</string>
-     <string name="notifications_episode_release_body_code">%1$s is out now</string>
--    <string name="notifications_episode_release_body_code_title">%1$s â€¢ %2$s is out now</string>
-+    <string name="notifications_episode_release_body_code_title">%1$s • %2$s is out now</string>
-     <string name="notifications_episode_release_body_generic">A new episode is out now</string>
-     <string name="notifications_episode_release_body_title">%1$s is out now</string>
-     <string name="notifications_channel_episode_releases_name">Episode Releases</string>
-@@ -2107,9 +2128,9 @@
-     <string name="plugins_badge_tmdb_key_missing">TMDB API key missing</string>
-     <string name="plugins_badge_tmdb_key_set">TMDB API key set</string>
-     <string name="plugins_button_install_repo">Install Plugin Repository</string>
--    <string name="plugins_button_installing">Installingâ€¦</string>
-+    <string name="plugins_button_installing">Installing…</string>
-     <string name="plugins_button_test_provider">Test Provider</string>
--    <string name="plugins_button_testing">Testingâ€¦</string>
-+    <string name="plugins_button_testing">Testing…</string>
-     <string name="plugins_cd_delete_repo">Delete plugin repository</string>
-     <string name="plugins_cd_refresh_repo">Refresh plugin repository</string>
-     <string name="plugins_empty_providers">No providers available yet.</string>
-@@ -2186,11 +2207,11 @@
-     </plurals>
-     <string name="cw_new_episode">New Episode</string>
-     <string name="cw_new_season">New Season</string>
--    <!-- Pass 4 â€” platform stubs and dynamic title fallbacks -->
-+    <!-- Pass 4 — platform stubs and dynamic title fallbacks -->
-     <string name="collections_editor_trakt_list_title_format">Trakt List %1$s</string>
-     <string name="external_player_android_system">Android system player</string>
-     <string name="p2p_consent_title">P2P Streaming</string>
--    <string name="p2p_consent_body">This stream uses peer-to-peer (P2P) technology. By enabling P2P, you acknowledge and agree that:\n\nâ€¢ Your IP address will be visible to other peers in the network\nâ€¢ You are solely responsible for the content you access\nâ€¢ You confirm you have the legal right to stream this content in your jurisdiction\nâ€¢ Nuvio does not host, distribute, or control any P2P content\nâ€¢ Nuvio bears no liability for any legal consequences arising from your use of P2P streaming\n\nYou use this feature entirely at your own risk. P2P can be disabled anytime in Settings.</string>
-+    <string name="p2p_consent_body">This stream uses peer-to-peer (P2P) technology. By enabling P2P, you acknowledge and agree that:\n\n• Your IP address will be visible to other peers in the network\n• You are solely responsible for the content you access\n• You confirm you have the legal right to stream this content in your jurisdiction\n• Nuvio does not host, distribute, or control any P2P content\n• Nuvio bears no liability for any legal consequences arising from your use of P2P streaming\n\nYou use this feature entirely at your own risk. P2P can be disabled anytime in Settings.</string>
-     <string name="p2p_consent_enable">Enable P2P</string>
-     <string name="p2p_consent_cancel">Cancel</string>
-     <string name="p2p_error_unknown">Unknown torrent error</string>
-@@ -2214,20 +2235,20 @@
-     <string name="settings_p2p_clear_cache_title">Clear torrent cache</string>
-     <string name="settings_p2p_clear_cache_usage">%1$s currently used</string>
-     <string name="settings_p2p_clear_cache_usage_pending">Usage is measured after P2P starts; tap to clear cached torrent data</string>
--    <string name="settings_p2p_clear_cache_clearing">Clearing inactive torrent dataâ€¦</string>
-+    <string name="settings_p2p_clear_cache_clearing">Clearing inactive torrent data…</string>
-     <string name="settings_p2p_clear_cache_playback_active">Stop P2P playback before clearing the cache</string>
-     <string name="settings_p2p_clear_cache_done">Cleared %1$s of inactive torrent data</string>
-     <string name="settings_p2p_clear_cache_failed">Could not clear the torrent cache</string>
--    <string name="player_torrent_peer_info">%1$d seeds Â· %2$d peers</string>
--    <string name="player_torrent_buffered_status">%1$s buffered Â· %2$s Â· %3$s</string>
--    <string name="player_torrent_status">%1$s Â· %2$s</string>
--    <string name="player_torrent_stats">%1$d peers Â· %2$d seeds Â· %3$d%%</string>
--    <string name="player_torrent_connecting_peers">Connecting to peersâ€¦</string>
--    <string name="player_torrent_starting_engine">Starting P2P engineâ€¦</string>
--    <string name="player_torrent_fetching_metadata">Fetching torrent metadataâ€¦</string>
--    <string name="player_torrent_preparing_stream">Preparing torrent streamâ€¦</string>
--    <string name="player_torrent_connecting_status">%1$s Â· %2$s Â· %3$s</string>
--    <string name="player_torrent_loading_status">%1$s downloaded Â· %2$s Â· %3$s</string>
-+    <string name="player_torrent_peer_info">%1$d seeds · %2$d peers</string>
-+    <string name="player_torrent_buffered_status">%1$s buffered · %2$s · %3$s</string>
-+    <string name="player_torrent_status">%1$s · %2$s</string>
-+    <string name="player_torrent_stats">%1$d peers · %2$d seeds · %3$d%%</string>
-+    <string name="player_torrent_connecting_peers">Connecting to peers…</string>
-+    <string name="player_torrent_starting_engine">Starting P2P engine…</string>
-+    <string name="player_torrent_fetching_metadata">Fetching torrent metadata…</string>
-+    <string name="player_torrent_preparing_stream">Preparing torrent stream…</string>
-+    <string name="player_torrent_connecting_status">%1$s · %2$s · %3$s</string>
-+    <string name="player_torrent_loading_status">%1$s downloaded · %2$s · %3$s</string>
-     <string name="player_error_failed_start_torrent">Failed to start torrent: %1$s</string>
-     <string name="player_error_torrent">Torrent error: %1$s</string>
-     <!-- Person & TMDB entity detail (pass7) -->
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 index 23c8d9b..c28280a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
@@ -2448,7 +2068,7 @@ index 0000000..f82780c
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 0000000..ebab6be
+index 0000000..79ffead
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 @@ -0,0 +1,343 @@
@@ -2461,11 +2081,11 @@ index 0000000..ebab6be
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.height
 +import androidx.compose.foundation.layout.padding
-+import androidx.compose.material3.rememberModalBottomSheetState
 +import androidx.compose.material3.CircularProgressIndicator
 +import androidx.compose.material3.ExperimentalMaterial3Api
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Text
++import com.nuvio.app.core.ui.rememberNuvioBottomSheetState
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.getValue
@@ -2509,7 +2129,7 @@ index 0000000..ebab6be
 +) {
 +    if (stream == null) return
 +
-+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
++    val sheetState = rememberNuvioBottomSheetState(skipPartiallyExpanded = true)
 +    val coroutineScope = rememberCoroutineScope()
 +    var hlsMetadata by remember { mutableStateOf<HlsStreamMetadata?>(null) }
 +    var isFetching by remember { mutableStateOf(true) }
@@ -2933,12 +2553,13 @@ index 077b853..82a08ee 100644
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index b0440dc..f478c35 100644
+index b0440dc..a79ab77 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-@@ -1,6 +1,12 @@
+@@ -1,6 +1,13 @@
  package com.nuvio.app.features.downloads
  
++import com.nuvio.app.core.logging.InAppLogger
  import com.nuvio.app.features.streams.StreamItem
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
@@ -2949,7 +2570,7 @@ index b0440dc..f478c35 100644
  import kotlinx.coroutines.runBlocking
  import kotlinx.coroutines.flow.MutableStateFlow
  import kotlinx.coroutines.flow.StateFlow
-@@ -17,22 +23,36 @@ object DownloadsRepository {
+@@ -17,22 +24,36 @@ object DownloadsRepository {
      private val _uiState = MutableStateFlow(DownloadsUiState())
      val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
  
@@ -2986,7 +2607,7 @@ index b0440dc..f478c35 100644
          hasLoaded = false
          _uiState.value = DownloadsUiState()
          notifyLiveStatusPlatform()
-@@ -100,6 +120,13 @@ object DownloadsRepository {
+@@ -100,6 +121,13 @@ object DownloadsRepository {
          return resolvedUri
      }
  
@@ -3000,7 +2621,7 @@ index b0440dc..f478c35 100644
      fun enqueueFromStream(
          contentType: String,
          videoId: String,
-@@ -126,6 +153,54 @@ object DownloadsRepository {
+@@ -126,6 +154,162 @@ object DownloadsRepository {
              return DownloadEnqueueResult.UnsupportedFormat
          }
  
@@ -3031,6 +2652,10 @@ index b0440dc..f478c35 100644
 +        val headers = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request)
 +        val content = DownloadsPlatformDownloader.fetchUrlAsString(sourceUrl, headers) ?: return null
 +        val master = HlsPlaylistParser.parseMasterPlaylist(content, sourceUrl)
++        InAppLogger.info("HlsSheet", "parsed ${master.audioTracks.size} audio tracks, ${master.subtitleTracks.size} subtitle tracks")
++        master.audioTracks.forEachIndexed { i, t ->
++            InAppLogger.info("HlsSheet", "  audio[$i]: name='${t.name}' uri='${t.uri}' lang='${t.language}'")
++        }
 +        return HlsStreamMetadata(master, sourceUrl)
 +    }
 +
@@ -3052,13 +2677,19 @@ index b0440dc..f478c35 100644
 +    ): DownloadEnqueueResult {
 +        ensureLoaded()
 +
-         val now = DownloadsClock.nowEpochMs()
-         val logicalKey = buildLogicalKey(
-             parentMetaId = parentMetaId,
-@@ -139,6 +214,112 @@ object DownloadsRepository {
-         if (existing != null) {
-             replacedExisting = true
-             activeHandles.remove(existing.id)?.cancel()
++        val now = DownloadsClock.nowEpochMs()
++        val logicalKey = buildLogicalKey(
++            parentMetaId = parentMetaId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++        )
++
++        var replacedExisting = false
++        val currentItems = _uiState.value.items.toMutableList()
++        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
++        if (existing != null) {
++            replacedExisting = true
++            activeHandles.remove(existing.id)?.cancel()
 +            processingRemovalJobs.remove(existing.id)?.cancel()
 +            _trackProgress.update { it - existing.id }
 +            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
@@ -3150,25 +2781,19 @@ index b0440dc..f478c35 100644
 +        stream: StreamItem,
 +        sourceUrl: String,
 +    ): DownloadEnqueueResult {
-+        val now = DownloadsClock.nowEpochMs()
-+        val logicalKey = buildLogicalKey(
-+            parentMetaId = parentMetaId,
-+            seasonNumber = seasonNumber,
-+            episodeNumber = episodeNumber,
-+        )
-+
-+        var replacedExisting = false
-+        val currentItems = _uiState.value.items.toMutableList()
-+        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
-+        if (existing != null) {
-+            replacedExisting = true
-+            activeHandles.remove(existing.id)?.cancel()
+         val now = DownloadsClock.nowEpochMs()
+         val logicalKey = buildLogicalKey(
+             parentMetaId = parentMetaId,
+@@ -139,6 +323,8 @@ object DownloadsRepository {
+         if (existing != null) {
+             replacedExisting = true
+             activeHandles.remove(existing.id)?.cancel()
 +            processingRemovalJobs.remove(existing.id)?.cancel()
 +            _trackProgress.update { it - existing.id }
              DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
              DownloadsPlatformDownloader.removePartialFile(existing.fileName)
              currentItems.removeAll { it.id == existing.id }
-@@ -152,6 +333,7 @@ object DownloadsRepository {
+@@ -152,6 +338,7 @@ object DownloadsRepository {
              episodeTitle = episodeTitle,
              fallbackTitle = stream.streamLabel,
              sourceUrl = sourceUrl,
@@ -3176,7 +2801,7 @@ index b0440dc..f478c35 100644
              nowEpochMs = now,
          )
  
-@@ -247,6 +429,8 @@ object DownloadsRepository {
+@@ -247,6 +434,8 @@ object DownloadsRepository {
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
  
          activeHandles.remove(downloadId)?.cancel()
@@ -3185,7 +2810,7 @@ index b0440dc..f478c35 100644
          DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
          DownloadsPlatformDownloader.removePartialFile(item.fileName)
  
-@@ -291,11 +475,34 @@ object DownloadsRepository {
+@@ -291,11 +480,34 @@ object DownloadsRepository {
  
      private fun startDownload(item: DownloadItem) {
          val request = DownloadPlatformRequest(
@@ -3220,7 +2845,7 @@ index b0440dc..f478c35 100644
          val handle = DownloadsPlatformDownloader.start(
              request = request,
              onProgress = { downloadedBytes, totalBytes ->
-@@ -311,28 +518,82 @@ object DownloadsRepository {
+@@ -311,28 +523,82 @@ object DownloadsRepository {
                          )
                      }
                  }
@@ -3237,8 +2862,7 @@ index b0440dc..f478c35 100644
 +                    }
 +                }
 +                notifyLiveStatusPlatform()
-             },
--            onSuccess = { localFileUri, totalBytes ->
++            },
 +            onTrackProgress = { trackName, downloadedBytes, totalBytes ->
 +                val currentItem = _uiState.value.items.firstOrNull { it.id == item.id }
 +                if (currentItem?.status == DownloadStatus.Downloading) {
@@ -3253,7 +2877,8 @@ index b0440dc..f478c35 100644
 +                    }
 +                }
 +                notifyLiveStatusPlatform()
-+            },
+             },
+-            onSuccess = { localFileUri, totalBytes ->
 +            onWarning = { message ->
 +                mutateItem(item.id) { current ->
 +                    current.copy(
@@ -3305,16 +2930,19 @@ index b0440dc..f478c35 100644
                          current
                      } else {
                          current.copy(
-@@ -343,33 +604,46 @@ object DownloadsRepository {
+@@ -343,33 +609,49 @@ object DownloadsRepository {
                      }
                  }
              },
 +            onPhase = { phase ->
 +                processingRemovalJobs.remove(item.id)?.cancel()
 +                val now = DownloadsClock.nowEpochMs()
++                val prevStatus = _uiState.value.items.firstOrNull { it.id == item.id }?.status
++                InAppLogger.info("DownloadsRepository", "onPhase('$phase') item=${item.id} prevStatus=$prevStatus")
 +                _processingItemIds.update { it + item.id }
 +                mutateItem(item.id) { current ->
 +                    if (current.status != DownloadStatus.Downloading) {
++                        InAppLogger.warn("DownloadsRepository", "onPhase: status NOT Downloading, was ${current.status}")
 +                        current
 +                    } else {
 +                        current.copy(
@@ -3367,7 +2995,7 @@ index b0440dc..f478c35 100644
      }
  
      private fun publish(items: List<DownloadItem>) {
-@@ -495,6 +769,7 @@ private fun buildFileName(
+@@ -495,6 +777,7 @@ private fun buildFileName(
      episodeTitle: String?,
      fallbackTitle: String,
      sourceUrl: String,
@@ -3375,7 +3003,7 @@ index b0440dc..f478c35 100644
      nowEpochMs: Long,
  ): String {
      val baseTitle = if (seasonNumber != null && episodeNumber != null) {
-@@ -513,7 +788,7 @@ private fun buildFileName(
+@@ -513,7 +796,7 @@ private fun buildFileName(
          title.ifBlank { fallbackTitle }
      }
  
@@ -3384,7 +3012,7 @@ index b0440dc..f478c35 100644
      return buildString {
          append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(92))
          append('_')
-@@ -523,6 +798,44 @@ private fun buildFileName(
+@@ -523,6 +806,44 @@ private fun buildFileName(
      }
  }
  
@@ -3429,7 +3057,7 @@ index b0440dc..f478c35 100644
  private fun String.sanitizeFileName(): String =
      trim().replace(Regex("[^A-Za-z0-9._ -]"), "_")
  
-@@ -542,8 +855,22 @@ private fun String.fileExtensionFromUrl(): String {
+@@ -542,8 +863,22 @@ private fun String.fileExtensionFromUrl(): String {
  private fun String.isSupportedDownloadUrl(): Boolean {
      val normalized = trim().lowercase()
      if (normalized.startsWith("magnet:")) return false
@@ -3454,7 +3082,7 @@ index b0440dc..f478c35 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10..b3f9fd0 100644
+index 7019a10..987a703 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -3481,10 +3109,12 @@ index 7019a10..b3f9fd0 100644
  import androidx.compose.material3.Icon
  import androidx.compose.material3.IconButton
  import androidx.compose.material3.LinearProgressIndicator
-@@ -29,9 +38,13 @@ import androidx.compose.runtime.getValue
+@@ -29,17 +38,24 @@ import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateOf
  import androidx.compose.runtime.remember
  import androidx.compose.runtime.saveable.rememberSaveable
++import com.nuvio.app.core.ui.formatEpisodeCode
++import com.nuvio.app.core.ui.rememberEpisodeCodeFormat
 +import androidx.compose.runtime.collectAsState
  import androidx.compose.runtime.setValue
 +import kotlinx.coroutines.flow.map
@@ -3495,8 +3125,9 @@ index 7019a10..b3f9fd0 100644
  import androidx.compose.ui.text.font.FontWeight
  import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.dp
-@@ -39,7 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import com.nuvio.app.core.i18n.localizedByteUnit
++import com.nuvio.app.core.share.SharePlatform
  import com.nuvio.app.core.ui.NuvioScreen
  import com.nuvio.app.core.ui.NuvioScreenHeader
 -import com.nuvio.app.core.ui.NuvioStatusModal
@@ -3504,7 +3135,7 @@ index 7019a10..b3f9fd0 100644
  import com.nuvio.app.core.ui.NuvioToastController
  import nuvio.composeapp.generated.resources.*
  import org.jetbrains.compose.resources.stringResource
-@@ -52,13 +65,15 @@ fun DownloadsScreen(
+@@ -52,13 +68,15 @@ fun DownloadsScreen(
      onNavigateToShow: ((showId: String, title: String) -> Unit)? = null,
      onBackFromShow: (() -> Unit)? = null,
  ) {
@@ -3515,33 +3146,27 @@ index 7019a10..b3f9fd0 100644
          DownloadsRepository.uiState
      }.collectAsStateWithLifecycle()
  
--    var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
+     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
 -    var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
-+    var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf<String?>(initialShowId) }
 +    var showSettings by rememberSaveable { mutableStateOf(false) }
      val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
  
      val completedEpisodes = remember(uiState.items) {
-@@ -68,9 +83,15 @@ fun DownloadsScreen(
+@@ -73,6 +91,13 @@ fun DownloadsScreen(
+         }
      }
  
-     val selectedShowTitle = remember(selectedShowId, completedEpisodes) {
--        selectedShowId?.let { showId ->
--            completedEpisodes.firstOrNull { it.parentMetaId == showId }?.title
--        }
-+        val showId = selectedShowId ?: return@remember null
-+        completedEpisodes.firstOrNull { it.parentMetaId == showId }?.title
-+    }
-+
 +    if (showSettings) {
 +        DownloadsSettingsScreen(
 +            onBack = { showSettings = false },
 +        )
 +        return
-     }
- 
++    }
++
      NuvioScreen {
-@@ -89,6 +110,14 @@ fun DownloadsScreen(
+         stickyHeader {
+             NuvioScreenHeader(
+@@ -89,6 +114,14 @@ fun DownloadsScreen(
                      }
                  },
                  actions = {
@@ -3556,7 +3181,7 @@ index 7019a10..b3f9fd0 100644
                      IconButton(
                          onClick = {
                              if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
-@@ -112,40 +141,24 @@ fun DownloadsScreen(
+@@ -112,40 +145,24 @@ fun DownloadsScreen(
                  onOpenShow = { showId, title ->
                      onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
                  },
@@ -3600,7 +3225,7 @@ index 7019a10..b3f9fd0 100644
  ) {
      val activeItems = uiState.activeItems
      val completedMovies = uiState.completedItems.filterNot(DownloadItem::isEpisode)
-@@ -172,8 +185,10 @@ private fun LazyListScope.downloadsRootContent(
+@@ -172,8 +189,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -3612,7 +3237,7 @@ index 7019a10..b3f9fd0 100644
              )
          }
      }
-@@ -191,8 +206,10 @@ private fun LazyListScope.downloadsRootContent(
+@@ -191,8 +210,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -3624,7 +3249,7 @@ index 7019a10..b3f9fd0 100644
              )
          }
      }
-@@ -269,7 +286,7 @@ private fun LazyListScope.downloadsShowContent(
+@@ -269,7 +290,7 @@ private fun LazyListScope.downloadsShowContent(
      showId: String,
      episodes: List<DownloadItem>,
      onOpenDownload: (DownloadItem) -> Unit,
@@ -3633,7 +3258,7 @@ index 7019a10..b3f9fd0 100644
  ) {
      val showEpisodes = episodes
          .filter { it.parentMetaId == showId }
-@@ -324,8 +341,10 @@ private fun LazyListScope.downloadsShowContent(
+@@ -324,8 +345,10 @@ private fun LazyListScope.downloadsShowContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -3645,7 +3270,7 @@ index 7019a10..b3f9fd0 100644
              )
          }
      }
-@@ -339,6 +358,8 @@ private fun DownloadRow(
+@@ -339,6 +362,8 @@ private fun DownloadRow(
      onResume: () -> Unit,
      onRetry: () -> Unit,
      onDelete: () -> Unit,
@@ -3654,7 +3279,7 @@ index 7019a10..b3f9fd0 100644
  ) {
      val displayTitle = item.displayTitle()
      val displaySubtitle = downloadDisplaySubtitle(
-@@ -392,6 +413,16 @@ private fun DownloadRow(
+@@ -392,6 +417,16 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3671,7 +3296,7 @@ index 7019a10..b3f9fd0 100644
                      when (item.status) {
                          DownloadStatus.Downloading -> {
                              IconButton(onClick = onPause) {
-@@ -409,6 +440,7 @@ private fun DownloadRow(
+@@ -409,6 +444,7 @@ private fun DownloadRow(
                                  )
                              }
                          }
@@ -3679,7 +3304,7 @@ index 7019a10..b3f9fd0 100644
                          DownloadStatus.Failed -> {
                              IconButton(onClick = onRetry) {
                                  Icon(
-@@ -424,6 +456,18 @@ private fun DownloadRow(
+@@ -424,6 +460,18 @@ private fun DownloadRow(
                                      contentDescription = stringResource(Res.string.action_play),
                                  )
                              }
@@ -3698,7 +3323,7 @@ index 7019a10..b3f9fd0 100644
                          }
                      }
                      IconButton(onClick = onDelete) {
-@@ -435,8 +479,52 @@ private fun DownloadRow(
+@@ -435,8 +483,52 @@ private fun DownloadRow(
                  }
              }
  
@@ -3753,31 +3378,43 @@ index 7019a10..b3f9fd0 100644
                      LinearProgressIndicator(
                          progress = item.progressFraction,
                          modifier = Modifier.fillMaxWidth(),
-@@ -469,11 +557,7 @@ private fun downloadDisplaySubtitle(
+@@ -469,10 +561,10 @@ private fun downloadDisplaySubtitle(
          return item.displaySubtitle
      }
  
 -    val episodeCode = stringResource(
 -        Res.string.compose_player_episode_code_full,
--        seasonNumber,
--        episodeNumber,
--    )
-+    val episodeCode = "S${seasonNumber.toString().padStart(2, '0')}E${episodeNumber.toString().padStart(2, '0')}"
++    val episodeCode = formatEpisodeCode(
+         seasonNumber,
+         episodeNumber,
++        rememberEpisodeCodeFormat(),
+     )
      return listOf(
          episodeCode,
-         item.episodeTitle?.trim().orEmpty().takeIf { it.isNotBlank() && it != displayTitle },
-@@ -481,6 +565,10 @@ private fun downloadDisplaySubtitle(
+@@ -481,6 +573,22 @@ private fun downloadDisplaySubtitle(
      ).filterNotNull().joinToString(" • ")
  }
  
 +private fun shareItem(item: DownloadItem): () -> Unit {
-+    return {}
++    val fileUri = item.localFileUri ?: return {}
++    val mimeType = item.fileName.substringAfterLast('.', "").let { ext ->
++        when (ext.lowercase()) {
++            "mp4" -> "video/mp4"
++            "mkv" -> "video/x-matroska"
++            "avi" -> "video/x-msvideo"
++            "mov" -> "video/quicktime"
++            "webm" -> "video/webm"
++            "ts" -> "video/mp2t"
++            else -> "video/*"
++        }
++    }
++    return { SharePlatform.shareFile(fileUri, item.title, mimeType) }
 +}
 +
  @Composable
  private fun SectionTitle(title: String) {
      Text(
-@@ -494,20 +582,44 @@ private fun SectionTitle(title: String) {
+@@ -494,20 +602,44 @@ private fun SectionTitle(title: String) {
  
  @Composable
  private fun statusText(item: DownloadItem): String {
@@ -3828,7 +3465,7 @@ index 7019a10..b3f9fd0 100644
      }
  }
  
-@@ -524,3 +636,46 @@ private fun formatBytes(bytes: Long): String {
+@@ -524,3 +656,46 @@ private fun formatBytes(bytes: Long): String {
          else -> "$bytes ${localizedByteUnit("B")}"
      }
  }
@@ -4560,125 +4197,18 @@ index 0000000..ea3a5f3
 +        return "$basePath/$trimmed"
 +    }
 +}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
-new file mode 100644
-index 0000000..0870034
---- /dev/null
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
-@@ -0,0 +1,66 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.foundation.lazy.LazyListScope
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.getValue
-+import androidx.compose.runtime.mutableStateOf
-+import androidx.compose.runtime.remember
-+import androidx.compose.runtime.setValue
-+import androidx.lifecycle.compose.collectAsStateWithLifecycle
-+import com.nuvio.app.features.downloads.DownloadsSettingsRepository
-+import nuvio.composeapp.generated.resources.Res
-+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
-+import nuvio.composeapp.generated.resources.settings_downloads_location_private
-+import nuvio.composeapp.generated.resources.settings_downloads_location_reset
-+import nuvio.composeapp.generated.resources.settings_downloads_location_title
-+import org.jetbrains.compose.resources.stringResource
-+
-+internal fun LazyListScope.downloadsSettingsContent(
-+    isTablet: Boolean,
-+) {
-+    item {
-+        val downloadLocationUri by DownloadsSettingsRepository.downloadLocationUri.collectAsStateWithLifecycle()
-+        var showPicker by remember { mutableStateOf(false) }
-+
-+        SettingsSection(
-+            title = stringResource(Res.string.compose_settings_root_downloads_title),
-+            isTablet = isTablet,
-+        ) {
-+            SettingsGroup(isTablet = isTablet) {
-+                SettingsNavigationRow(
-+                    title = stringResource(Res.string.settings_downloads_location_title),
-+                    description = downloadLocationUri?.let { formatUriForDisplay(it) } ?: stringResource(Res.string.settings_downloads_location_private),
-+                    isTablet = isTablet,
-+                    onClick = { showPicker = true },
-+                )
-+                if (downloadLocationUri != null) {
-+                    SettingsGroupDivider(isTablet = isTablet)
-+                    SettingsNavigationRow(
-+                        title = stringResource(Res.string.settings_downloads_location_reset),
-+                        description = null,
-+                        isTablet = isTablet,
-+                        onClick = { DownloadsSettingsRepository.setDownloadLocationUri(null) },
-+                    )
-+                }
-+            }
-+        }
-+
-+        if (showPicker) {
-+            DownloadLocationPicker(
-+                onLocationSelected = { uri ->
-+                    DownloadsSettingsRepository.setDownloadLocationUri(uri)
-+                    showPicker = false
-+                },
-+                onDismiss = { showPicker = false },
-+            )
-+        }
-+    }
-+}
-+
-+@Composable
-+internal expect fun DownloadLocationPicker(
-+    onLocationSelected: (uri: String) -> Unit,
-+    onDismiss: () -> Unit,
-+)
-+
-+internal expect fun formatUriForDisplay(uri: String): String
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
-new file mode 100644
-index 0000000..5bad106
---- /dev/null
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
-@@ -0,0 +1,30 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.foundation.layout.fillMaxSize
-+import androidx.compose.runtime.Composable
-+import androidx.compose.ui.Modifier
-+import com.nuvio.app.core.ui.NuvioScreen
-+import com.nuvio.app.core.ui.NuvioScreenHeader
-+import com.nuvio.app.features.downloads.DownloadsSettingsRepository
-+import nuvio.composeapp.generated.resources.Res
-+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
-+import org.jetbrains.compose.resources.stringResource
-+
-+@Composable
-+fun DownloadsSettingsScreen(
-+    onBack: () -> Unit,
-+) {
-+    DownloadsSettingsRepository.ensureLoaded()
-+
-+    NuvioScreen(
-+        modifier = Modifier.fillMaxSize(),
-+    ) {
-+        stickyHeader {
-+            NuvioScreenHeader(
-+                title = stringResource(Res.string.compose_settings_root_downloads_title),
-+                onBack = onBack,
-+            )
-+        }
-+        downloadsSettingsContent(isTablet = false)
-+    }
-+}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index d6f6f98..f3efb6a 100644
+index d6f6f98..d7562a6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -79,6 +79,9 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
+@@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
+ import com.nuvio.app.core.ui.NuvioModalBottomSheet
  import com.nuvio.app.core.ui.NuvioToastController
  import com.nuvio.app.core.ui.dismissNuvioBottomSheet
- import com.nuvio.app.features.downloads.DownloadsRepository
-+import com.nuvio.app.features.downloads.DownloadsHlsSelectionSheet
 +import com.nuvio.app.features.downloads.DownloadEnqueueResult
-+import com.nuvio.app.features.downloads.HlsPlaylistParser
++import com.nuvio.app.features.downloads.DownloadsHlsSelectionSheet
+ import com.nuvio.app.features.downloads.DownloadsRepository
++import com.nuvio.app.features.downloads.toastMessage
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import androidx.compose.material3.ExperimentalMaterial3Api
@@ -4690,23 +4220,38 @@ index d6f6f98..f3efb6a 100644
      val downloadScope = rememberCoroutineScope()
      var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
      var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
-@@ -402,7 +406,14 @@ fun StreamsScreen(
-                 }
-             },
-             onDownload = { stream ->
--                if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
-+                val directUrl = stream.playableDirectUrl.orEmpty()
-+                val isHls = directUrl.isNotBlank() && (
-+                    HlsPlaylistParser.isHlsUrl(directUrl) ||
-+                    HlsPlaylistParser.isHlsStream(stream.streamType)
-+                )
-+                if (isHls) {
-+                    hlsDownloadTarget = stream
-+                } else if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
-                     downloadScope.launch {
-                         val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
-                             stream = stream,
-@@ -452,7 +463,11 @@ fun StreamsScreen(
+@@ -411,7 +415,7 @@ fun StreamsScreen(
+                         )
+                         when (resolved) {
+                             is DirectDebridPlayableResult.Success -> {
+-                                val result = DownloadsRepository.enqueueFromStream(
++                                val result = DownloadsRepository.enqueue(
+                                     contentType = type,
+                                     videoId = videoId,
+                                     parentMetaId = parentMetaId,
+@@ -426,7 +430,11 @@ fun StreamsScreen(
+                                     episodeThumbnail = episodeThumbnail,
+                                     stream = resolved.stream,
+                                 )
+-                                NuvioToastController.show(result.toastMessage())
++                                if (result == DownloadEnqueueResult.HlsNeedsSelection) {
++                                    hlsDownloadTarget = resolved.stream
++                                } else {
++                                    NuvioToastController.show(result.toastMessage())
++                                }
+                             }
+                             else -> {
+                                 val message = resolved.toastMessage()
+@@ -437,7 +445,7 @@ fun StreamsScreen(
+                         }
+                     }
+                 } else {
+-                    val result = DownloadsRepository.enqueueFromStream(
++                    val result = DownloadsRepository.enqueue(
+                         contentType = type,
+                         videoId = videoId,
+                         parentMetaId = parentMetaId,
+@@ -452,7 +460,11 @@ fun StreamsScreen(
                          episodeThumbnail = episodeThumbnail,
                          stream = stream,
                      )
@@ -4719,7 +4264,7 @@ index d6f6f98..f3efb6a 100644
                  }
              },
              onOpen = { stream, openExternally ->
-@@ -464,6 +479,32 @@ fun StreamsScreen(
+@@ -464,6 +476,32 @@ fun StreamsScreen(
                  )
              },
          )
@@ -4729,7 +4274,6 @@ index d6f6f98..f3efb6a 100644
 +            onDismiss = { hlsDownloadTarget = null },
 +            onDownload = { selection ->
 +                val stream = hlsDownloadTarget ?: return@DownloadsHlsSelectionSheet
-+                hlsDownloadTarget = null
 +                val result = DownloadsRepository.enqueueFromHlsSelection(
 +                    contentType = type,
 +                    videoId = videoId,
@@ -4747,16 +4291,155 @@ index d6f6f98..f3efb6a 100644
 +                    selection = selection,
 +                )
 +                NuvioToastController.show(result.toastMessage())
++                hlsDownloadTarget = null
 +            },
 +        )
      }
  }
  
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
+new file mode 100644
+index 0000000..3d1ab5a
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
+@@ -0,0 +1,6 @@
++package com.nuvio.app.features.downloads
++
++import androidx.compose.runtime.Composable
++
++@Composable
++actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
+new file mode 100644
+index 0000000..2a9a1c8
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
+@@ -0,0 +1,5 @@
++package com.nuvio.app.features.downloads
++
++internal actual object DownloadsClock {
++    actual fun nowEpochMs(): Long = System.currentTimeMillis()
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
+new file mode 100644
+index 0000000..92e4807
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
+@@ -0,0 +1,5 @@
++package com.nuvio.app.features.downloads
++
++internal actual object DownloadsLiveStatusPlatform {
++    actual fun onItemsChanged(items: List<DownloadItem>) {}
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
+new file mode 100644
+index 0000000..1f11f57
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
+@@ -0,0 +1,98 @@
++package com.nuvio.app.features.downloads
++
++import java.io.File
++import java.net.HttpURLConnection
++import java.net.URI
++import java.net.URL
++import kotlin.concurrent.thread
++
++internal class DesktopDownloadsTaskHandle(private val thread: Thread) : DownloadsTaskHandle {
++    override fun cancel() {
++        thread.interrupt()
++    }
++}
++
++internal actual object DownloadsPlatformDownloader {
++    actual fun start(
++        request: DownloadPlatformRequest,
++        onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
++        onSuccess: (localFileUri: String, totalBytes: Long?, companion: HlsCompanionOutcome?) -> Unit,
++        onFailure: (message: String) -> Unit,
++        onWarning: ((message: String) -> Unit)?,
++        onPhase: ((phase: String) -> Unit)?,
++        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
++    ): DownloadsTaskHandle {
++        if (request.isHlsStream) {
++            onFailure("HLS download not supported on desktop yet.")
++            return DesktopDownloadsTaskHandle(Thread.currentThread())
++        }
++
++        val t = thread(name = "download-${request.destinationFileName}", isDaemon = true) {
++            try {
++                val url = URL(request.sourceUrl)
++                val conn = url.openConnection() as HttpURLConnection
++                request.sourceHeaders.forEach { (k, v) -> conn.setRequestProperty(k, v) }
++                conn.connect()
++                val totalBytes = conn.contentLengthLong.let { if (it < 0) null else it }
++                val destDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads")
++                destDir.mkdirs()
++                val destFile = File(destDir, request.destinationFileName)
++                conn.inputStream.use { input ->
++                    destFile.outputStream().use { output ->
++                        val buffer = ByteArray(8192)
++                        var bytesRead: Int
++                        var downloaded: Long = 0L
++                        while (input.read(buffer).also { bytesRead = it } != -1) {
++                            if (Thread.currentThread().isInterrupted) {
++                                onFailure("Download cancelled")
++                                return@thread
++                            }
++                            output.write(buffer, 0, bytesRead)
++                            downloaded += bytesRead
++                            onProgress(downloaded, totalBytes)
++                        }
++                    }
++                }
++                onSuccess(destFile.toURI().toString(), totalBytes, null)
++            } catch (e: Exception) {
++                if (!Thread.currentThread().isInterrupted) {
++                    onFailure(e.message ?: "Unknown error")
++                }
++            }
++        }
++        return DesktopDownloadsTaskHandle(t)
++    }
++
++    actual fun removeFile(localFileUri: String?): Boolean {
++        if (localFileUri == null) return false
++        return runCatching { File(URI(localFileUri)).delete() }.getOrElse { false }
++    }
++
++    actual fun removePartialFile(destinationFileName: String): Boolean {
++        val file = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads/$destinationFileName")
++        return file.delete()
++    }
++
++    actual fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String? {
++        return localFileUri ?: let {
++            val file = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads/$destinationFileName")
++            if (file.exists()) file.toURI().toString() else null
++        }
++    }
++
++    actual fun openDownloadsDirectory(): Boolean {
++        val dir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "nuvio-downloads")
++        return dir.exists() || dir.mkdirs()
++    }
++
++    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
++        return try {
++            val conn = URL(url).openConnection() as HttpURLConnection
++            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
++            conn.connect()
++            conn.inputStream.reader().readText()
++        } catch (_: Exception) {
++            null
++        }
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 new file mode 100644
 index 0000000..b3c0d23
 --- /dev/null
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 @@ -0,0 +1,21 @@
 +package com.nuvio.app.features.downloads
 +
@@ -4779,27 +4462,6 @@ index 0000000..b3c0d23
 +        store.putString("download_location_uri", uri)
 +    }
 +}
-diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings
-new file mode 100644
-index 0000000..8812bcd
---- /dev/null
-+++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings
-@@ -0,0 +1,15 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.foundation.layout.Box
-+import androidx.compose.material3.Text
-+import androidx.compose.runtime.Composable
-+
-+@Composable
-+internal actual fun DownloadLocationPicker(
-+    onLocationSelected: (uri: String) -> Unit,
-+    onDismiss: () -> Unit,
-+) {
-+    onDismiss()
-+}
-+
-+internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
 new file mode 100644
 index 0000000..3d1ab5a
@@ -5380,38 +5042,16 @@ index 1fe7cbf..d363f62 100644
 +        }
 +    }
  }
-diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
-new file mode 100644
-index 0000000..03d3dee
---- /dev/null
-+++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
-@@ -0,0 +1,16 @@
-+package com.nuvio.app.features.settings
-+
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.LaunchedEffect
-+
-+@Composable
-+internal actual fun DownloadLocationPicker(
-+    onLocationSelected: (uri: String) -> Unit,
-+    onDismiss: () -> Unit,
-+) {
-+    LaunchedEffect(Unit) {
-+        onDismiss()
-+    }
-+}
-+
-+internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
-index 50a3d7f..3aac621 100644
+index 50a3d7f..690cc4c 100644
 --- a/gradle/libs.versions.toml
 +++ b/gradle/libs.versions.toml
 @@ -33,6 +33,8 @@ reorderable = "3.0.0"
  desugarJdkLibs = "2.1.5"
  sentry = "8.47.0"
  sentryGradle = "6.14.0"
-+mp4parser = "1.9.41"
 +androidx-documentfile = "1.0.1"
++mp4parser = "1.9.41"
  
  [libraries]
  kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -5426,3 +5066,6 @@ index 50a3d7f..3aac621 100644
  mpv-android-lib = { module = "io.github.abdallahmehiz:mpv-android-lib", version.ref = "mpv-android-lib" }
  supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt", version.ref = "supabase" }
  supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt", version.ref = "supabase" }
+-- 
+2.54.0.windows.1
+
