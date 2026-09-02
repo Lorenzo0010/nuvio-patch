@@ -1,4 +1,4 @@
-﻿diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 index 45f0c72..bdffd68 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
@@ -44,7 +44,7 @@ index 3c9c926..edbae80 100644
 @@ -256,7 +256,7 @@
    <string name="compose_settings_root_content_discovery_description_appstore">Gestisci gli addon e scegli cosa mostrare in Nuvio.</string>
    <string name="compose_settings_root_downloads_description">Gestisci i film e gli episodi scaricati.</string>
-   <string name="compose_settings_root_downloads_description_appstore">Gestisci ci├â┬▓ che hai salvato su questo dispositivo.</string>
+   <string name="compose_settings_root_downloads_description_appstore">Gestisci ciÃ² che hai salvato su questo dispositivo.</string>
 -  <string name="compose_settings_root_downloads_title">Download</string>
 +  <string name="compose_settings_root_downloads_title">Offline</string>
    <string name="compose_settings_root_general_section">GENERALI</string>
@@ -58,7 +58,7 @@ index 7e8d52c..967e86b 100644
      <string name="compose_player_currently_playing">Currently playing</string>
      <string name="compose_player_episode_code_episode_only">E%1$d</string>
      <string name="compose_player_episode_code_full">S%1$dE%2$d</string>
--    <string name="compose_player_episode_title_format">S%1$dE%2$d ÔÇó %3$s</string>
+-    <string name="compose_player_episode_title_format">S%1$dE%2$d • %3$s</string>
 +    <string name="compose_player_episode_title_format">S%1$dE%2$d - %3$s</string>
      <string name="compose_player_episodes">Episodes</string>
      <string name="compose_player_font_size">Font Size</string>
@@ -66,7 +66,7 @@ index 7e8d52c..967e86b 100644
 @@ -529,7 +529,7 @@
      <string name="compose_settings_root_content_discovery_description_appstore">Manage addons and choose what appears in Nuvio.</string>
      <string name="compose_settings_root_downloads_description">Manage your downloaded movies and episodes.</string>
-     <string name="compose_settings_root_downloads_description_appstore">Manage what you├â┬ó├óÔÇÜ┬¼├óÔÇ×┬óve saved on this device.</string>
+     <string name="compose_settings_root_downloads_description_appstore">Manage what youÃ¢â‚¬â„¢ve saved on this device.</string>
 -    <string name="compose_settings_root_downloads_title">Downloads</string>
 +    <string name="compose_settings_root_downloads_title">Offline</string>
      <string name="compose_settings_root_general_section">GENERAL</string>
