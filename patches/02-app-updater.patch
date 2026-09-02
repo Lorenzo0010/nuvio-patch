@@ -1,49 +1,59 @@
+From c2c8b12ff6e5c714cb61b0f6d7fc22d8636ab9ab Mon Sep 17 00:00:00 2001
+From: Nuvio Bot <bot@nuvio.app>
+Date: Tue, 1 Sep 2026 23:04:54 +0200
+Subject: [PATCH 2/4] apply 02
+
+---
+ .../nuvio/app/features/updater/AppUpdater.kt  | 36 +++++++++----------
+ 1 file changed, 18 insertions(+), 18 deletions(-)
+
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index 5f09dd5..a6342d0 100644
+index d0b40fc..9f9f3e0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-@@ -99,16 +99,25 @@ private object VersionUtils {
+@@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
+ import nuvio.composeapp.generated.resources.*
+ import org.jetbrains.compose.resources.getString
+ 
+-private const val gitHubOwner = "NuvioMedia"
+-private const val gitHubRepo = "NuvioMobile"
++private const val gitHubOwner = "Lorenzo0010"
++private const val gitHubRepo = "nuvio-patch"
+ private const val gitHubApiBase = "https://api.github.com"
+-private const val releaseChannelBranch = "cmp-rewrite"
++private const val releaseChannelBranch = "main"
+ 
+ data class AppUpdate(
+     val tag: String,
+@@ -90,22 +90,17 @@ private object VersionUtils {
+         val normalized = normalize(raw)
+         if (normalized.isBlank()) return null
+ 
+-        val parts = normalized.split('.', '-', '_')
++        val semverCore = normalized.substringBefore('-').substringBefore('+').trim()
++        val parts = semverCore.split('.')
+             .filter { it.isNotBlank() }
+-            .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
++            .mapNotNull { it.toIntOrNull() }
+ 
+         return parts.takeIf { it.isNotEmpty() }
      }
  
      fun isRemoteNewer(remote: String?, local: String?): Boolean {
--        val remoteParts = parseVersionParts(remote) ?: return false
--        val localParts = parseVersionParts(local) ?: return false
+-        val remoteParts = parseVersionParts(remote)
+-        val localParts = parseVersionParts(local)
 -
--        val maxSize = maxOf(remoteParts.size, localParts.size)
--        for (index in 0 until maxSize) {
--            val remoteValue = remoteParts.getOrElse(index) { 0 }
--            val localValue = localParts.getOrElse(index) { 0 }
--            if (remoteValue != localValue) return remoteValue > localValue
-+        val remoteNorm = normalize(remote)
-+        val localNorm = normalize(local)
-+        if (remoteNorm.isBlank()) return false
-+        if (localNorm.isBlank()) return true
-+        if (remoteNorm.equals(localNorm, ignoreCase = true)) return false
-+
-+        val remoteParts = parseVersionParts(remote)
-+        val localParts = parseVersionParts(local)
-+
-+        if (remoteParts != null && localParts != null) {
-+            val maxSize = maxOf(remoteParts.size, localParts.size)
-+            for (index in 0 until maxSize) {
-+                val remoteValue = remoteParts.getOrElse(index) { 0 }
-+                val localValue = localParts.getOrElse(index) { 0 }
-+                if (remoteValue != localValue) return remoteValue > localValue
-+            }
-         }
--        return false
-+
-+        return remoteNorm != localNorm
-     }
- }
+-        if (remoteParts == null || localParts == null) {
+-            val remoteValue = normalize(remote)
+-            val localValue = normalize(local)
+-            return remoteValue.isNotBlank() && localValue.isNotBlank() && remoteValue != localValue
+-        }
++        val remoteParts = parseVersionParts(remote) ?: return false
++        val localParts = parseVersionParts(local) ?: return false
  
-@@ -150,14 +159,20 @@ private object AppUpdaterRepository {
-     }
- 
-     private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
-+        if (draft || prerelease) return false
-         val channel = releaseChannelBranch
-         if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
+         val maxSize = maxOf(remoteParts.size, localParts.size)
+         for (index in 0 until maxSize) {
+@@ -160,9 +155,14 @@ private object AppUpdaterRepository {
              return true
          }
  
@@ -60,3 +70,26 @@ index 5f09dd5..a6342d0 100644
      }
  
      private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
+@@ -235,8 +235,8 @@ class AppUpdaterController internal constructor(
+                 _uiState.update { state ->
+                     state.copy(
+                         isChecking = false,
+-                        update = update.takeIf { remoteNewer },
+-                        isUpdateAvailable = remoteNewer,
++                        update = if (force) update else update.takeIf { remoteNewer },
++                        isUpdateAvailable = force || remoteNewer,
+                         isDownloading = false,
+                         downloadProgress = null,
+                         downloadedApkPath = state.downloadedApkPath.takeIf { remoteNewer },
+@@ -246,7 +246,7 @@ class AppUpdaterController internal constructor(
+                     )
+                 }
+ 
+-                if (showNoUpdateFeedback && !remoteNewer) {
++                if (showNoUpdateFeedback && !remoteNewer && !force) {
+                     NuvioToastController.show(getString(Res.string.updates_latest_version))
+                 }
+             }.onFailure { error ->
+-- 
+2.54.0.windows.1
+
