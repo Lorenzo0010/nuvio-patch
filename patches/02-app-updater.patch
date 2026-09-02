@@ -1,14 +1,14 @@
-From c2c8b12ff6e5c714cb61b0f6d7fc22d8636ab9ab Mon Sep 17 00:00:00 2001
+From 388ccda36092675a9c40e489c6e4d418e16569ee Mon Sep 17 00:00:00 2001
 From: Nuvio Bot <bot@nuvio.app>
 Date: Tue, 1 Sep 2026 23:04:54 +0200
 Subject: [PATCH 2/4] apply 02
 
 ---
- .../nuvio/app/features/updater/AppUpdater.kt  | 36 +++++++++----------
- 1 file changed, 18 insertions(+), 18 deletions(-)
+ .../nuvio/app/features/updater/AppUpdater.kt  | 61 +++++++++++--------
+ 1 file changed, 34 insertions(+), 27 deletions(-)
 
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..9f9f3e0 100644
+index d0b40fc..4022b70 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
@@ -25,18 +25,23 @@ index d0b40fc..9f9f3e0 100644
  
  data class AppUpdate(
      val tag: String,
-@@ -90,22 +90,17 @@ private object VersionUtils {
-         val normalized = normalize(raw)
-         if (normalized.isBlank()) return null
+@@ -86,32 +86,34 @@ private object VersionUtils {
+         return raw.trim().removePrefix("v").removePrefix("V")
+     }
  
+-    fun parseVersionParts(raw: String?): List<Int>? {
+-        val normalized = normalize(raw)
+-        if (normalized.isBlank()) return null
+-
 -        val parts = normalized.split('.', '-', '_')
-+        val semverCore = normalized.substringBefore('-').substringBefore('+').trim()
-+        val parts = semverCore.split('.')
-             .filter { it.isNotBlank() }
+-            .filter { it.isNotBlank() }
 -            .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
-+            .mapNotNull { it.toIntOrNull() }
- 
-         return parts.takeIf { it.isNotEmpty() }
+-
+-        return parts.takeIf { it.isNotEmpty() }
++    fun parseVersionParts(version: String?): List<Int>? {
++        return version?.split(".")
++            ?.mapNotNull { it.filter { char -> char.isDigit() }.toIntOrNull() }
++            ?.takeIf { it.isNotEmpty() }
      }
  
      fun isRemoteNewer(remote: String?, local: String?): Boolean {
@@ -47,13 +52,34 @@ index d0b40fc..9f9f3e0 100644
 -            val remoteValue = normalize(remote)
 -            val localValue = normalize(local)
 -            return remoteValue.isNotBlank() && localValue.isNotBlank() && remoteValue != localValue
--        }
-+        val remoteParts = parseVersionParts(remote) ?: return false
-+        val localParts = parseVersionParts(local) ?: return false
++        val remoteClean = remote?.trim() ?: ""
++        val localClean = local?.trim() ?: ""
++        
++        if (remoteClean == localClean) return false
++        
++        val remoteBase = remoteClean.substringBefore("-")
++        val localBase = localClean.substringBefore("-")
++        
++        if (remoteBase == localBase && remoteClean != localClean) {
++            return true
+         }
  
++        val remoteParts = parseVersionParts(remoteBase) ?: return false
++        val localParts = parseVersionParts(localBase) ?: return false
++
          val maxSize = maxOf(remoteParts.size, localParts.size)
          for (index in 0 until maxSize) {
-@@ -160,9 +155,14 @@ private object AppUpdaterRepository {
+-            val remoteValue = remoteParts.getOrElse(index) { 0 }
+-            val localValue = localParts.getOrElse(index) { 0 }
+-            if (remoteValue != localValue) return remoteValue > localValue
++            val remotePart = remoteParts.getOrElse(index) { 0 }
++            val localPart = localParts.getOrElse(index) { 0 }
++            if (remotePart > localPart) return true
++            if (remotePart < localPart) return false
+         }
+         return false
+     }
+@@ -160,9 +162,14 @@ private object AppUpdaterRepository {
              return true
          }
  
@@ -70,7 +96,7 @@ index d0b40fc..9f9f3e0 100644
      }
  
      private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
-@@ -235,8 +235,8 @@ class AppUpdaterController internal constructor(
+@@ -235,8 +242,8 @@ class AppUpdaterController internal constructor(
                  _uiState.update { state ->
                      state.copy(
                          isChecking = false,
@@ -81,7 +107,7 @@ index d0b40fc..9f9f3e0 100644
                          isDownloading = false,
                          downloadProgress = null,
                          downloadedApkPath = state.downloadedApkPath.takeIf { remoteNewer },
-@@ -246,7 +246,7 @@ class AppUpdaterController internal constructor(
+@@ -246,7 +253,7 @@ class AppUpdaterController internal constructor(
                      )
                  }
  
