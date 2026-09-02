@@ -3049,7 +3049,7 @@ index 892da4b..949dd33 100644
 +import androidx.compose.material.icons.rounded.LiveTv
 +import com.nuvio.app.features.downloads.DownloadItem
 +import com.nuvio.app.features.downloads.DownloadsScreen
-+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
++import nuvio.composeapp.generated.resources.compose_nav_downloads
  import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Surface
@@ -3161,13 +3161,13 @@ index 892da4b..949dd33 100644
 +                    },
 +                )
 +                TabletTopPillItem(
-+                    label = stringResource(Res.string.compose_settings_root_downloads_title),
++                    label = stringResource(Res.string.compose_nav_downloads),
 +                    selected = selectedTab == AppScreenTab.Downloads,
 +                    onClick = { onTabSelected(AppScreenTab.Downloads) },
 +                    icon = {
 +                        Icon(
 +                            imageVector = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                            contentDescription = stringResource(Res.string.compose_nav_downloads),
 +                            modifier = Modifier.size(NuvioTokens.Space.s18),
 +                            tint = if (selectedTab == AppScreenTab.Downloads) {
 +                                tokens.colors.textPrimary
@@ -3272,7 +3272,7 @@ index 2d6219a..9e925bd 100644
 +import androidx.compose.material.icons.rounded.Download
 +import androidx.compose.material.icons.rounded.LiveTv
 +import nuvio.composeapp.generated.resources.compose_nav_downloads
-+import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
++import nuvio.composeapp.generated.resources.compose_nav_downloads
 +import nuvio.composeapp.generated.resources.live_tv_title
 +
  @Composable
@@ -3292,7 +3292,7 @@ index 2d6219a..9e925bd 100644
 +                            selected = selectedTab == AppScreenTab.Downloads,
 +                            onClick = { onTabSelected(AppScreenTab.Downloads) },
 +                            icon = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                            contentDescription = stringResource(Res.string.compose_nav_downloads),
 +                        )
                          NavItem(
                              selected = selectedTab == AppScreenTab.Library,
@@ -3312,7 +3312,7 @@ index 2d6219a..9e925bd 100644
 +                            selected = selectedTab == AppScreenTab.Downloads,
 +                            onClick = { onTabSelected(AppScreenTab.Downloads) },
 +                            icon = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_settings_root_downloads_title),
++                            contentDescription = stringResource(Res.string.compose_nav_downloads),
 +                            label = stringResource(Res.string.compose_nav_downloads),
 +                        )
                          NavItem(
