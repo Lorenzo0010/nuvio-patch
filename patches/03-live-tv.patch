@@ -1,4 +1,4 @@
-From b945937d5bfaa74f9858a3d3dcd5dd5233e9d9ef Mon Sep 17 00:00:00 2001
+From 0a5cb495db47c609951178486ac869a8d1eadfbb Mon Sep 17 00:00:00 2001
 From: Nuvio Bot <bot@nuvio.app>
 Date: Tue, 1 Sep 2026 23:04:54 +0200
 Subject: [PATCH 3/4] apply 03
@@ -15,12 +15,12 @@ Subject: [PATCH 3/4] apply 03
  .../app/features/livetv/LiveTvStorage.kt      |  15 +
  .../features/player/LiveTvChannelsPanel.kt    | 301 ++++++++
  .../features/player/LiveTvPlayerActions.kt    |  37 +
- .../app/features/player/PlayerControls.kt     |  60 +-
+ .../app/features/player/PlayerControls.kt     |  70 +-
  .../features/livetv/LiveTvClock.desktop.kt    |  33 +
  .../features/livetv/LiveTvStorage.desktop.kt  |  44 ++
  .../app/features/livetv/LiveTvClock.ios.kt    | Bin 0 -> 2186 bytes
  .../app/features/livetv/LiveTvStorage.ios.kt  |  74 ++
- 16 files changed, 1945 insertions(+), 24 deletions(-)
+ 16 files changed, 1950 insertions(+), 29 deletions(-)
  create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.android.kt
  create mode 100644 composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
  create mode 100644 composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvFilterBar.kt
@@ -1888,18 +1888,30 @@ index 0000000..83ce720
 +    controlsVisible = true
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
-index 1a0d092..52bd0cc 100644
+index b7ce6e0..52bd0cc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
-@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.Replay10
- import androidx.compose.material.icons.rounded.Speed
- import androidx.compose.material.icons.rounded.SwapHoriz
- import androidx.compose.material.icons.rounded.VideoLibrary
+@@ -24,14 +24,17 @@ import androidx.compose.foundation.layout.windowInsetsPadding
+ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+-import androidx.compose.material.icons.filled.Speed
+-import androidx.compose.material.icons.filled.SwapHoriz
++import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+ import androidx.compose.material.icons.rounded.Build
+ import androidx.compose.material.icons.rounded.Flag
+ import androidx.compose.material.icons.rounded.Forward10
+ import androidx.compose.material.icons.rounded.Lock
+ import androidx.compose.material.icons.rounded.LockOpen
+ import androidx.compose.material.icons.rounded.Replay10
++import androidx.compose.material.icons.rounded.Speed
++import androidx.compose.material.icons.rounded.SwapHoriz
++import androidx.compose.material.icons.rounded.VideoLibrary
 +import androidx.compose.material.icons.rounded.LiveTv
  import com.nuvio.app.core.ui.NuvioLoadingIndicator
  import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
-@@ -94,6 +95,7 @@ internal fun PlayerControlsShell(
+@@ -92,6 +95,7 @@ internal fun PlayerControlsShell(
      onSourcesClick: (() -> Unit)? = null,
      onEpisodesClick: (() -> Unit)? = null,
      onOpenInExternalPlayer: (() -> Unit)? = null,
@@ -1907,7 +1919,7 @@ index 1a0d092..52bd0cc 100644
      onSubmitIntroClick: (() -> Unit)? = null,
      parentalWarnings: List<ParentalWarning> = emptyList(),
      showParentalGuide: Boolean = false,
-@@ -195,6 +197,7 @@ internal fun PlayerControlsShell(
+@@ -193,6 +197,7 @@ internal fun PlayerControlsShell(
                      onAudioClick = onAudioClick,
                      onSourcesClick = onSourcesClick,
                      onEpisodesClick = onEpisodesClick,
@@ -1915,7 +1927,16 @@ index 1a0d092..52bd0cc 100644
                      modifier = Modifier
                          .align(Alignment.BottomCenter)
                          .fillMaxWidth()
-@@ -501,6 +504,7 @@ private fun ProgressControls(
+@@ -323,7 +328,7 @@ private fun PlayerHeader(
+                     }
+                     if (onOpenInExternalPlayer != null) {
+                         PlayerHeaderIconButton(
+-                            icon = Icons.Filled.SwapHoriz,
++                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                             contentDescription = stringResource(Res.string.streams_open_external_player),
+                             buttonSize = metrics.headerIconSize + 16.dp,
+                             iconSize = metrics.headerIconSize,
+@@ -499,14 +504,13 @@ private fun ProgressControls(
      onAudioClick: () -> Unit,
      onSourcesClick: (() -> Unit)? = null,
      onEpisodesClick: (() -> Unit)? = null,
@@ -1923,13 +1944,21 @@ index 1a0d092..52bd0cc 100644
      modifier: Modifier = Modifier,
  ) {
      val durationMs = playbackSnapshot.durationMs.coerceAtLeast(1L)
+     val aspectRatioPainter = appIconPainter(AppIconResource.PlayerAspectRatio)
+     val subtitlesPainter = appIconPainter(AppIconResource.PlayerSubtitles)
+     val audioPainter = appIconPainter(AppIconResource.PlayerAudioFilled)
+-    val sourcePainter = appIconPainter(AppIconResource.PlayerSource)
+-    val episodesPainter = appIconPainter(AppIconResource.PlayerEpisodes)
+ 
+     Column(modifier = modifier) {
+         Slider(
 @@ -554,34 +558,42 @@ private fun ProgressControls(
                          painter = aspectRatioPainter,
                          onClick = onResizeModeClick,
                      )
 -                    PlayerActionPillButton(
 -                        label = formatPlaybackSpeedLabel(playbackSnapshot.playbackSpeed),
--                        icon = Icons.Rounded.Speed,
+-                        icon = Icons.Filled.Speed,
 -                        onClick = onSpeedClick,
 -                    )
 -                    PlayerActionPillButton(
@@ -1946,7 +1975,7 @@ index 1a0d092..52bd0cc 100644
 +                    if (onLiveChannelsClick != null) {
                          PlayerActionPillButton(
 -                            label = stringResource(Res.string.compose_player_sources),
--                            icon = Icons.Rounded.SwapHoriz,
+-                            painter = sourcePainter,
 -                            onClick = onSourcesClick,
 +                            label = stringResource(Res.string.live_tv_player_channels),
 +                            icon = Icons.Rounded.LiveTv,
@@ -1967,7 +1996,7 @@ index 1a0d092..52bd0cc 100644
 -                    if (onEpisodesClick != null) {
                          PlayerActionPillButton(
 -                            label = stringResource(Res.string.compose_player_episodes),
--                            icon = Icons.Rounded.VideoLibrary,
+-                            painter = episodesPainter,
 -                            onClick = onEpisodesClick,
 +                            label = stringResource(Res.string.compose_player_audio),
 +                            painter = audioPainter,
