@@ -1,0 +1,74 @@
+﻿diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
+index 45f0c72..bdffd68 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
+@@ -574,7 +574,7 @@ private suspend fun performHlsDownloadAndroid(
+                             headers = request.sourceHeaders,
+                             finalName = audioFinalName,
+                             tempName = audioTempName,
+-                            onProgress = onProgress,
++                            onProgress = { _, _ -> },
+                             ctx = ctx,
+                             trackName = "audio_$audioIndex",
+                             onTrackProgress = onTrackProgress,
+@@ -611,7 +611,7 @@ private suspend fun performHlsDownloadAndroid(
+                             headers = request.sourceHeaders,
+                             finalName = subFinalName,
+                             tempName = subTempName,
+-                            onProgress = onProgress,
++                            onProgress = { _, _ -> },
+                             ctx = ctx,
+                             trackName = "subs_$subIndex",
+                             onTrackProgress = onTrackProgress,
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
+index f542e4a..aeaa0d8 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
+@@ -300,7 +300,11 @@ private fun ExoPlayerSurface(
+ 
+     val extractorsFactory = remember {
+         DefaultExtractorsFactory()
+-            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
++            .setTsExtractorFlags(
++                DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS or
++                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
++                DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
++            )
+             .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+     }
+     val dataSourceFactory = remember(
+diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+index 3c9c926..edbae80 100644
+--- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+@@ -256,7 +256,7 @@
+   <string name="compose_settings_root_content_discovery_description_appstore">Gestisci gli addon e scegli cosa mostrare in Nuvio.</string>
+   <string name="compose_settings_root_downloads_description">Gestisci i film e gli episodi scaricati.</string>
+   <string name="compose_settings_root_downloads_description_appstore">Gestisci ci├â┬▓ che hai salvato su questo dispositivo.</string>
+-  <string name="compose_settings_root_downloads_title">Download</string>
++  <string name="compose_settings_root_downloads_title">Offline</string>
+   <string name="compose_settings_root_general_section">GENERALI</string>
+   <string name="compose_settings_root_integrations_description">Collega i servizi TMDB e MDBList.</string>
+   <string name="compose_settings_root_notifications_description">Gestisci gli avvisi per l'uscita di nuovi episodi e invia una notifica di test.</string>
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 7e8d52c..967e86b 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -425,7 +425,7 @@
+     <string name="compose_player_currently_playing">Currently playing</string>
+     <string name="compose_player_episode_code_episode_only">E%1$d</string>
+     <string name="compose_player_episode_code_full">S%1$dE%2$d</string>
+-    <string name="compose_player_episode_title_format">S%1$dE%2$d ÔÇó %3$s</string>
++    <string name="compose_player_episode_title_format">S%1$dE%2$d - %3$s</string>
+     <string name="compose_player_episodes">Episodes</string>
+     <string name="compose_player_font_size">Font Size</string>
+     <string name="compose_player_font_size_value">%1$dsp</string>
+@@ -529,7 +529,7 @@
+     <string name="compose_settings_root_content_discovery_description_appstore">Manage addons and choose what appears in Nuvio.</string>
+     <string name="compose_settings_root_downloads_description">Manage your downloaded movies and episodes.</string>
+     <string name="compose_settings_root_downloads_description_appstore">Manage what you├â┬ó├óÔÇÜ┬¼├óÔÇ×┬óve saved on this device.</string>
+-    <string name="compose_settings_root_downloads_title">Downloads</string>
++    <string name="compose_settings_root_downloads_title">Offline</string>
+     <string name="compose_settings_root_general_section">GENERAL</string>
+     <string name="compose_settings_root_integrations_description">Manage available integrations</string>
+     <string name="compose_settings_root_notifications_description">Manage episode release alerts and send a test notification.</string>
