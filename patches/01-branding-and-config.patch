@@ -1,21 +1,12 @@
 diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
-index ea9aaf3..7aa0fb9 100644
+index ea9aaf3..d623311 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
-@@ -36,9 +36,20 @@ val sentryAuthToken = envOrLocalProperty("SENTRY_AUTH_TOKEN")
+@@ -36,9 +36,11 @@ val sentryAuthToken = envOrLocalProperty("SENTRY_AUTH_TOKEN")
  val sentryOrg = envOrLocalProperty("SENTRY_ORG")
  val sentryProject = envOrLocalProperty("SENTRY_PROJECT")
  val sentryMappingUploadEnabled = sentryAuthToken != null && sentryOrg != null && sentryProject != null
-+fun getGitCommitHash(): String {
-+    return try {
-+        val process = ProcessBuilder("git", "rev-parse", "--short=7", "HEAD").redirectErrorStream(true).start()
-+        process.inputStream.bufferedReader().readText().trim()
-+    } catch (e: Exception) {
-+        ""
-+    }
-+}
-+
-+val gitCommit = getGitCommitHash()
++val gitCommit = project.findProperty("git.commit")?.toString() ?: ""
  val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 -val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
 +val baseVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
@@ -24,7 +15,7 @@ index ea9aaf3..7aa0fb9 100644
  val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
      ?.toIntOrNull()
      ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
-@@ -64,7 +75,7 @@ android {
+@@ -64,7 +66,7 @@ android {
      }
  
      defaultConfig {
@@ -33,7 +24,7 @@ index ea9aaf3..7aa0fb9 100644
          minSdk = libs.versions.android.minSdk.get().toInt()
          targetSdk = libs.versions.android.targetSdk.get().toInt()
          versionCode = releaseAppVersionCode
-@@ -119,7 +130,11 @@ android {
+@@ -119,7 +121,11 @@ android {
                  getDefaultProguardFile("proguard-android-optimize.txt"),
                  "../composeApp/proguard-rules.pro",
              )
@@ -57,32 +48,22 @@ index 0000000..0747ebe
 +    <string name="app_name">Nuvio Plus</string>
 +</resources>
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index dfacfd6..0f4a33a 100644
+index dfacfd6..782e591 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
-@@ -205,9 +205,20 @@ val supabaseProps = Properties().apply {
-     val propsFile = rootProject.file("local.properties")
+@@ -206,8 +206,10 @@ val supabaseProps = Properties().apply {
      if (propsFile.exists()) propsFile.inputStream().use { load(it) }
  }
-+fun getGitCommitHash(): String {
-+    return try {
-+        val process = ProcessBuilder("git", "rev-parse", "--short=7", "HEAD").redirectErrorStream(true).start()
-+        process.inputStream.bufferedReader().readText().trim()
-+    } catch (e: Exception) {
-+        ""
-+    }
-+}
-+
  val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 -val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
-+val gitCommit = getGitCommitHash()
++val gitCommit = project.findProperty("git.commit")?.toString() ?: ""
 +val baseVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
      ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
 +val releaseAppVersionName = if (gitCommit.isNotEmpty()) "$baseVersionName-$gitCommit" else baseVersionName
  val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
      ?.toIntOrNull()
      ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
-@@ -407,6 +418,7 @@ kotlin {
+@@ -407,6 +409,7 @@ kotlin {
                  implementation(libs.coil.gif)
                  implementation("androidx.recyclerview:recyclerview:1.4.0")
                  implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -90,7 +71,7 @@ index dfacfd6..0f4a33a 100644
                  implementation("com.google.code.gson:gson:2.11.0")
                  implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
                  implementation(libs.ktor.client.okhttp)
-@@ -422,6 +434,10 @@ kotlin {
+@@ -422,6 +425,10 @@ kotlin {
                  implementation(libs.androidx.media3.common)
                  implementation(libs.androidx.media3.container)
                  implementation(libs.androidx.media3.extractor)
