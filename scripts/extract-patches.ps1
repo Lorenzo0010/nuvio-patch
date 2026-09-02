@@ -17,7 +17,7 @@ try {
 
     Write-Host "Estrazione 01-branding-and-config.patch..." -ForegroundColor Yellow
     $patch1 = Join-Path $OutputDir "01-branding-and-config.patch"
-    git diff --binary --output="$patch1" $UpstreamRef -- "androidApp/build.gradle.kts" "androidApp/src/main/res/values/strings.xml" "*strings.xml"
+    git diff --binary --output="$patch1" $UpstreamRef -- "androidApp/build.gradle.kts" "composeApp/build.gradle.kts" "androidApp/src/main/res/values/strings.xml" "*strings.xml"
 
     Write-Host "Estrazione 02-app-updater.patch..." -ForegroundColor Yellow
     $patch2 = Join-Path $OutputDir "02-app-updater.patch"

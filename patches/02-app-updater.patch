@@ -1,11 +1,5 @@
-From 9b59cdf597711c48a85c055454671dbe177e6fcf Mon Sep 17 00:00:00 2001
-From: Nuvio Bot <bot@nuvio.app>
-Date: Tue, 1 Sep 2026 14:44:44 +0200
-Subject: [PATCH 2/4] feat: app updater
-
----
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..9f9f3e0 100644
+index d0b40fc..1f2195c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
@@ -22,7 +16,7 @@ index d0b40fc..9f9f3e0 100644
  
  data class AppUpdate(
      val tag: String,
-@@ -90,22 +90,17 @@ private object VersionUtils {
+@@ -90,30 +90,34 @@ private object VersionUtils {
          val normalized = normalize(raw)
          if (normalized.isBlank()) return null
  
@@ -37,20 +31,46 @@ index d0b40fc..9f9f3e0 100644
      }
  
      fun isRemoteNewer(remote: String?, local: String?): Boolean {
--        val remoteParts = parseVersionParts(remote)
--        val localParts = parseVersionParts(local)
--
++        val remoteNorm = normalize(remote)
++        val localNorm = normalize(local)
++        if (remoteNorm.isBlank()) return false
++        if (localNorm.isBlank()) return true
++        if (remoteNorm.equals(localNorm, ignoreCase = true)) return false
++
+         val remoteParts = parseVersionParts(remote)
+         val localParts = parseVersionParts(local)
+ 
 -        if (remoteParts == null || localParts == null) {
 -            val remoteValue = normalize(remote)
 -            val localValue = normalize(local)
 -            return remoteValue.isNotBlank() && localValue.isNotBlank() && remoteValue != localValue
--        }
-+        val remoteParts = parseVersionParts(remote) ?: return false
-+        val localParts = parseVersionParts(local) ?: return false
++        if (remoteParts != null && localParts != null) {
++            val maxSize = maxOf(remoteParts.size, localParts.size)
++            for (index in 0 until maxSize) {
++                val remoteValue = remoteParts.getOrElse(index) { 0 }
++                val localValue = localParts.getOrElse(index) { 0 }
++                if (remoteValue != localValue) return remoteValue > localValue
++            }
+         }
  
-         val maxSize = maxOf(remoteParts.size, localParts.size)
-         for (index in 0 until maxSize) {
-@@ -160,9 +155,14 @@ private object AppUpdaterRepository {
+-        val maxSize = maxOf(remoteParts.size, localParts.size)
+-        for (index in 0 until maxSize) {
+-            val remoteValue = remoteParts.getOrElse(index) { 0 }
+-            val localValue = localParts.getOrElse(index) { 0 }
+-            if (remoteValue != localValue) return remoteValue > localValue
+-        }
+-        return false
++        return remoteNorm != localNorm
+     }
+ }
+ 
+@@ -155,14 +159,20 @@ private object AppUpdaterRepository {
+     }
+ 
+     private fun GitHubReleaseDto.matchesRequestedChannel(): Boolean {
++        if (draft || prerelease) return false
+         val channel = releaseChannelBranch
+         if (targetCommitish?.trim()?.equals(channel, ignoreCase = true) == true) {
              return true
          }
  
@@ -67,7 +87,7 @@ index d0b40fc..9f9f3e0 100644
      }
  
      private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
-@@ -235,8 +235,8 @@ class AppUpdaterController internal constructor(
+@@ -235,8 +245,8 @@ class AppUpdaterController internal constructor(
                  _uiState.update { state ->
                      state.copy(
                          isChecking = false,
@@ -78,7 +98,7 @@ index d0b40fc..9f9f3e0 100644
                          isDownloading = false,
                          downloadProgress = null,
                          downloadedApkPath = state.downloadedApkPath.takeIf { remoteNewer },
-@@ -246,7 +246,7 @@ class AppUpdaterController internal constructor(
+@@ -246,7 +256,7 @@ class AppUpdaterController internal constructor(
                      )
                  }
  

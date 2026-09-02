@@ -13,7 +13,7 @@ cd "$SOURCE_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 echo "Estrazione 01-branding-and-config.patch..."
-git diff --binary "$UPSTREAM_REF" -- "androidApp/build.gradle.kts" "androidApp/src/main/res/values/strings.xml" "*strings.xml" > "$OUTPUT_DIR/01-branding-and-config.patch"
+git diff --binary "$UPSTREAM_REF" -- "androidApp/build.gradle.kts" "composeApp/build.gradle.kts" "androidApp/src/main/res/values/strings.xml" "*strings.xml" > "$OUTPUT_DIR/01-branding-and-config.patch"
 
 echo "Estrazione 02-app-updater.patch..."
 git diff --binary "$UPSTREAM_REF" -- "*AppUpdater.kt*" > "$OUTPUT_DIR/02-app-updater.patch"
