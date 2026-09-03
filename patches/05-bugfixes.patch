@@ -72,3 +72,96 @@ index 7e8d52c..967e86b 100644
      <string name="compose_settings_root_general_section">GENERAL</string>
      <string name="compose_settings_root_integrations_description">Manage available integrations</string>
      <string name="compose_settings_root_notifications_description">Manage episode release alerts and send a test notification.</string>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt
+index 29da4ad2..18673abc 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt
+@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.ImageBitmap
+ import androidx.compose.ui.graphics.Path
+ import androidx.compose.ui.graphics.drawscope.DrawScope
+ import androidx.compose.ui.graphics.drawscope.clipPath
++import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.graphics.layer.drawLayer
+ import androidx.compose.ui.graphics.rememberGraphicsLayer
+ import androidx.compose.ui.graphics.toArgb
+@@ -35,23 +36,14 @@ fun DisintegratingContainer(
+     disintegrating: Boolean,
+     onDisintegrated: () -> Unit,
+     modifier: Modifier = Modifier,
+-    durationMillis: Int = 1500,
++    durationMillis: Int = 200,
+     content: @Composable () -> Unit,
+ ) {
+-    val graphicsLayer = rememberGraphicsLayer()
+     val progress = remember { Animatable(0f) }
+-    var field by remember { mutableStateOf<AshField?>(null) }
+-    val seed = remember { Random.nextLong() }
+     val onDisintegratedState = rememberUpdatedState(onDisintegrated)
+ 
+     LaunchedEffect(disintegrating) {
+         if (!disintegrating) return@LaunchedEffect
+-        val bitmap = runCatching { graphicsLayer.toImageBitmap() }.getOrNull()
+-        if (bitmap == null) {
+-            onDisintegratedState.value()
+-            return@LaunchedEffect
+-        }
+-        field = withContext(Dispatchers.Default) { buildAshField(bitmap, seed) }
+         progress.snapTo(0f)
+         progress.animateTo(
+             targetValue = 1f,
+@@ -61,20 +53,19 @@ fun DisintegratingContainer(
+     }
+ 
+     Box(
+-        modifier = modifier.drawWithContent {
+-            val activeField = field
+-            if (activeField == null) {
+-                graphicsLayer.record { this@drawWithContent.drawContent() }
+-                drawLayer(graphicsLayer)
+-            } else {
+-                drawAsh(activeField, progress.value)
+-            }
++        modifier = modifier.graphicsLayer {
++            val p = progress.value
++            alpha = (1f - p).coerceIn(0f, 1f)
++            val scale = 1f - (0.08f * p)
++            scaleX = scale
++            scaleY = scale
+         },
+     ) {
+         content()
+     }
+ }
+ 
++
+ private class AshField(
+     val bitmap: ImageBitmap,
+     val cols: Int,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterZoomActionOverlay.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterZoomActionOverlay.kt
+index 391966fc..89133dfe 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterZoomActionOverlay.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterZoomActionOverlay.kt
+@@ -198,8 +198,9 @@ fun NuvioPosterZoomActionOverlay(
+             hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+             action.onSelected()
+             scope.launch {
+-                launch { menu.animateTo(0f, tween(durationMillis = 160)) }
+-                launch { shadowFade.animateTo(0f, tween(durationMillis = 350)) }
++                launch { menu.animateTo(0f, tween(durationMillis = 140)) }
++                launch { shadowFade.animateTo(0f, tween(durationMillis = 200)) }
++                launch { scrim.animateTo(0f, tween(durationMillis = 200, easing = NuvioTokens.Motion.standard)) }
+             }
+         } else {
+             action.onSelected()
+@@ -378,10 +379,7 @@ fun NuvioPosterZoomActionOverlay(
+             DisintegratingContainer(
+                 disintegrating = phase == PosterZoomPhase.Disintegrating,
+                 onDisintegrated = {
+-                    scope.launch {
+-                        scrim.animateTo(0f, tween(durationMillis = 300, easing = NuvioTokens.Motion.standard))
+-                        onDismissed()
+-                    }
++                    onDismissed()
+                 },
+                 modifier = Modifier.fillMaxSize(),
+             ) {
