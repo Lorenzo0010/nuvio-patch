@@ -2924,10 +2924,10 @@ index 0000000..f82780c
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 0000000..68acf39
+index 00000000..f178b012
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
-@@ -0,0 +1,345 @@
+@@ -0,0 +1,403 @@
 +package com.nuvio.app.features.downloads
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -2962,6 +2962,7 @@ index 0000000..68acf39
 +import com.nuvio.app.core.ui.nuvioSafeBottomPadding
 +import com.nuvio.app.features.player.getLanguageLabelForCode
 +import com.nuvio.app.features.player.languageLabelForCode
++import com.nuvio.app.features.player.languageMatchesPreference
 +import com.nuvio.app.features.streams.StreamItem
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.launch
@@ -3006,8 +3007,15 @@ index 0000000..68acf39
 +
 +    val playlist = hlsMetadata?.masterPlaylist
 +
-+    val qualityOptions = remember(playlist) {
-+        playlist?.variants?.mapIndexed { _, variant ->
++    val sortedVariants = remember(playlist) {
++        playlist?.variants?.sortedWith(
++            compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
++                .thenByDescending { it.bandwidth }
++        ).orEmpty()
++    }
++
++    val qualityOptions = remember(sortedVariants) {
++        sortedVariants.map { variant ->
 +            val label = buildString {
 +                variant.resolution?.let { append(it) }
 +                if (variant.resolution != null) append(" • ")
@@ -3024,7 +3032,7 @@ index 0000000..68acf39
 +                key = variant.url,
 +                label = label,
 +            )
-+        }.orEmpty()
++        }
 +    }
 +
 +    val audioTracks = remember(playlist) {
@@ -3038,7 +3046,20 @@ index 0000000..68acf39
 +        mutableStateOf(qualityOptions.firstOrNull()?.key)
 +    }
 +    var selectedAudioKeys by remember(audioTracks) {
-+        mutableStateOf(audioTracks.filter { it.isDefault }.mapNotNull { it.uri }.toSet())
++        val italianTracks = audioTracks.filter { isItalianTrack(it) }
++        val initialKeys = if (italianTracks.isNotEmpty()) {
++            val defaultItalian = italianTracks.filter { it.isDefault }
++            if (defaultItalian.isNotEmpty()) {
++                defaultItalian.mapNotNull { it.uri }.toSet()
++            } else {
++                setOfNotNull(italianTracks.firstOrNull()?.uri)
++            }
++        } else {
++            audioTracks.filter { it.isDefault }.mapNotNull { it.uri }.toSet().ifEmpty {
++                setOfNotNull(audioTracks.firstOrNull()?.uri)
++            }
++        }
++        mutableStateOf(initialKeys)
 +    }
 +    var selectedSubtitleKeys by remember(subtitleTracks) {
 +        mutableStateOf(setOf<String>())
@@ -3273,6 +3294,43 @@ index 0000000..68acf39
 +        else -> ""
 +    }
 +}
++
++private fun parseResolutionPixels(resolution: String?): Long {
++    if (resolution.isNullOrBlank()) return 0L
++    val parts = resolution.split('x', 'X')
++    if (parts.size == 2) {
++        val w = parts[0].trim().toLongOrNull() ?: 0L
++        val h = parts[1].trim().toLongOrNull() ?: 0L
++        return w * h
++    }
++    return 0L
++}
++
++private fun isItalianTrack(track: HlsMediaTrack): Boolean {
++    val lang = track.language?.trim()?.lowercase()
++    val name = track.name.trim().lowercase()
++
++    if (lang != null && (lang == "it" || lang == "ita" || lang == "italian" || lang == "italiano" || lang.startsWith("it-") || lang.startsWith("it_"))) {
++        return true
++    }
++    if (languageMatchesPreference(track.language, "it")) {
++        return true
++    }
++    if (languageMatchesPreference(track.name, "it")) {
++        return true
++    }
++    if (name == "it" || name == "ita" || name == "italian" || name == "italiano") {
++        return true
++    }
++    if (name.contains("italiano") || name.contains("italian")) {
++        return true
++    }
++    if (Regex("""\b(ita|it)\b""", RegexOption.IGNORE_CASE).containsMatchIn(track.name)) {
++        return true
++    }
++    return false
++}
++
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 index 48da488..2c91b1b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
