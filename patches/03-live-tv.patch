@@ -554,7 +554,7 @@ new file mode 100644
 index 0000000..d97c01a
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,318 @@
 +package com.nuvio.app.features.livetv
 +
 +import com.nuvio.app.features.addons.httpGetText
@@ -656,13 +656,28 @@ index 0000000..d97c01a
 +        mutableUiState.value = mutableUiState.value.copy(recentChannel = recentChannel)
 +    }
 +
+++    private fun selectRelevantEpgUrls(urls: List<String>): List<String> {
++        if (urls.isEmpty()) return emptyList()
++        val italianEpgs = urls.filter { it.contains("IT", ignoreCase = true) || it.contains("italy", ignoreCase = true) }
++        val candidates = if (italianEpgs.isNotEmpty()) italianEpgs else urls
++        return candidates.take(2)
++    }
++
 +    private fun loadEpgInBackground(sourceUrl: String, epgUrls: List<String>) {
-+        if (epgUrls.isEmpty()) return
++        val selectedUrls = selectRelevantEpgUrls(epgUrls)
++        if (selectedUrls.isEmpty()) {
++            mutableUiState.value = mutableUiState.value.copy(isEpgLoading = false)
++            return
++        }
 +        epgScope.launch {
-+            val programmes = epgUrls
++            val programmes = selectedUrls
 +                .mapNotNull { epgUrl ->
 +                    runCatching {
-+                        parseCurrentXmlTvProgrammes(httpGetText(epgUrl))
++                        if (epgUrl.endsWith(".gz", ignoreCase = true)) {
++                            null
++                        } else {
++                            parseCurrentXmlTvProgrammes(httpGetText(epgUrl))
++                        }
 +                    }.getOrNull()
 +                }
 +                .fold(emptyMap<String, LiveTvProgramme>()) { merged, entries -> merged + entries }
