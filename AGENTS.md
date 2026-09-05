@@ -10,12 +10,14 @@ Mantenere il fork e le patch personalizzate perfettamente allineate con l'upstre
 ---
 
 ## 🏷️ Regola di Versionamento Obbligatoria
-1. **Versione Base Upstream**: La versione base (es. `0.4.13`) deve rispecchiare esclusivamente la versione dell'app originale upstream (`MARKETING_VERSION` in `iosApp/Configuration/Version.xcconfig`). **Va cambiata SOLO se c'è un aggiornamento nell'app originale upstream.**
-2. **Incremento Patch Utente (`0.4.13.x`)**: Tutte le modifiche, bugfix o personalizzazioni richieste dall'utente devono essere salvate incrementando il suffisso `.x`:
+1. **Versione Base Upstream (`0.4.13`)**: La versione base (es. `0.4.13`) deve rispecchiare esclusivamente la versione dell'app originale upstream rilasciata ufficialmente. **NON deve mai essere incrementata a versioni successive (es. non passare a `0.4.14` o `0.4.14.x`) a meno che non ci sia una nuova release ufficiale upstream o che l'utente non lo richieda esplicitamente.** Anche se il branch upstream git contiene commit intermedi o bump interni di versione, la base di Nuvio Plus deve rimanere ancorata a `0.4.13`.
+2. **Incremento Patch Utente (`0.4.13.x`)**: Tutte le modifiche, nuove funzionalità (come il Launcher Widget), bugfix o personalizzazioni richieste dall'utente devono essere rilasciate incrementando **esclusivamente il quarto numero (`.x`)**:
    - Prima modifica: `0.4.13.1`
    - Seconda modifica: `0.4.13.2`
-   - Terza modifica: `0.4.13.3`, ecc.
-3. **Aggiornamento in-app e Tag Release**: L'incremento `0.4.13.x` va impostato in `iosApp/Configuration/Version.xcconfig` e utilizzato nel tag di release (formato: `<versione>-<short_sha>`, es. `0.4.13.1-9b09045`). Questo consente all'updater in-app di rilevare e proporre sempre l'aggiornamento senza blocchi.
+   - Terza modifica: `0.4.13.3` (es. Launcher Widget)
+   - Quarta modifica: `0.4.13.4`, ecc.
+   Non modificare o avanzare mai i primi tre numeri per modifiche dell'utente.
+3. **Aggiornamento in-app e Tag Release**: L'incremento `0.4.13.x` va impostato in `iosApp/Configuration/Version.xcconfig` e utilizzato nel tag di release (formato: `<versione>-<short_sha>`, es. `0.4.13.3-7950aba`). Questo consente all'updater in-app di rilevare e proporre sempre l'aggiornamento senza blocchi.
 4. **Firma APK Persistente**: Tutti gli APK devono essere firmati con il keystore persistente in `assets/keystore/nuvio-release.keystore` (impronta SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`). Non cambiare mai keystore tra le release per evitare l'errore Android di firma non corrispondente.
 
 ---
