@@ -99,10 +99,10 @@ index 5cc0712..0de9611 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
 new file mode 100644
-index 0000000..48684f5
+index 0000000..047798a
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
-@@ -0,0 +1,451 @@
+@@ -0,0 +1,441 @@
 +package com.nuvio.app.widget
 +
 +import android.appwidget.AppWidgetManager
@@ -110,9 +110,7 @@ index 0000000..48684f5
 +import android.content.ComponentName
 +import android.content.Context
 +import android.content.Intent
-+import android.os.Build
 +import android.os.Bundle
-+import android.util.SizeF
 +import android.view.View
 +import android.widget.RemoteViews
 +import com.nuvio.app.R
@@ -192,34 +190,26 @@ index 0000000..48684f5
 +        options: Bundle,
 +        items: List<WatchProgressEntry>,
 +    ) {
-+        val remoteViews = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-+            val viewsMap = mutableMapOf<SizeF, RemoteViews>()
-+            // 4x1 (compatto 1 riga con scorciatoie)
-+            viewsMap[SizeF(180f, 40f)] = buildCompactViews(context, items)
-+            // 2x2 (Apple TV Piccolo)
-+            viewsMap[SizeF(110f, 110f)] = buildSingleViews(context, items.firstOrNull())
-+            // 4x2 (Apple TV Medio)
-+            viewsMap[SizeF(220f, 110f)] = buildMediumViews(context, items)
-+            // 2x4 (Google TV Alto)
-+            viewsMap[SizeF(110f, 220f)] = buildTallViews(context, items)
-+            // 4x4 (Apple TV Grande)
-+            viewsMap[SizeF(220f, 220f)] = buildLargeViews(context, items)
++        val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 200)
++        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
 +
-+            RemoteViews(viewsMap)
-+        } else {
-+            val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 200)
-+            val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
-+
-+            when {
-+                minHeight < 80 -> buildCompactViews(context, items)
-+                minWidth <= 160 && minHeight >= 200 -> buildTallViews(context, items)
-+                minWidth <= 160 -> buildSingleViews(context, items.firstOrNull())
-+                minHeight >= 200 -> buildLargeViews(context, items)
-+                else -> buildMediumViews(context, items)
-+            }
++        // Seleziona direttamente il layout corrispondente alle dimensioni del widget,
++        // evitando di impacchettare 5 layout con bitmap multiple che causerebbero TransactionTooLargeException su Binder IPC.
++        val remoteViews = when {
++            minHeight < 80 -> buildCompactViews(context, items)
++            minHeight >= 200 && minWidth >= 200 -> buildLargeViews(context, items)
++            minHeight >= 200 && minWidth < 200 -> buildTallViews(context, items)
++            minWidth < 180 -> buildSingleViews(context, items.firstOrNull())
++            else -> buildMediumViews(context, items)
 +        }
 +
-+        appWidgetManager.updateAppWidget(appWidgetId, remoteViews)
++        try {
++            appWidgetManager.updateAppWidget(appWidgetId, remoteViews)
++        } catch (_: Exception) {
++            // Fallback di sicurezza in caso di memoria ridotta o errore del launcher
++            val fallbackViews = buildMediumViews(context, items)
++            runCatching { appWidgetManager.updateAppWidget(appWidgetId, fallbackViews) }
++        }
 +    }
 +
 +    /**
@@ -244,8 +234,8 @@ index 0000000..48684f5
 +            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                context,
 +                backdropUrl,
-+                targetWidth = 320,
-+                targetHeight = 180,
++                targetWidth = 260,
++                targetHeight = 146,
 +                cornerRadiusDp = 12f,
 +            )
 +            if (bitmap != null) {
@@ -291,8 +281,8 @@ index 0000000..48684f5
 +            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                context,
 +                backdropUrl,
-+                targetWidth = 300,
-+                targetHeight = 170,
++                targetWidth = 260,
++                targetHeight = 146,
 +                cornerRadiusDp = 12f,
 +            )
 +            if (bitmap != null) {
@@ -326,8 +316,8 @@ index 0000000..48684f5
 +            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                context,
 +                backdropUrl,
-+                targetWidth = 300,
-+                targetHeight = 170,
++                targetWidth = 260,
++                targetHeight = 146,
 +                cornerRadiusDp = 12f,
 +            )
 +            if (bitmap != null) {
@@ -383,8 +373,8 @@ index 0000000..48684f5
 +                val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                    context,
 +                    backdropUrl,
-+                    targetWidth = 320,
-+                    targetHeight = 180,
++                    targetWidth = 260,
++                    targetHeight = 146,
 +                    cornerRadiusDp = 12f,
 +                )
 +                if (bitmap != null) {
@@ -436,8 +426,8 @@ index 0000000..48684f5
 +            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                context,
 +                backdropUrl,
-+                targetWidth = 500,
-+                targetHeight = 280,
++                targetWidth = 360,
++                targetHeight = 200,
 +                cornerRadiusDp = 12f,
 +            )
 +            if (bitmap != null) {
@@ -479,8 +469,8 @@ index 0000000..48684f5
 +                val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                    context,
 +                    backdropUrl,
-+                    targetWidth = 160,
-+                    targetHeight = 90,
++                    targetWidth = 144,
++                    targetHeight = 84,
 +                    cornerRadiusDp = 8f,
 +                )
 +                if (bitmap != null) {
@@ -519,8 +509,8 @@ index 0000000..48684f5
 +            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
 +                context,
 +                backdropUrl,
-+                targetWidth = 140,
-+                targetHeight = 84,
++                targetWidth = 120,
++                targetHeight = 72,
 +                cornerRadiusDp = 8f,
 +            )
 +            if (bitmap != null) {
@@ -666,10 +656,10 @@ index 0000000..319f2db
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
 new file mode 100644
-index 0000000..b6943a8
+index 0000000..73dc6c1
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,237 @@
 +package com.nuvio.app.widget
 +
 +import android.app.PendingIntent
@@ -839,6 +829,8 @@ index 0000000..b6943a8
 +            val decoded = BitmapFactory.decodeFile(cachedFile.absolutePath)
 +            if (decoded != null) {
 +                return@withContext getRoundedCornerBitmap(context, decoded, cornerRadiusDp)
++            } else {
++                cachedFile.delete()
 +            }
 +        }
 +
@@ -1122,10 +1114,10 @@ index 0000000..5889f09
 +</layer-list>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
 new file mode 100644
-index 0000000..608614d
+index 0000000..3c7ca80
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,128 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:layout_width="match_parent"
@@ -1194,13 +1186,14 @@ index 0000000..608614d
 +        </LinearLayout>
 +    </LinearLayout>
 +
-+    <!-- Separatore verticale -->
-+    <View
++    <!-- Separatore verticale compatibile RemoteViews (ImageView) -->
++    <ImageView
 +        android:layout_width="1dp"
 +        android:layout_height="28dp"
 +        android:layout_marginStart="6dp"
 +        android:layout_marginEnd="6dp"
-+        android:background="#2C2C2E" />
++        android:background="#2C2C2E"
++        android:contentDescription="@null" />
 +
 +    <!-- Sezione Scorciatoie: Cerca, Live TV, Libreria, Offline -->
 +    <LinearLayout
@@ -1255,7 +1248,7 @@ index 0000000..608614d
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
 new file mode 100644
-index 0000000..9971003
+index 0000000..0a05a20
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
 @@ -0,0 +1,204 @@
@@ -1275,7 +1268,7 @@ index 0000000..9971003
 +        android:id="@+id/slot_1"
 +        android:layout_width="match_parent"
 +        android:layout_height="0dp"
-+        android:layout_weight="1.2"
++        android:layout_weight="6"
 +        android:clickable="true"
 +        android:orientation="vertical">
 +
@@ -1296,7 +1289,6 @@ index 0000000..9971003
 +                android:layout_width="wrap_content"
 +                android:layout_height="wrap_content"
 +                android:layout_marginStart="3dp"
-+                android:letterSpacing="-0.02"
 +                android:text="nuvio"
 +                android:textColor="#D9FFFFFF"
 +                android:textSize="12sp"
@@ -1342,19 +1334,20 @@ index 0000000..9971003
 +            android:textSize="11sp" />
 +    </LinearLayout>
 +
-+    <!-- Separatore discreto -->
-+    <View
++    <!-- Separatore compatibile RemoteViews (ImageView al posto di View) -->
++    <ImageView
 +        android:layout_width="match_parent"
 +        android:layout_height="1dp"
 +        android:layout_marginTop="8dp"
 +        android:layout_marginBottom="8dp"
-+        android:background="#22262E" />
++        android:background="#22262E"
++        android:contentDescription="@null" />
 +
 +    <!-- Sezione Inferiore: Lista a 2 righe con miniature orizzontali -->
 +    <LinearLayout
 +        android:layout_width="match_parent"
 +        android:layout_height="0dp"
-+        android:layout_weight="1.0"
++        android:layout_weight="5"
 +        android:orientation="vertical">
 +
 +        <!-- SLOT 2 -->
@@ -1465,10 +1458,10 @@ index 0000000..9971003
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
 new file mode 100644
-index 0000000..07cac3f
+index 0000000..9f598bc
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,183 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:layout_width="match_parent"
@@ -1497,7 +1490,6 @@ index 0000000..07cac3f
 +            android:layout_width="wrap_content"
 +            android:layout_height="wrap_content"
 +            android:layout_marginStart="3dp"
-+            android:letterSpacing="-0.02"
 +            android:text="nuvio"
 +            android:textColor="#D9FFFFFF"
 +            android:textSize="12sp"
@@ -1895,10 +1887,10 @@ index 0000000..481cdc1
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
 new file mode 100644
-index 0000000..0843171
+index 0000000..85d0d73
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,77 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:id="@+id/item_container_1"
@@ -1929,7 +1921,6 @@ index 0000000..0843171
 +            android:layout_width="wrap_content"
 +            android:layout_height="wrap_content"
 +            android:layout_marginStart="3dp"
-+            android:letterSpacing="-0.02"
 +            android:text="nuvio"
 +            android:textColor="#D9FFFFFF"
 +            android:textSize="12sp"
@@ -1979,10 +1970,10 @@ index 0000000..0843171
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
 new file mode 100644
-index 0000000..20f9f2b
+index 0000000..4621f63
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,199 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:layout_width="match_parent"
@@ -2005,7 +1996,7 @@ index 0000000..20f9f2b
 +            android:layout_height="26dp"
 +            android:layout_alignParentStart="true"
 +            android:layout_centerVertical="true"
-+            android:background="?android:attr/selectableItemBackgroundBorderless"
++            android:background="@drawable/widget_nav_button_bg"
 +            android:contentDescription="Cerca"
 +            android:padding="3dp"
 +            android:scaleType="fitCenter"
@@ -2028,7 +2019,6 @@ index 0000000..20f9f2b
 +                android:layout_width="wrap_content"
 +                android:layout_height="wrap_content"
 +                android:layout_marginStart="4dp"
-+                android:letterSpacing="-0.02"
 +                android:text="nuvio"
 +                android:textColor="#FFFFFF"
 +                android:textSize="15sp"
@@ -2041,7 +2031,7 @@ index 0000000..20f9f2b
 +            android:layout_height="26dp"
 +            android:layout_alignParentEnd="true"
 +            android:layout_centerVertical="true"
-+            android:background="?android:attr/selectableItemBackgroundBorderless"
++            android:background="@drawable/widget_nav_button_bg"
 +            android:contentDescription="Live TV"
 +            android:padding="3dp"
 +            android:scaleType="fitCenter"
