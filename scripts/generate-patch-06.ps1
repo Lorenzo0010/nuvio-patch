@@ -53,12 +53,14 @@ try {
     # Widget XML Provider Info
     New-Item -ItemType Directory -Path "composeApp\src\androidMain\res\xml" -Force | Out-Null
     Copy-Item "$sourceMobile\composeApp\src\androidMain\res\xml\nuvio_app_widget_info.xml" -Destination "composeApp\src\androidMain\res\xml\" -Force
+    Copy-Item "$sourceMobile\composeApp\src\androidMain\res\xml\nuvio_navbar_widget_info.xml" -Destination "composeApp\src\androidMain\res\xml\" -Force
 
     # Widget Drawables
     $drawables = @(
         "ic_widget_library.xml", "ic_widget_livetv.xml", "ic_widget_play.xml",
-        "ic_widget_poster_placeholder.xml", "ic_widget_search.xml",
-        "widget_background.xml", "widget_button_bg.xml", "widget_card_bg.xml", "widget_progress_bar.xml"
+        "ic_widget_poster_placeholder.xml", "ic_widget_search.xml", "ic_widget_download.xml",
+        "ic_widget_brand_logo.xml", "widget_background.xml", "widget_button_bg.xml",
+        "widget_nav_button_bg.xml", "widget_card_bg.xml", "widget_progress_bar.xml"
     )
     foreach ($d in $drawables) {
         Copy-Item "$sourceMobile\composeApp\src\androidMain\res\drawable\$d" -Destination "composeApp\src\androidMain\res\drawable\" -Force
@@ -67,11 +69,15 @@ try {
     # Widget Layouts
     $layouts = @(
         "widget_nuvio_compact.xml", "widget_nuvio_large.xml", "widget_nuvio_medium.xml",
-        "widget_nuvio_single.xml", "widget_nuvio_tall.xml"
+        "widget_nuvio_single.xml", "widget_nuvio_tall.xml", "widget_nuvio_navbar.xml",
+        "widget_nuvio_navbar_compact.xml"
     )
     foreach ($l in $layouts) {
         Copy-Item "$sourceMobile\composeApp\src\androidMain\res\layout\$l" -Destination "composeApp\src\androidMain\res\layout\" -Force
     }
+
+    # Widget Strings
+    Copy-Item "$sourceMobile\composeApp\src\androidMain\res\values\strings.xml" -Destination "composeApp\src\androidMain\res\values\" -Force
 
     # Modify AndroidManifest.xml
     $manifestFile = "androidApp\src\main\AndroidManifest.xml"
@@ -86,6 +92,16 @@ try {
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/nuvio_app_widget_info" />
+        </receiver>
+        <receiver
+            android:name="com.nuvio.app.widget.NuvioNavbarWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nuvio_navbar_widget_info" />
         </receiver>
 "@
     if (-not $manifestContent.Contains("com.nuvio.app.widget.NuvioAppWidgetProvider")) {

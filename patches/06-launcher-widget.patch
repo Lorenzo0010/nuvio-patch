@@ -1,8 +1,8 @@
 ﻿diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/AndroidManifest.xml
-index e536c4d..82c78ef 100644
+index e536c4d..ca134d7 100644
 --- a/androidApp/src/main/AndroidManifest.xml
 +++ b/androidApp/src/main/AndroidManifest.xml
-@@ -189,6 +189,16 @@
+@@ -189,6 +189,26 @@
                  android:name="android.support.FILE_PROVIDER_PATHS"
                  android:resource="@xml/file_paths" />
          </provider>
@@ -15,6 +15,16 @@ index e536c4d..82c78ef 100644
 +            <meta-data
 +                android:name="android.appwidget.provider"
 +                android:resource="@xml/nuvio_app_widget_info" />
++        </receiver>
++        <receiver
++            android:name="com.nuvio.app.widget.NuvioNavbarWidgetProvider"
++            android:exported="true">
++            <intent-filter>
++                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
++            </intent-filter>
++            <meta-data
++                android:name="android.appwidget.provider"
++                android:resource="@xml/nuvio_navbar_widget_info" />
 +        </receiver>
      </application>
  
@@ -89,10 +99,10 @@ index 5cc0712..0de9611 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
 new file mode 100644
-index 0000000..97ab750
+index 0000000..48684f5
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
-@@ -0,0 +1,415 @@
+@@ -0,0 +1,451 @@
 +package com.nuvio.app.widget
 +
 +import android.appwidget.AppWidgetManager
@@ -135,7 +145,7 @@ index 0000000..97ab750
 +        val pendingResult = goAsync()
 +        providerScope.launch {
 +            try {
-+                val items = NuvioWidgetDataHelper.loadContinueWatchingItems(context, 15)
++                val items = NuvioWidgetDataHelper.loadContinueWatchingItems(context, 10)
 +                updateSingleWidget(context, appWidgetManager, appWidgetId, newOptions, items)
 +            } finally {
 +                pendingResult.finish()
@@ -164,7 +174,7 @@ index 0000000..97ab750
 +        val pendingResult = goAsync()
 +        providerScope.launch {
 +            try {
-+                val items = NuvioWidgetDataHelper.loadContinueWatchingItems(context, 15)
++                val items = NuvioWidgetDataHelper.loadContinueWatchingItems(context, 10)
 +                for (id in appWidgetIds) {
 +                    val options = appWidgetManager.getAppWidgetOptions(id) ?: Bundle.EMPTY
 +                    updateSingleWidget(context, appWidgetManager, id, options, items)
@@ -184,24 +194,16 @@ index 0000000..97ab750
 +    ) {
 +        val remoteViews = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 +            val viewsMap = mutableMapOf<SizeF, RemoteViews>()
-+            // 2x1 (110dp x 45dp)
-+            viewsMap[SizeF(110f, 45f)] = buildCompactViews(context, items, isWide = false)
-+            // 3x1..5x1 (220dp x 45dp)
-+            viewsMap[SizeF(220f, 45f)] = buildCompactViews(context, items, isWide = true)
-+            // 2x2 (110dp x 110dp)
++            // 4x1 (compatto 1 riga con scorciatoie)
++            viewsMap[SizeF(180f, 40f)] = buildCompactViews(context, items)
++            // 2x2 (Apple TV Piccolo)
 +            viewsMap[SizeF(110f, 110f)] = buildSingleViews(context, items.firstOrNull())
-+            // 3x2, 4x2 (220dp x 110dp) -> 3 items
-+            viewsMap[SizeF(220f, 110f)] = buildMediumViews(context, items, maxColumns = 3)
-+            // 5x2 (340dp x 110dp) -> 4 items
-+            viewsMap[SizeF(340f, 110f)] = buildMediumViews(context, items, maxColumns = 4)
-+            // 4x4 (220dp x 200dp) -> 2x3 (6 items)
-+            viewsMap[SizeF(220f, 200f)] = buildLargeViews(context, items, maxColumns = 3)
-+            // 5x4 (340dp x 200dp) -> 2x5 (10 items)
-+            viewsMap[SizeF(340f, 200f)] = buildLargeViews(context, items, maxColumns = 5)
-+            // 4x6 (220dp x 320dp) -> 3x3 (9 items)
-+            viewsMap[SizeF(220f, 320f)] = buildTallViews(context, items, maxColumns = 3)
-+            // 5x6 (340dp x 320dp) -> 3x5 (15 items)
-+            viewsMap[SizeF(340f, 320f)] = buildTallViews(context, items, maxColumns = 5)
++            // 4x2 (Apple TV Medio)
++            viewsMap[SizeF(220f, 110f)] = buildMediumViews(context, items)
++            // 2x4 (Google TV Alto)
++            viewsMap[SizeF(110f, 220f)] = buildTallViews(context, items)
++            // 4x4 (Apple TV Grande)
++            viewsMap[SizeF(220f, 220f)] = buildLargeViews(context, items)
 +
 +            RemoteViews(viewsMap)
 +        } else {
@@ -209,37 +211,43 @@ index 0000000..97ab750
 +            val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 100)
 +
 +            when {
-+                minHeight >= 300 -> buildTallViews(context, items, maxColumns = if (minWidth >= 320) 5 else 3)
-+                minHeight >= 180 -> buildLargeViews(context, items, maxColumns = if (minWidth >= 320) 5 else 3)
-+                minWidth <= 150 && minHeight >= 100 -> buildSingleViews(context, items.firstOrNull())
-+                minHeight >= 90 -> buildMediumViews(context, items, maxColumns = if (minWidth >= 320) 4 else 3)
-+                else -> buildCompactViews(context, items, isWide = minWidth >= 200)
++                minHeight < 80 -> buildCompactViews(context, items)
++                minWidth <= 160 && minHeight >= 200 -> buildTallViews(context, items)
++                minWidth <= 160 -> buildSingleViews(context, items.firstOrNull())
++                minHeight >= 200 -> buildLargeViews(context, items)
++                else -> buildMediumViews(context, items)
 +            }
 +        }
 +
 +        appWidgetManager.updateAppWidget(appWidgetId, remoteViews)
 +    }
 +
-+    private suspend fun buildCompactViews(
++    /**
++     * Apple TV Piccolo (2x2) - Immagine 0
++     * Singola card 16:9 con logo Nuvio in alto a destra, titolo e sottotitolo (es. S1, E2).
++     */
++    private suspend fun buildSingleViews(
 +        context: Context,
-+        items: List<WatchProgressEntry>,
-+        isWide: Boolean,
++        item: WatchProgressEntry?,
 +    ): RemoteViews {
-+        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_compact)
-+        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 100)
++        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_single)
 +
-+        val first = items.firstOrNull()
-+        if (first != null) {
-+            views.setTextViewText(R.id.title_1, first.title)
-+            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatSubtitle(first))
-+            views.setProgressBar(R.id.progress_1, 100, NuvioWidgetDataHelper.formatProgressPercent(first), false)
++        if (item != null) {
++            views.setTextViewText(R.id.title_1, item.title)
++            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatSubtitle(item))
 +            views.setOnClickPendingIntent(
 +                R.id.item_container_1,
-+                NuvioWidgetDataHelper.createPendingIntentForMeta(context, first, requestCode = 105),
++                NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 205),
 +            )
 +
-+            val posterUrl = first.poster ?: first.episodeThumbnail ?: first.background
-+            val bitmap = NuvioWidgetDataHelper.loadPosterBitmap(context, posterUrl, targetWidth = 100, targetHeight = 100, cornerRadiusDp = 6f)
++            val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(item)
++            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                context,
++                backdropUrl,
++                targetWidth = 320,
++                targetHeight = 180,
++                cornerRadiusDp = 12f,
++            )
 +            if (bitmap != null) {
 +                views.setImageViewBitmap(R.id.poster_1, bitmap)
 +            } else {
@@ -248,44 +256,6 @@ index 0000000..97ab750
 +        } else {
 +            views.setTextViewText(R.id.title_1, "Nuvio Plus")
 +            views.setTextViewText(R.id.subtitle_1, "Nessun video in corso")
-+            views.setProgressBar(R.id.progress_1, 100, 0, false)
-+            views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
-+            views.setOnClickPendingIntent(
-+                R.id.item_container_1,
-+                NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://library", requestCode = 106),
-+            )
-+        }
-+
-+        return views
-+    }
-+
-+    private suspend fun buildSingleViews(
-+        context: Context,
-+        item: WatchProgressEntry?,
-+    ): RemoteViews {
-+        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_single)
-+        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 200)
-+
-+        if (item != null) {
-+            views.setTextViewText(R.id.title_1, item.title)
-+            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatSubtitle(item))
-+            views.setProgressBar(R.id.progress_1, 100, NuvioWidgetDataHelper.formatProgressPercent(item), false)
-+            views.setOnClickPendingIntent(
-+                R.id.item_container_1,
-+                NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 205),
-+            )
-+
-+            val posterUrl = item.poster ?: item.episodeThumbnail ?: item.background
-+            val bitmap = NuvioWidgetDataHelper.loadPosterBitmap(context, posterUrl, targetWidth = 160, targetHeight = 240, cornerRadiusDp = 8f)
-+            if (bitmap != null) {
-+                views.setImageViewBitmap(R.id.poster_1, bitmap)
-+            } else {
-+                views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
-+            }
-+        } else {
-+            views.setTextViewText(R.id.title_1, "Nuvio Plus")
-+            views.setTextViewText(R.id.subtitle_1, "Nessun video")
-+            views.setProgressBar(R.id.progress_1, 100, 0, false)
 +            views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
 +            views.setOnClickPendingIntent(
 +                R.id.item_container_1,
@@ -296,40 +266,127 @@ index 0000000..97ab750
 +        return views
 +    }
 +
++    /**
++     * Apple TV Medio (4x2) - Immagine 1
++     * 2 schede 16:9 affiancate con titoli e sottotitoli separati, logo Nuvio in alto a destra.
++     */
 +    private suspend fun buildMediumViews(
 +        context: Context,
 +        items: List<WatchProgressEntry>,
-+        maxColumns: Int,
 +    ): RemoteViews {
 +        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_medium)
-+        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 300)
 +
-+        val slotIds = listOf(R.id.slot_1, R.id.slot_2, R.id.slot_3, R.id.slot_4)
-+        val posterIds = listOf(R.id.poster_1, R.id.poster_2, R.id.poster_3, R.id.poster_4)
-+        val progressIds = listOf(R.id.progress_1, R.id.progress_2, R.id.progress_3, R.id.progress_4)
-+        val titleIds = listOf(R.id.title_1, R.id.title_2, R.id.title_3, R.id.title_4)
-+        val subtitleIds = listOf(R.id.subtitle_1, R.id.subtitle_2, R.id.subtitle_3, R.id.subtitle_4)
++        // Slot 1
++        if (items.isNotEmpty()) {
++            val first = items[0]
++            views.setViewVisibility(R.id.slot_1, View.VISIBLE)
++            views.setTextViewText(R.id.title_1, first.title)
++            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatSubtitle(first))
++            views.setOnClickPendingIntent(
++                R.id.slot_1,
++                NuvioWidgetDataHelper.createPendingIntentForMeta(context, first, requestCode = 310),
++            )
 +
-+        for (i in 0 until 4) {
-+            val slot = slotIds[i]
-+            if (i >= maxColumns) {
-+                views.setViewVisibility(slot, View.GONE)
-+                continue
++            val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(first)
++            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                context,
++                backdropUrl,
++                targetWidth = 300,
++                targetHeight = 170,
++                cornerRadiusDp = 12f,
++            )
++            if (bitmap != null) {
++                views.setImageViewBitmap(R.id.poster_1, bitmap)
++            } else {
++                views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
 +            }
++        } else {
++            views.setViewVisibility(R.id.slot_1, View.VISIBLE)
++            views.setTextViewText(R.id.title_1, "Nuvio Plus")
++            views.setTextViewText(R.id.subtitle_1, "Nessun video in corso")
++            views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
++            views.setOnClickPendingIntent(
++                R.id.slot_1,
++                NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://library", requestCode = 311),
++            )
++        }
 +
++        // Slot 2
++        if (items.size > 1) {
++            val second = items[1]
++            views.setViewVisibility(R.id.slot_2, View.VISIBLE)
++            views.setTextViewText(R.id.title_2, second.title)
++            views.setTextViewText(R.id.subtitle_2, NuvioWidgetDataHelper.formatSubtitle(second))
++            views.setOnClickPendingIntent(
++                R.id.slot_2,
++                NuvioWidgetDataHelper.createPendingIntentForMeta(context, second, requestCode = 312),
++            )
++
++            val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(second)
++            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                context,
++                backdropUrl,
++                targetWidth = 300,
++                targetHeight = 170,
++                cornerRadiusDp = 12f,
++            )
++            if (bitmap != null) {
++                views.setImageViewBitmap(R.id.poster_2, bitmap)
++            } else {
++                views.setImageViewResource(R.id.poster_2, R.drawable.ic_widget_poster_placeholder)
++            }
++        } else {
++            views.setViewVisibility(R.id.slot_2, View.INVISIBLE)
++        }
++
++        return views
++    }
++
++    /**
++     * Google TV Alto (2x4) - Immagine 2
++     * Header superiore con Cerca, Logo Nuvio e Live TV, seguito da 3 card 16:9 verticali.
++     */
++    private suspend fun buildTallViews(
++        context: Context,
++        items: List<WatchProgressEntry>,
++    ): RemoteViews {
++        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_tall)
++
++        // Header pulsanti
++        views.setOnClickPendingIntent(
++            R.id.btn_search,
++            NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://search", requestCode = 501),
++        )
++        views.setOnClickPendingIntent(
++            R.id.btn_livetv,
++            NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://livetv", requestCode = 502),
++        )
++
++        val slotIds = listOf(R.id.slot_1, R.id.slot_2, R.id.slot_3)
++        val posterIds = listOf(R.id.poster_1, R.id.poster_2, R.id.poster_3)
++        val titleIds = listOf(R.id.title_1, R.id.title_2, R.id.title_3)
++        val subtitleIds = listOf(R.id.subtitle_1, R.id.subtitle_2, R.id.subtitle_3)
++
++        for (i in 0 until 3) {
++            val slot = slotIds[i]
 +            if (i < items.size) {
 +                val item = items[i]
 +                views.setViewVisibility(slot, View.VISIBLE)
 +                views.setTextViewText(titleIds[i], item.title)
 +                views.setTextViewText(subtitleIds[i], NuvioWidgetDataHelper.formatSubtitle(item))
-+                views.setProgressBar(progressIds[i], 100, NuvioWidgetDataHelper.formatProgressPercent(item), false)
 +                views.setOnClickPendingIntent(
 +                    slot,
-+                    NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 310 + i),
++                    NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 510 + i),
 +                )
 +
-+                val posterUrl = item.poster ?: item.episodeThumbnail ?: item.background
-+                val bitmap = NuvioWidgetDataHelper.loadPosterBitmap(context, posterUrl, targetWidth = 140, targetHeight = 210, cornerRadiusDp = 8f)
++                val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(item)
++                val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                    context,
++                    backdropUrl,
++                    targetWidth = 320,
++                    targetHeight = 180,
++                    cornerRadiusDp = 12f,
++                )
 +                if (bitmap != null) {
 +                    views.setImageViewBitmap(posterIds[i], bitmap)
 +                } else {
@@ -338,10 +395,13 @@ index 0000000..97ab750
 +            } else {
 +                if (i == 0) {
 +                    views.setViewVisibility(slot, View.VISIBLE)
-+                    views.setTextViewText(titleIds[0], "Nuvio")
-+                    views.setTextViewText(subtitleIds[0], "Nessun video")
-+                    views.setProgressBar(progressIds[0], 100, 0, false)
++                    views.setTextViewText(titleIds[0], "Nuvio Plus")
++                    views.setTextViewText(subtitleIds[0], "Nessun video in corso")
 +                    views.setImageViewResource(posterIds[0], R.drawable.ic_widget_poster_placeholder)
++                    views.setOnClickPendingIntent(
++                        slot,
++                        NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://library", requestCode = 515),
++                    )
 +                } else {
 +                    views.setViewVisibility(slot, View.INVISIBLE)
 +                }
@@ -351,145 +411,131 @@ index 0000000..97ab750
 +        return views
 +    }
 +
++    /**
++     * Apple TV Grande (4x4) - Immagine 3
++     * Elemento in primo piano in alto (backdrop grande) + lista orizzontale a 2 righe in basso.
++     */
 +    private suspend fun buildLargeViews(
 +        context: Context,
 +        items: List<WatchProgressEntry>,
-+        maxColumns: Int,
 +    ): RemoteViews {
 +        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_large)
-+        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 400)
 +
-+        val slotIds = listOf(
-+            R.id.slot_1, R.id.slot_2, R.id.slot_3, R.id.slot_4, R.id.slot_5,
-+            R.id.slot_6, R.id.slot_7, R.id.slot_8, R.id.slot_9, R.id.slot_10,
-+        )
-+        val posterIds = listOf(
-+            R.id.poster_1, R.id.poster_2, R.id.poster_3, R.id.poster_4, R.id.poster_5,
-+            R.id.poster_6, R.id.poster_7, R.id.poster_8, R.id.poster_9, R.id.poster_10,
-+        )
-+        val progressIds = listOf(
-+            R.id.progress_1, R.id.progress_2, R.id.progress_3, R.id.progress_4, R.id.progress_5,
-+            R.id.progress_6, R.id.progress_7, R.id.progress_8, R.id.progress_9, R.id.progress_10,
-+        )
-+        val titleIds = listOf(
-+            R.id.title_1, R.id.title_2, R.id.title_3, R.id.title_4, R.id.title_5,
-+            R.id.title_6, R.id.title_7, R.id.title_8, R.id.title_9, R.id.title_10,
-+        )
++        // Elemento in primo piano (Slot 1)
++        if (items.isNotEmpty()) {
++            val featured = items[0]
++            views.setViewVisibility(R.id.slot_1, View.VISIBLE)
++            views.setTextViewText(R.id.title_1, featured.title)
++            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatFeaturedSubtitle(featured))
++            views.setOnClickPendingIntent(
++                R.id.slot_1,
++                NuvioWidgetDataHelper.createPendingIntentForMeta(context, featured, requestCode = 410),
++            )
 +
-+        var itemIndex = 0
-+        for (row in 0..1) {
-+            for (col in 0..4) {
-+                val slotIndex = row * 5 + col
-+                val slot = slotIds[slotIndex]
++            val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(featured)
++            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                context,
++                backdropUrl,
++                targetWidth = 500,
++                targetHeight = 280,
++                cornerRadiusDp = 12f,
++            )
++            if (bitmap != null) {
++                views.setImageViewBitmap(R.id.poster_1, bitmap)
++            } else {
++                views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
++            }
++        } else {
++            views.setViewVisibility(R.id.slot_1, View.VISIBLE)
++            views.setTextViewText(R.id.title_1, "Nuvio Plus")
++            views.setTextViewText(R.id.subtitle_1, "CONTINUA A GUARDARE")
++            views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
++            views.setOnClickPendingIntent(
++                R.id.slot_1,
++                NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://library", requestCode = 411),
++            )
++        }
 +
-+                if (col >= maxColumns) {
-+                    views.setViewVisibility(slot, View.GONE)
-+                    continue
-+                }
++        // Righe inferiori (Slot 2 e 3)
++        val subSlots = listOf(R.id.slot_2, R.id.slot_3)
++        val subPosters = listOf(R.id.poster_2, R.id.poster_3)
++        val subTitles = listOf(R.id.title_2, R.id.title_3)
++        val subSubtitles = listOf(R.id.subtitle_2, R.id.subtitle_3)
 +
-+                if (itemIndex < items.size) {
-+                    val item = items[itemIndex]
-+                    views.setViewVisibility(slot, View.VISIBLE)
-+                    views.setTextViewText(titleIds[slotIndex], item.title)
-+                    views.setProgressBar(progressIds[slotIndex], 100, NuvioWidgetDataHelper.formatProgressPercent(item), false)
-+                    views.setOnClickPendingIntent(
-+                        slot,
-+                        NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 410 + slotIndex),
-+                    )
++        for (i in 0..1) {
++            val itemIndex = i + 1
++            val slot = subSlots[i]
++            if (itemIndex < items.size) {
++                val item = items[itemIndex]
++                views.setViewVisibility(slot, View.VISIBLE)
++                views.setTextViewText(subTitles[i], item.title)
++                views.setTextViewText(subSubtitles[i], NuvioWidgetDataHelper.formatSubtitle(item))
++                views.setOnClickPendingIntent(
++                    slot,
++                    NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 420 + i),
++                )
 +
-+                    val posterUrl = item.poster ?: item.episodeThumbnail ?: item.background
-+                    val bitmap = NuvioWidgetDataHelper.loadPosterBitmap(context, posterUrl, targetWidth = 120, targetHeight = 180, cornerRadiusDp = 6f)
-+                    if (bitmap != null) {
-+                        views.setImageViewBitmap(posterIds[slotIndex], bitmap)
-+                    } else {
-+                        views.setImageViewResource(posterIds[slotIndex], R.drawable.ic_widget_poster_placeholder)
-+                    }
-+                    itemIndex++
++                val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(item)
++                val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                    context,
++                    backdropUrl,
++                    targetWidth = 160,
++                    targetHeight = 90,
++                    cornerRadiusDp = 8f,
++                )
++                if (bitmap != null) {
++                    views.setImageViewBitmap(subPosters[i], bitmap)
 +                } else {
-+                    if (itemIndex == 0 && slotIndex == 0) {
-+                        views.setViewVisibility(slot, View.VISIBLE)
-+                        views.setTextViewText(titleIds[0], "Nuvio")
-+                        views.setProgressBar(progressIds[0], 100, 0, false)
-+                        views.setImageViewResource(posterIds[0], R.drawable.ic_widget_poster_placeholder)
-+                    } else {
-+                        views.setViewVisibility(slot, View.INVISIBLE)
-+                    }
++                    views.setImageViewResource(subPosters[i], R.drawable.ic_widget_poster_placeholder)
 +                }
++            } else {
++                views.setViewVisibility(slot, View.INVISIBLE)
 +            }
 +        }
 +
 +        return views
 +    }
 +
-+    private suspend fun buildTallViews(
++    /**
++     * Fallback compatto (1 riga) per il widget continua a guardare ridimensionato al minimo.
++     */
++    private suspend fun buildCompactViews(
 +        context: Context,
 +        items: List<WatchProgressEntry>,
-+        maxColumns: Int,
 +    ): RemoteViews {
-+        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_tall)
-+        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 500)
++        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_compact)
++        NuvioWidgetDataHelper.bindNavigationButtons(context, views, baseRequestCode = 100)
 +
-+        val slotIds = listOf(
-+            R.id.slot_1, R.id.slot_2, R.id.slot_3, R.id.slot_4, R.id.slot_5,
-+            R.id.slot_6, R.id.slot_7, R.id.slot_8, R.id.slot_9, R.id.slot_10,
-+            R.id.slot_11, R.id.slot_12, R.id.slot_13, R.id.slot_14, R.id.slot_15,
-+        )
-+        val posterIds = listOf(
-+            R.id.poster_1, R.id.poster_2, R.id.poster_3, R.id.poster_4, R.id.poster_5,
-+            R.id.poster_6, R.id.poster_7, R.id.poster_8, R.id.poster_9, R.id.poster_10,
-+            R.id.poster_11, R.id.poster_12, R.id.poster_13, R.id.poster_14, R.id.poster_15,
-+        )
-+        val progressIds = listOf(
-+            R.id.progress_1, R.id.progress_2, R.id.progress_3, R.id.progress_4, R.id.progress_5,
-+            R.id.progress_6, R.id.progress_7, R.id.progress_8, R.id.progress_9, R.id.progress_10,
-+            R.id.progress_11, R.id.progress_12, R.id.progress_13, R.id.progress_14, R.id.progress_15,
-+        )
-+        val titleIds = listOf(
-+            R.id.title_1, R.id.title_2, R.id.title_3, R.id.title_4, R.id.title_5,
-+            R.id.title_6, R.id.title_7, R.id.title_8, R.id.title_9, R.id.title_10,
-+            R.id.title_11, R.id.title_12, R.id.title_13, R.id.title_14, R.id.title_15,
-+        )
++        val first = items.firstOrNull()
++        if (first != null) {
++            views.setTextViewText(R.id.title_1, first.title)
++            views.setTextViewText(R.id.subtitle_1, NuvioWidgetDataHelper.formatSubtitle(first))
++            views.setOnClickPendingIntent(
++                R.id.item_container_1,
++                NuvioWidgetDataHelper.createPendingIntentForMeta(context, first, requestCode = 105),
++            )
 +
-+        var itemIndex = 0
-+        for (row in 0..2) {
-+            for (col in 0..4) {
-+                val slotIndex = row * 5 + col
-+                val slot = slotIds[slotIndex]
-+
-+                if (col >= maxColumns) {
-+                    views.setViewVisibility(slot, View.GONE)
-+                    continue
-+                }
-+
-+                if (itemIndex < items.size) {
-+                    val item = items[itemIndex]
-+                    views.setViewVisibility(slot, View.VISIBLE)
-+                    views.setTextViewText(titleIds[slotIndex], item.title)
-+                    views.setProgressBar(progressIds[slotIndex], 100, NuvioWidgetDataHelper.formatProgressPercent(item), false)
-+                    views.setOnClickPendingIntent(
-+                        slot,
-+                        NuvioWidgetDataHelper.createPendingIntentForMeta(context, item, requestCode = 510 + slotIndex),
-+                    )
-+
-+                    val posterUrl = item.poster ?: item.episodeThumbnail ?: item.background
-+                    val bitmap = NuvioWidgetDataHelper.loadPosterBitmap(context, posterUrl, targetWidth = 100, targetHeight = 150, cornerRadiusDp = 6f)
-+                    if (bitmap != null) {
-+                        views.setImageViewBitmap(posterIds[slotIndex], bitmap)
-+                    } else {
-+                        views.setImageViewResource(posterIds[slotIndex], R.drawable.ic_widget_poster_placeholder)
-+                    }
-+                    itemIndex++
-+                } else {
-+                    if (itemIndex == 0 && slotIndex == 0) {
-+                        views.setViewVisibility(slot, View.VISIBLE)
-+                        views.setTextViewText(titleIds[0], "Nuvio")
-+                        views.setProgressBar(progressIds[0], 100, 0, false)
-+                        views.setImageViewResource(posterIds[0], R.drawable.ic_widget_poster_placeholder)
-+                    } else {
-+                        views.setViewVisibility(slot, View.INVISIBLE)
-+                    }
-+                }
++            val backdropUrl = NuvioWidgetDataHelper.resolveBackdropUrl(first)
++            val bitmap = NuvioWidgetDataHelper.loadBackdropBitmap(
++                context,
++                backdropUrl,
++                targetWidth = 140,
++                targetHeight = 84,
++                cornerRadiusDp = 8f,
++            )
++            if (bitmap != null) {
++                views.setImageViewBitmap(R.id.poster_1, bitmap)
++            } else {
++                views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
 +            }
++        } else {
++            views.setTextViewText(R.id.title_1, "Nuvio Plus")
++            views.setTextViewText(R.id.subtitle_1, "Nessun video in corso")
++            views.setImageViewResource(R.id.poster_1, R.drawable.ic_widget_poster_placeholder)
++            views.setOnClickPendingIntent(
++                R.id.item_container_1,
++                NuvioWidgetDataHelper.createPendingIntentForDeepLink(context, "nuvio://library", requestCode = 106),
++            )
 +        }
 +
 +        return views
@@ -508,12 +554,122 @@ index 0000000..97ab750
 +        }
 +    }
 +}
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt
+new file mode 100644
+index 0000000..319f2db
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt
+@@ -0,0 +1,104 @@
++package com.nuvio.app.widget
++
++import android.appwidget.AppWidgetManager
++import android.appwidget.AppWidgetProvider
++import android.content.ComponentName
++import android.content.Context
++import android.content.Intent
++import android.os.Build
++import android.os.Bundle
++import android.util.SizeF
++import android.widget.RemoteViews
++import com.nuvio.app.R
++
++class NuvioNavbarWidgetProvider : AppWidgetProvider() {
++
++    override fun onUpdate(
++        context: Context,
++        appWidgetManager: AppWidgetManager,
++        appWidgetIds: IntArray,
++    ) {
++        super.onUpdate(context, appWidgetManager, appWidgetIds)
++        for (id in appWidgetIds) {
++            val options = appWidgetManager.getAppWidgetOptions(id) ?: Bundle.EMPTY
++            updateNavbarWidget(context, appWidgetManager, id, options)
++        }
++    }
++
++    override fun onAppWidgetOptionsChanged(
++        context: Context,
++        appWidgetManager: AppWidgetManager,
++        appWidgetId: Int,
++        newOptions: Bundle,
++    ) {
++        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
++        updateNavbarWidget(context, appWidgetManager, appWidgetId, newOptions)
++    }
++
++    override fun onReceive(context: Context, intent: Intent) {
++        super.onReceive(context, intent)
++        val action = intent.action
++        if (action == ACTION_UPDATE_NAVBAR || action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
++            val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
++            val component = ComponentName(context, NuvioNavbarWidgetProvider::class.java)
++            val ids = appWidgetManager.getAppWidgetIds(component)
++            if (ids != null && ids.isNotEmpty()) {
++                for (id in ids) {
++                    val options = appWidgetManager.getAppWidgetOptions(id) ?: Bundle.EMPTY
++                    updateNavbarWidget(context, appWidgetManager, id, options)
++                }
++            }
++        }
++    }
++
++    private fun updateNavbarWidget(
++        context: Context,
++        appWidgetManager: AppWidgetManager,
++        appWidgetId: Int,
++        options: Bundle,
++    ) {
++        val remoteViews = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++            val viewsMap = mutableMapOf<SizeF, RemoteViews>()
++            // Sotto i 50dp di altezza: versione solo icone compatta
++            viewsMap[SizeF(120f, 35f)] = buildCompactNavbarViews(context)
++            // Sopra i 50dp di altezza: versione con icone e diciture (Cerca, Live TV, Libreria, Offline)
++            viewsMap[SizeF(120f, 50f)] = buildStandardNavbarViews(context)
++            viewsMap[SizeF(240f, 50f)] = buildStandardNavbarViews(context)
++            RemoteViews(viewsMap)
++        } else {
++            val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 50)
++            if (minHeight < 48) {
++                buildCompactNavbarViews(context)
++            } else {
++                buildStandardNavbarViews(context)
++            }
++        }
++
++        appWidgetManager.updateAppWidget(appWidgetId, remoteViews)
++    }
++
++    private fun buildStandardNavbarViews(context: Context): RemoteViews {
++        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_navbar)
++        NuvioWidgetDataHelper.bindNavbarWidgetButtons(context, views, baseRequestCode = 910)
++        return views
++    }
++
++    private fun buildCompactNavbarViews(context: Context): RemoteViews {
++        val views = RemoteViews(context.packageName, R.layout.widget_nuvio_navbar_compact)
++        NuvioWidgetDataHelper.bindNavbarWidgetButtons(context, views, baseRequestCode = 920)
++        return views
++    }
++
++    companion object {
++        const val ACTION_UPDATE_NAVBAR = "com.nuvio.app.widget.ACTION_UPDATE_NAVBAR"
++
++        fun notifyChanged(context: Context) {
++            runCatching {
++                val intent = Intent(ACTION_UPDATE_NAVBAR).apply {
++                    setPackage(context.packageName)
++                }
++                context.sendBroadcast(intent)
++            }
++        }
++    }
++}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
 new file mode 100644
-index 0000000..48c7db7
+index 0000000..b6943a8
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,235 @@
 +package com.nuvio.app.widget
 +
 +import android.app.PendingIntent
@@ -522,13 +678,13 @@ index 0000000..48c7db7
 +import android.graphics.Bitmap
 +import android.graphics.BitmapFactory
 +import android.graphics.Canvas
++import android.graphics.Matrix
 +import android.graphics.Paint
 +import android.graphics.PorterDuff
 +import android.graphics.PorterDuffXfermode
 +import android.graphics.Rect
 +import android.graphics.RectF
 +import android.net.Uri
-+import android.view.View
 +import android.widget.RemoteViews
 +import com.nuvio.app.MainActivity
 +import com.nuvio.app.R
@@ -548,10 +704,10 @@ index 0000000..48c7db7
 +    private const val KEY_PAYLOAD = "watch_progress_payload"
 +    private const val KEY_LAST_ACTIVE_PROFILE = "last_active_profile_id"
 +
-+    fun loadContinueWatchingItems(context: Context, maxItems: Int = 15): List<WatchProgressEntry> {
++    fun loadContinueWatchingItems(context: Context, maxItems: Int = 10): List<WatchProgressEntry> {
 +        val prefs = context.getSharedPreferences(PREFS_WATCH_PROGRESS, Context.MODE_PRIVATE)
 +        val activeProfileId = prefs.getInt(KEY_LAST_ACTIVE_PROFILE, 0)
-+        
++
 +        var payload = prefs.getString("${KEY_PAYLOAD}_$activeProfileId", null)
 +        if (payload.isNullOrBlank()) {
 +            val fallbackKey = prefs.all.keys.firstOrNull { it.startsWith(KEY_PAYLOAD) }
@@ -599,29 +755,51 @@ index 0000000..48c7db7
 +
 +    fun bindNavigationButtons(context: Context, remoteViews: RemoteViews, baseRequestCode: Int) {
 +        remoteViews.setOnClickPendingIntent(
-+            R.id.btn_library,
-+            createPendingIntentForDeepLink(context, "nuvio://library", baseRequestCode + 1),
++            R.id.btn_search,
++            createPendingIntentForDeepLink(context, "nuvio://search", baseRequestCode + 1),
 +        )
 +        remoteViews.setOnClickPendingIntent(
 +            R.id.btn_livetv,
 +            createPendingIntentForDeepLink(context, "nuvio://livetv", baseRequestCode + 2),
 +        )
 +        remoteViews.setOnClickPendingIntent(
-+            R.id.btn_search,
-+            createPendingIntentForDeepLink(context, "nuvio://search", baseRequestCode + 3),
++            R.id.btn_library,
++            createPendingIntentForDeepLink(context, "nuvio://library", baseRequestCode + 3),
 +        )
++        remoteViews.setOnClickPendingIntent(
++            R.id.btn_offline,
++            createPendingIntentForDeepLink(context, "nuvio://downloads", baseRequestCode + 4),
++        )
++    }
++
++    fun bindNavbarWidgetButtons(context: Context, remoteViews: RemoteViews, baseRequestCode: Int) {
++        remoteViews.setOnClickPendingIntent(
++            R.id.btn_nav_search,
++            createPendingIntentForDeepLink(context, "nuvio://search", baseRequestCode + 1),
++        )
++        remoteViews.setOnClickPendingIntent(
++            R.id.btn_nav_livetv,
++            createPendingIntentForDeepLink(context, "nuvio://livetv", baseRequestCode + 2),
++        )
++        remoteViews.setOnClickPendingIntent(
++            R.id.btn_nav_library,
++            createPendingIntentForDeepLink(context, "nuvio://library", baseRequestCode + 3),
++        )
++        remoteViews.setOnClickPendingIntent(
++            R.id.btn_nav_offline,
++            createPendingIntentForDeepLink(context, "nuvio://downloads", baseRequestCode + 4),
++        )
++    }
++
++    fun resolveBackdropUrl(entry: WatchProgressEntry): String? {
++        return entry.episodeThumbnail ?: entry.background ?: entry.poster
 +    }
 +
 +    fun formatSubtitle(entry: WatchProgressEntry): String {
 +        return if (entry.isEpisode) {
 +            val s = entry.seasonNumber ?: 1
 +            val e = entry.episodeNumber ?: 1
-+            val epCode = "S%02dE%02d".format(s, e)
-+            if (!entry.episodeTitle.isNullOrBlank()) {
-+                "$epCode ├ö├ç├│ ${entry.episodeTitle}"
-+            } else {
-+                epCode
-+            }
++            "S%d, E%d".format(s, e)
 +        } else {
 +            val remainingMs = (entry.durationMs - entry.lastPositionMs).coerceAtLeast(0L)
 +            if (remainingMs > 0L) {
@@ -635,20 +813,26 @@ index 0000000..48c7db7
 +        }
 +    }
 +
-+    fun formatProgressPercent(entry: WatchProgressEntry): Int {
-+        return (entry.progressFraction * 100f).toInt().coerceIn(0, 100)
++    fun formatFeaturedSubtitle(entry: WatchProgressEntry): String {
++        return if (entry.isEpisode) {
++            val s = entry.seasonNumber ?: 1
++            val e = entry.episodeNumber ?: 1
++            "CONTINUA ÔÇó S%d, E%d".format(s, e)
++        } else {
++            "CONTINUA"
++        }
 +    }
 +
-+    suspend fun loadPosterBitmap(
++    suspend fun loadBackdropBitmap(
 +        context: Context,
 +        url: String?,
-+        targetWidth: Int = 180,
-+        targetHeight: Int = 270,
-+        cornerRadiusDp: Float = 8f,
++        targetWidth: Int = 320,
++        targetHeight: Int = 180,
++        cornerRadiusDp: Float = 12f,
 +    ): Bitmap? = withContext(Dispatchers.IO) {
 +        if (url.isNullOrBlank()) return@withContext null
 +        val cacheDir = File(context.cacheDir, "widget_posters").apply { mkdirs() }
-+        val filename = hashUrl(url) + ".png"
++        val filename = "${hashUrl(url)}_${targetWidth}x${targetHeight}.png"
 +        val cachedFile = File(cacheDir, filename)
 +
 +        if (cachedFile.exists() && cachedFile.length() > 0) {
@@ -668,17 +852,38 @@ index 0000000..48c7db7
 +            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
 +                connection.inputStream.use { stream ->
 +                    val rawBitmap = BitmapFactory.decodeStream(stream) ?: return@withContext null
-+                    val scaled = Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
++                    val cropped = createCenterCropBitmap(rawBitmap, targetWidth, targetHeight)
 +                    FileOutputStream(cachedFile).use { out ->
-+                        scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
++                        cropped.compress(Bitmap.CompressFormat.PNG, 90, out)
 +                    }
-+                    return@withContext getRoundedCornerBitmap(context, scaled, cornerRadiusDp)
++                    return@withContext getRoundedCornerBitmap(context, cropped, cornerRadiusDp)
 +                }
 +            }
 +        } catch (_: Exception) {
 +            // Ignored - fallback image will be shown
 +        }
 +        null
++    }
++
++    private fun createCenterCropBitmap(src: Bitmap, targetWidth: Int, targetHeight: Int): Bitmap {
++        val scale = maxOf(
++            targetWidth.toFloat() / src.width.toFloat(),
++            targetHeight.toFloat() / src.height.toFloat(),
++        )
++        val scaledWidth = scale * src.width
++        val scaledHeight = scale * src.height
++        val left = (targetWidth - scaledWidth) / 2f
++        val top = (targetHeight - scaledHeight) / 2f
++
++        val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
++        val canvas = Canvas(output)
++        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
++        val matrix = Matrix().apply {
++            postScale(scale, scale)
++            postTranslate(left, top)
++        }
++        canvas.drawBitmap(src, matrix, paint)
++        return output
 +    }
 +
 +    private fun getRoundedCornerBitmap(context: Context, bitmap: Bitmap, cornerRadiusDp: Float): Bitmap {
@@ -700,9 +905,63 @@ index 0000000..48c7db7
 +        return bytes.joinToString("") { "%02x".format(it) }
 +    }
 +}
+diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml b/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml
+new file mode 100644
+index 0000000..73f36c1
+--- /dev/null
++++ b/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml
+@@ -0,0 +1,32 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#E6FFFFFF"
++        android:fillType="evenOdd"
++        android:pathData="M7.2,1.9
++            C5.15,1.9 3.5,3.62 3.5,5.73
++            V18.27
++            C3.5,20.38 5.15,22.1 7.2,22.1
++            C7.88,22.1 8.56,21.91 9.16,21.56
++            L18.03,16.34
++            C19.49,15.48 20.4,13.88 20.4,12
++            C20.4,10.12 19.49,8.52 18.03,7.66
++            L9.16,2.44
++            C8.56,2.09 7.88,1.9 7.2,1.9
++            Z
++            M9.08,7.54
++            C8.81,7.38 8.49,7.38 8.22,7.53
++            C7.95,7.69 7.79,7.98 7.79,8.29
++            V15.71
++            C7.79,16.02 7.95,16.31 8.22,16.47
++            C8.49,16.62 8.81,16.62 9.08,16.46
++            L14.99,12.75
++            C15.24,12.59 15.39,12.31 15.39,12
++            C15.39,11.69 15.24,11.41 14.99,11.25
++            L9.08,7.54
++            Z" />
++</vector>
+diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_download.xml b/composeApp/src/androidMain/res/drawable/ic_widget_download.xml
+new file mode 100644
+index 0000000..bb7e510
+--- /dev/null
++++ b/composeApp/src/androidMain/res/drawable/ic_widget_download.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#FFFFFF"
++        android:pathData="M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z" />
++</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_library.xml b/composeApp/src/androidMain/res/drawable/ic_widget_library.xml
 new file mode 100644
-index 0000000..b25e3fd
+index 0000000..39c37a3
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_library.xml
 @@ -0,0 +1,10 @@
@@ -713,12 +972,12 @@ index 0000000..b25e3fd
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +    <path
-+        android:fillColor="#00B4D8"
++        android:fillColor="#FFFFFF"
 +        android:pathData="M4,6H2v14c0,1.1 0.9,2 2,2h14v-2H4V6zm16,-4H8c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V4c0,-1.1 -0.9,-2 -2,-2zm0,14H8V4h12v12z" />
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml b/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml
 new file mode 100644
-index 0000000..84a0976
+index 0000000..2a3db77
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml
 @@ -0,0 +1,10 @@
@@ -729,7 +988,7 @@ index 0000000..84a0976
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +    <path
-+        android:fillColor="#00B4D8"
++        android:fillColor="#FFFFFF"
 +        android:pathData="M21,6h-7.58l3.29,-3.29L16,2l-4,4h-0.03l-4,-4L6.29,2.71 9.58,6H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.9 2,-2V8c0,-1.1 -0.9,-2 -2,-2zm0,14H3V8h18v12z" />
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_play.xml b/composeApp/src/androidMain/res/drawable/ic_widget_play.xml
@@ -766,7 +1025,7 @@ index 0000000..e892e8a
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_search.xml b/composeApp/src/androidMain/res/drawable/ic_widget_search.xml
 new file mode 100644
-index 0000000..4663ed7
+index 0000000..85a5128
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_search.xml
 @@ -0,0 +1,10 @@
@@ -777,23 +1036,23 @@ index 0000000..4663ed7
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +    <path
-+        android:fillColor="#00B4D8"
++        android:fillColor="#FFFFFF"
 +        android:pathData="M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zm-6,0C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z" />
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_background.xml b/composeApp/src/androidMain/res/drawable/widget_background.xml
 new file mode 100644
-index 0000000..0af620f
+index 0000000..0e03a1f
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_background.xml
 @@ -0,0 +1,9 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<shape xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:shape="rectangle">
-+    <solid android:color="#0E121B" />
++    <solid android:color="#1C1C1E" />
 +    <stroke
 +        android:width="1dp"
-+        android:color="#222938" />
-+    <corners android:radius="16dp" />
++        android:color="#2C2C2E" />
++    <corners android:radius="22dp" />
 +</shape>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_button_bg.xml b/composeApp/src/androidMain/res/drawable/widget_button_bg.xml
 new file mode 100644
@@ -809,16 +1068,35 @@ index 0000000..54df0a8
 +</shape>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_card_bg.xml b/composeApp/src/androidMain/res/drawable/widget_card_bg.xml
 new file mode 100644
-index 0000000..24ba998
+index 0000000..7c7677b
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_card_bg.xml
 @@ -0,0 +1,6 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<shape xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:shape="rectangle">
-+    <solid android:color="#161C28" />
-+    <corners android:radius="8dp" />
++    <solid android:color="#26262A" />
++    <corners android:radius="12dp" />
 +</shape>
+diff --git a/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml b/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml
+new file mode 100644
+index 0000000..057c607
+--- /dev/null
++++ b/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<ripple xmlns:android="http://schemas.android.com/apk/res/android"
++    android:color="#40FFFFFF">
++    <item>
++        <shape android:shape="rectangle">
++            <solid android:color="#2C2C2E" />
++            <stroke
++                android:width="1dp"
++                android:color="#3A3A3C" />
++            <corners android:radius="16dp" />
++        </shape>
++    </item>
++</ripple>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_progress_bar.xml b/composeApp/src/androidMain/res/drawable/widget_progress_bar.xml
 new file mode 100644
 index 0000000..5889f09
@@ -844,10 +1122,10 @@ index 0000000..5889f09
 +</layer-list>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
 new file mode 100644
-index 0000000..99893dc
+index 0000000..608614d
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,127 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:layout_width="match_parent"
@@ -870,10 +1148,10 @@ index 0000000..99893dc
 +        android:gravity="center_vertical"
 +        android:orientation="horizontal">
 +
-+        <!-- Miniatura Cover -->
++        <!-- Miniatura Cover 16:9 -->
 +        <FrameLayout
-+            android:layout_width="44dp"
-+            android:layout_height="44dp"
++            android:layout_width="60dp"
++            android:layout_height="36dp"
 +            android:background="@drawable/widget_card_bg">
 +
 +            <ImageView
@@ -882,19 +1160,13 @@ index 0000000..99893dc
 +                android:layout_height="match_parent"
 +                android:scaleType="centerCrop"
 +                android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+            <ImageView
-+                android:layout_width="20dp"
-+                android:layout_height="20dp"
-+                android:layout_gravity="center"
-+                android:src="@drawable/ic_widget_play" />
 +        </FrameLayout>
 +
-+        <!-- Titoli e Progresso -->
++        <!-- Titoli -->
 +        <LinearLayout
 +            android:layout_width="0dp"
 +            android:layout_height="wrap_content"
-+            android:layout_marginStart="10dp"
++            android:layout_marginStart="8dp"
 +            android:layout_weight="1"
 +            android:orientation="vertical">
 +
@@ -904,7 +1176,373 @@ index 0000000..99893dc
 +                android:layout_height="wrap_content"
 +                android:ellipsize="end"
 +                android:maxLines="1"
-+                android:text="Nuvio"
++                android:text="Nuvio Plus"
++                android:textColor="#FFFFFF"
++                android:textSize="12sp"
++                android:textStyle="bold" />
++
++            <TextView
++                android:id="@+id/subtitle_1"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="1dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:text="Continua a guardare"
++                android:textColor="#8E8E93"
++                android:textSize="10sp" />
++        </LinearLayout>
++    </LinearLayout>
++
++    <!-- Separatore verticale -->
++    <View
++        android:layout_width="1dp"
++        android:layout_height="28dp"
++        android:layout_marginStart="6dp"
++        android:layout_marginEnd="6dp"
++        android:background="#2C2C2E" />
++
++    <!-- Sezione Scorciatoie: Cerca, Live TV, Libreria, Offline -->
++    <LinearLayout
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:gravity="center_vertical"
++        android:orientation="horizontal">
++
++        <ImageButton
++            android:id="@+id/btn_search"
++            android:layout_width="32dp"
++            android:layout_height="32dp"
++            android:background="@drawable/widget_nav_button_bg"
++            android:contentDescription="@string/widget_nav_search"
++            android:padding="6dp"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_search" />
++
++        <ImageButton
++            android:id="@+id/btn_livetv"
++            android:layout_width="32dp"
++            android:layout_height="32dp"
++            android:layout_marginStart="4dp"
++            android:background="@drawable/widget_nav_button_bg"
++            android:contentDescription="@string/widget_nav_livetv"
++            android:padding="6dp"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_livetv" />
++
++        <ImageButton
++            android:id="@+id/btn_library"
++            android:layout_width="32dp"
++            android:layout_height="32dp"
++            android:layout_marginStart="4dp"
++            android:background="@drawable/widget_nav_button_bg"
++            android:contentDescription="@string/widget_nav_library"
++            android:padding="6dp"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_library" />
++
++        <ImageButton
++            android:id="@+id/btn_offline"
++            android:layout_width="32dp"
++            android:layout_height="32dp"
++            android:layout_marginStart="4dp"
++            android:background="@drawable/widget_nav_button_bg"
++            android:contentDescription="@string/widget_nav_offline"
++            android:padding="6dp"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_download" />
++    </LinearLayout>
++</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
+new file mode 100644
+index 0000000..9971003
+--- /dev/null
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
+@@ -0,0 +1,204 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/widget_background"
++    android:orientation="vertical"
++    android:paddingStart="14dp"
++    android:paddingTop="12dp"
++    android:paddingEnd="14dp"
++    android:paddingBottom="12dp">
++
++    <!-- Sezione Superiore: In primo piano (Stile Apple TV) -->
++    <LinearLayout
++        android:id="@+id/slot_1"
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1.2"
++        android:clickable="true"
++        android:orientation="vertical">
++
++        <!-- Header superiore: Logo Nuvio in alto a destra -->
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:gravity="end|center_vertical"
++            android:orientation="horizontal">
++
++            <ImageView
++                android:layout_width="13dp"
++                android:layout_height="13dp"
++                android:contentDescription="Nuvio"
++                android:src="@drawable/ic_widget_brand_logo" />
++
++            <TextView
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_marginStart="3dp"
++                android:letterSpacing="-0.02"
++                android:text="nuvio"
++                android:textColor="#D9FFFFFF"
++                android:textSize="12sp"
++                android:textStyle="bold" />
++        </LinearLayout>
++
++        <FrameLayout
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_marginTop="6dp"
++            android:layout_weight="1"
++            android:background="@drawable/widget_card_bg">
++
++            <ImageView
++                android:id="@+id/poster_1"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:scaleType="centerCrop"
++                android:src="@drawable/ic_widget_poster_placeholder" />
++        </FrameLayout>
++
++        <TextView
++            android:id="@+id/title_1"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="5dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="Nuvio Plus"
++            android:textColor="#FFFFFF"
++            android:textSize="14sp"
++            android:textStyle="bold" />
++
++        <TextView
++            android:id="@+id/subtitle_1"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="1dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="CONTINUA"
++            android:textColor="#8E8E93"
++            android:textSize="11sp" />
++    </LinearLayout>
++
++    <!-- Separatore discreto -->
++    <View
++        android:layout_width="match_parent"
++        android:layout_height="1dp"
++        android:layout_marginTop="8dp"
++        android:layout_marginBottom="8dp"
++        android:background="#22262E" />
++
++    <!-- Sezione Inferiore: Lista a 2 righe con miniature orizzontali -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1.0"
++        android:orientation="vertical">
++
++        <!-- SLOT 2 -->
++        <LinearLayout
++            android:id="@+id/slot_2"
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_weight="1"
++            android:clickable="true"
++            android:gravity="center_vertical"
++            android:orientation="horizontal">
++
++            <FrameLayout
++                android:layout_width="72dp"
++                android:layout_height="42dp"
++                android:background="@drawable/widget_card_bg">
++
++                <ImageView
++                    android:id="@+id/poster_2"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:src="@drawable/ic_widget_poster_placeholder" />
++            </FrameLayout>
++
++            <LinearLayout
++                android:layout_width="0dp"
++                android:layout_height="wrap_content"
++                android:layout_marginStart="10dp"
++                android:layout_weight="1"
++                android:orientation="vertical">
++
++                <TextView
++                    android:id="@+id/title_2"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:ellipsize="end"
++                    android:maxLines="1"
++                    android:textColor="#FFFFFF"
++                    android:textSize="13sp"
++                    android:textStyle="bold" />
++
++                <TextView
++                    android:id="@+id/subtitle_2"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="1dp"
++                    android:ellipsize="end"
++                    android:maxLines="1"
++                    android:textColor="#8E8E93"
++                    android:textSize="11sp" />
++            </LinearLayout>
++        </LinearLayout>
++
++        <!-- SLOT 3 -->
++        <LinearLayout
++            android:id="@+id/slot_3"
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_marginTop="6dp"
++            android:layout_weight="1"
++            android:clickable="true"
++            android:gravity="center_vertical"
++            android:orientation="horizontal">
++
++            <FrameLayout
++                android:layout_width="72dp"
++                android:layout_height="42dp"
++                android:background="@drawable/widget_card_bg">
++
++                <ImageView
++                    android:id="@+id/poster_3"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:src="@drawable/ic_widget_poster_placeholder" />
++            </FrameLayout>
++
++            <LinearLayout
++                android:layout_width="0dp"
++                android:layout_height="wrap_content"
++                android:layout_marginStart="10dp"
++                android:layout_weight="1"
++                android:orientation="vertical">
++
++                <TextView
++                    android:id="@+id/title_3"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:ellipsize="end"
++                    android:maxLines="1"
++                    android:textColor="#FFFFFF"
++                    android:textSize="13sp"
++                    android:textStyle="bold" />
++
++                <TextView
++                    android:id="@+id/subtitle_3"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="1dp"
++                    android:ellipsize="end"
++                    android:maxLines="1"
++                    android:textColor="#8E8E93"
++                    android:textSize="11sp" />
++            </LinearLayout>
++        </LinearLayout>
++    </LinearLayout>
++</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
+new file mode 100644
+index 0000000..07cac3f
+--- /dev/null
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
+@@ -0,0 +1,184 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/widget_background"
++    android:orientation="vertical"
++    android:paddingStart="14dp"
++    android:paddingTop="10dp"
++    android:paddingEnd="14dp"
++    android:paddingBottom="12dp">
++
++    <!-- Header superiore: Logo Nuvio in alto a destra -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:gravity="end|center_vertical"
++        android:orientation="horizontal">
++
++        <ImageView
++            android:layout_width="13dp"
++            android:layout_height="13dp"
++            android:contentDescription="Nuvio"
++            android:src="@drawable/ic_widget_brand_logo" />
++
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="3dp"
++            android:letterSpacing="-0.02"
++            android:text="nuvio"
++            android:textColor="#D9FFFFFF"
++            android:textSize="12sp"
++            android:textStyle="bold" />
++    </LinearLayout>
++
++    <!-- Riga Contenuti: 2 card affiancate (Stile Apple TV) -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_marginTop="6dp"
++        android:layout_weight="1"
++        android:orientation="horizontal">
++
++        <!-- SLOT 1 -->
++        <LinearLayout
++            android:id="@+id/slot_1"
++            android:layout_width="0dp"
++            android:layout_height="match_parent"
++            android:layout_weight="1"
++            android:clickable="true"
++            android:orientation="vertical">
++
++            <FrameLayout
++                android:layout_width="match_parent"
++                android:layout_height="0dp"
++                android:layout_weight="1"
++                android:background="@drawable/widget_card_bg">
++
++                <ImageView
++                    android:id="@+id/poster_1"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:src="@drawable/ic_widget_poster_placeholder" />
++            </FrameLayout>
++
++            <TextView
++                android:id="@+id/title_1"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="5dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:text="Nuvio Plus"
 +                android:textColor="#FFFFFF"
 +                android:textSize="13sp"
 +                android:textStyle="bold" />
@@ -917,75 +1555,434 @@ index 0000000..99893dc
 +                android:ellipsize="end"
 +                android:maxLines="1"
 +                android:text="Continua a guardare"
-+                android:textColor="#94A3B8"
++                android:textColor="#8E8E93"
 +                android:textSize="11sp" />
++        </LinearLayout>
 +
-+            <ProgressBar
-+                android:id="@+id/progress_1"
-+                style="?android:attr/progressBarStyleHorizontal"
++        <!-- SLOT 2 -->
++        <LinearLayout
++            android:id="@+id/slot_2"
++            android:layout_width="0dp"
++            android:layout_height="match_parent"
++            android:layout_marginStart="10dp"
++            android:layout_weight="1"
++            android:clickable="true"
++            android:orientation="vertical">
++
++            <FrameLayout
 +                android:layout_width="match_parent"
-+                android:layout_height="4dp"
-+                android:layout_marginTop="4dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
++                android:layout_height="0dp"
++                android:layout_weight="1"
++                android:background="@drawable/widget_card_bg">
++
++                <ImageView
++                    android:id="@+id/poster_2"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:src="@drawable/ic_widget_poster_placeholder" />
++            </FrameLayout>
++
++            <TextView
++                android:id="@+id/title_2"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="5dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:textColor="#FFFFFF"
++                android:textSize="13sp"
++                android:textStyle="bold" />
++
++            <TextView
++                android:id="@+id/subtitle_2"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="1dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:textColor="#8E8E93"
++                android:textSize="11sp" />
++        </LinearLayout>
++
++        <!-- SLOT 3 (Opzionale su schermi larghi/tablet) -->
++        <LinearLayout
++            android:id="@+id/slot_3"
++            android:layout_width="0dp"
++            android:layout_height="match_parent"
++            android:layout_marginStart="10dp"
++            android:layout_weight="1"
++            android:clickable="true"
++            android:orientation="vertical"
++            android:visibility="gone">
++
++            <FrameLayout
++                android:layout_width="match_parent"
++                android:layout_height="0dp"
++                android:layout_weight="1"
++                android:background="@drawable/widget_card_bg">
++
++                <ImageView
++                    android:id="@+id/poster_3"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:src="@drawable/ic_widget_poster_placeholder" />
++            </FrameLayout>
++
++            <TextView
++                android:id="@+id/title_3"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="5dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:textColor="#FFFFFF"
++                android:textSize="13sp"
++                android:textStyle="bold" />
++
++            <TextView
++                android:id="@+id/subtitle_3"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="1dp"
++                android:ellipsize="end"
++                android:maxLines="1"
++                android:textColor="#8E8E93"
++                android:textSize="11sp" />
 +        </LinearLayout>
 +    </LinearLayout>
++</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml
+new file mode 100644
+index 0000000..8cd85b3
+--- /dev/null
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml
+@@ -0,0 +1,136 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/widget_background"
++    android:gravity="center_vertical"
++    android:orientation="horizontal"
++    android:paddingStart="6dp"
++    android:paddingTop="4dp"
++    android:paddingEnd="6dp"
++    android:paddingBottom="4dp">
 +
-+    <!-- Separatore verticale -->
-+    <View
-+        android:layout_width="1dp"
-+        android:layout_height="32dp"
-+        android:layout_marginStart="8dp"
-+        android:layout_marginEnd="8dp"
-+        android:background="#222938" />
-+
-+    <!-- Sezione Scorciatoie: Libreria, Live TV, Cerca -->
++    <!-- 1. Tasto Cerca -->
 +    <LinearLayout
-+        android:layout_width="wrap_content"
-+        android:layout_height="wrap_content"
-+        android:gravity="center_vertical"
-+        android:orientation="horizontal">
++        android:id="@+id/btn_nav_search"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="3dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true"
++        android:gravity="center"
++        android:orientation="vertical">
 +
-+        <ImageButton
-+            android:id="@+id/btn_library"
-+            android:layout_width="36dp"
-+            android:layout_height="36dp"
-+            android:background="@drawable/widget_button_bg"
-+            android:contentDescription="Libreria"
-+            android:padding="7dp"
++        <ImageView
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++            android:contentDescription="@string/widget_nav_search"
 +            android:scaleType="fitCenter"
-+            android:src="@drawable/ic_widget_library" />
++            android:src="@drawable/ic_widget_search" />
 +
-+        <ImageButton
-+            android:id="@+id/btn_livetv"
-+            android:layout_width="36dp"
-+            android:layout_height="36dp"
-+            android:layout_marginStart="6dp"
-+            android:background="@drawable/widget_button_bg"
-+            android:contentDescription="Live TV"
-+            android:padding="7dp"
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="@string/widget_nav_search"
++            android:textColor="#FFFFFF"
++            android:textSize="10sp" />
++    </LinearLayout>
++
++    <!-- 2. Tasto Live TV -->
++    <LinearLayout
++        android:id="@+id/btn_nav_livetv"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="3dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true"
++        android:gravity="center"
++        android:orientation="vertical">
++
++        <ImageView
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++            android:contentDescription="@string/widget_nav_livetv"
 +            android:scaleType="fitCenter"
 +            android:src="@drawable/ic_widget_livetv" />
 +
-+        <ImageButton
-+            android:id="@+id/btn_search"
-+            android:layout_width="36dp"
-+            android:layout_height="36dp"
-+            android:layout_marginStart="6dp"
-+            android:background="@drawable/widget_button_bg"
-+            android:contentDescription="Cerca"
-+            android:padding="7dp"
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="@string/widget_nav_livetv"
++            android:textColor="#FFFFFF"
++            android:textSize="10sp" />
++    </LinearLayout>
++
++    <!-- 3. Tasto Libreria -->
++    <LinearLayout
++        android:id="@+id/btn_nav_library"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="3dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true"
++        android:gravity="center"
++        android:orientation="vertical">
++
++        <ImageView
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++            android:contentDescription="@string/widget_nav_library"
 +            android:scaleType="fitCenter"
-+            android:src="@drawable/ic_widget_search" />
++            android:src="@drawable/ic_widget_library" />
++
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="@string/widget_nav_library"
++            android:textColor="#FFFFFF"
++            android:textSize="10sp" />
++    </LinearLayout>
++
++    <!-- 4. Tasto Offline (Download) -->
++    <LinearLayout
++        android:id="@+id/btn_nav_offline"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="3dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true"
++        android:gravity="center"
++        android:orientation="vertical">
++
++        <ImageView
++            android:layout_width="20dp"
++            android:layout_height="20dp"
++            android:contentDescription="@string/widget_nav_offline"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_download" />
++
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="2dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:text="@string/widget_nav_offline"
++            android:textColor="#FFFFFF"
++            android:textSize="10sp" />
 +    </LinearLayout>
 +</LinearLayout>
-diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml
 new file mode 100644
-index 0000000..99fecc7
+index 0000000..481cdc1
 --- /dev/null
-+++ b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
-@@ -0,0 +1,617 @@
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml
+@@ -0,0 +1,92 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/widget_background"
++    android:gravity="center_vertical"
++    android:orientation="horizontal"
++    android:paddingStart="8dp"
++    android:paddingTop="4dp"
++    android:paddingEnd="8dp"
++    android:paddingBottom="4dp">
++
++    <!-- 1. Tasto Cerca -->
++    <FrameLayout
++        android:id="@+id/btn_nav_search"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="2dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true">
++
++        <ImageView
++            android:layout_width="22dp"
++            android:layout_height="22dp"
++            android:layout_gravity="center"
++            android:contentDescription="@string/widget_nav_search"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_search" />
++    </FrameLayout>
++
++    <!-- 2. Tasto Live TV -->
++    <FrameLayout
++        android:id="@+id/btn_nav_livetv"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="2dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true">
++
++        <ImageView
++            android:layout_width="22dp"
++            android:layout_height="22dp"
++            android:layout_gravity="center"
++            android:contentDescription="@string/widget_nav_livetv"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_livetv" />
++    </FrameLayout>
++
++    <!-- 3. Tasto Libreria -->
++    <FrameLayout
++        android:id="@+id/btn_nav_library"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="2dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true">
++
++        <ImageView
++            android:layout_width="22dp"
++            android:layout_height="22dp"
++            android:layout_gravity="center"
++            android:contentDescription="@string/widget_nav_library"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_library" />
++    </FrameLayout>
++
++    <!-- 4. Tasto Offline (Download) -->
++    <FrameLayout
++        android:id="@+id/btn_nav_offline"
++        android:layout_width="0dp"
++        android:layout_height="match_parent"
++        android:layout_margin="2dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_nav_button_bg"
++        android:clickable="true"
++        android:focusable="true">
++
++        <ImageView
++            android:layout_width="22dp"
++            android:layout_height="22dp"
++            android:layout_gravity="center"
++            android:contentDescription="@string/widget_nav_offline"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_download" />
++    </FrameLayout>
++</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
+new file mode 100644
+index 0000000..0843171
+--- /dev/null
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
+@@ -0,0 +1,78 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/item_container_1"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="@drawable/widget_background"
++    android:clickable="true"
++    android:orientation="vertical"
++    android:paddingStart="12dp"
++    android:paddingTop="10dp"
++    android:paddingEnd="12dp"
++    android:paddingBottom="12dp">
++
++    <!-- Header superiore: Logo Nuvio in alto a destra -->
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:gravity="end|center_vertical"
++        android:orientation="horizontal">
++
++        <ImageView
++            android:layout_width="13dp"
++            android:layout_height="13dp"
++            android:contentDescription="Nuvio"
++            android:src="@drawable/ic_widget_brand_logo" />
++
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="3dp"
++            android:letterSpacing="-0.02"
++            android:text="nuvio"
++            android:textColor="#D9FFFFFF"
++            android:textSize="12sp"
++            android:textStyle="bold" />
++    </LinearLayout>
++
++    <!-- Card 16:9 Landscape -->
++    <FrameLayout
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_marginTop="6dp"
++        android:layout_weight="1"
++        android:background="@drawable/widget_card_bg">
++
++        <ImageView
++            android:id="@+id/poster_1"
++            android:layout_width="match_parent"
++            android:layout_height="match_parent"
++            android:scaleType="centerCrop"
++            android:src="@drawable/ic_widget_poster_placeholder" />
++    </FrameLayout>
++
++    <!-- Titolo Contenuto (es. Star City) -->
++    <TextView
++        android:id="@+id/title_1"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="6dp"
++        android:ellipsize="end"
++        android:maxLines="1"
++        android:text="Nuvio Plus"
++        android:textColor="#FFFFFF"
++        android:textSize="13sp"
++        android:textStyle="bold" />
++
++    <!-- Sottotitolo (es. S1, E2) -->
++    <TextView
++        android:id="@+id/subtitle_1"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="1dp"
++        android:ellipsize="end"
++        android:maxLines="1"
++        android:text="Continua a guardare"
++        android:textColor="#8E8E93"
++        android:textSize="11sp" />
++</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
+new file mode 100644
+index 0000000..20f9f2b
+--- /dev/null
++++ b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
+@@ -0,0 +1,200 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:layout_width="match_parent"
@@ -997,1013 +1994,68 @@ index 0000000..99fecc7
 +    android:paddingEnd="12dp"
 +    android:paddingBottom="10dp">
 +
-+    <!-- Header: Brand + Sezione + Scorciatoie -->
++    <!-- Header Google TV Style: Cerca a sinistra, Logo Nuvio al centro, Live TV ad azione a destra -->
 +    <RelativeLayout
 +        android:layout_width="match_parent"
-+        android:layout_height="32dp">
-+
-+        <TextView
-+            android:layout_width="wrap_content"
-+            android:layout_height="wrap_content"
-+            android:layout_alignParentStart="true"
-+            android:layout_centerVertical="true"
-+            android:text="NUVIO ├ö├ç├│ CONTINUA A GUARDARE"
-+            android:textColor="#FFFFFF"
-+            android:textSize="11sp"
-+            android:textStyle="bold" />
-+
-+        <LinearLayout
-+            android:layout_width="wrap_content"
-+            android:layout_height="match_parent"
-+            android:layout_alignParentEnd="true"
-+            android:gravity="center_vertical"
-+            android:orientation="horizontal">
-+
-+            <ImageButton
-+                android:id="@+id/btn_library"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Libreria"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_library" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_livetv"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Live TV"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_livetv" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_search"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Cerca"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_search" />
-+        </LinearLayout>
-+    </RelativeLayout>
-+
-+    <!-- RIGA 1 (Slot 1..5) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="8dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <!-- SLOT 1 -->
-+        <LinearLayout
-+            android:id="@+id/slot_1"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_1"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_1"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_1"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 2 -->
-+        <LinearLayout
-+            android:id="@+id/slot_2"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_2"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_2"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_2"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 3 -->
-+        <LinearLayout
-+            android:id="@+id/slot_3"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_3"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_3"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_3"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 4 (Opzionale su 5 col) -->
-+        <LinearLayout
-+            android:id="@+id/slot_4"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_4"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_4"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_4"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 5 (Opzionale su 5 col) -->
-+        <LinearLayout
-+            android:id="@+id/slot_5"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_5"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_5"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_5"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+    </LinearLayout>
-+
-+    <!-- RIGA 2 (Slot 6..10) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="6dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <!-- SLOT 6 -->
-+        <LinearLayout
-+            android:id="@+id/slot_6"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_6"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_6"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_6"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 7 -->
-+        <LinearLayout
-+            android:id="@+id/slot_7"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_7"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_7"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_7"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 8 -->
-+        <LinearLayout
-+            android:id="@+id/slot_8"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_8"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_8"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_8"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 9 (Opzionale su 5 col) -->
-+        <LinearLayout
-+            android:id="@+id/slot_9"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_9"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_9"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_9"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 10 (Opzionale su 5 col) -->
-+        <LinearLayout
-+            android:id="@+id/slot_10"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_10"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="20dp"
-+                    android:layout_height="20dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_10"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_10"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="10sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+    </LinearLayout>
-+</LinearLayout>
-diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
-new file mode 100644
-index 0000000..4f6935e
---- /dev/null
-+++ b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
-@@ -0,0 +1,332 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-+    android:layout_width="match_parent"
-+    android:layout_height="match_parent"
-+    android:background="@drawable/widget_background"
-+    android:orientation="vertical"
-+    android:paddingStart="12dp"
-+    android:paddingTop="8dp"
-+    android:paddingEnd="12dp"
-+    android:paddingBottom="8dp">
-+
-+    <!-- Header: Titolo sezione + Scorciatoie -->
-+    <RelativeLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="32dp">
-+
-+        <TextView
-+            android:layout_width="wrap_content"
-+            android:layout_height="wrap_content"
-+            android:layout_alignParentStart="true"
-+            android:layout_centerVertical="true"
-+            android:text="CONTINUA A GUARDARE"
-+            android:textColor="#94A3B8"
-+            android:textSize="10sp"
-+            android:textStyle="bold" />
-+
-+        <LinearLayout
-+            android:layout_width="wrap_content"
-+            android:layout_height="match_parent"
-+            android:layout_alignParentEnd="true"
-+            android:gravity="center_vertical"
-+            android:orientation="horizontal">
-+
-+            <ImageButton
-+                android:id="@+id/btn_library"
-+                android:layout_width="28dp"
-+                android:layout_height="28dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Libreria"
-+                android:padding="5dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_library" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_livetv"
-+                android:layout_width="28dp"
-+                android:layout_height="28dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Live TV"
-+                android:padding="5dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_livetv" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_search"
-+                android:layout_width="28dp"
-+                android:layout_height="28dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Cerca"
-+                android:padding="5dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_search" />
-+        </LinearLayout>
-+    </RelativeLayout>
-+
-+    <!-- Riga Contenuti (Slot 1, 2, 3, 4) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="6dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <!-- SLOT 1 -->
-+        <LinearLayout
-+            android:id="@+id/slot_1"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_1"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="22dp"
-+                    android:layout_height="22dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_1"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="3dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_1"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:layout_marginTop="2dp"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="11sp"
-+                android:textStyle="bold" />
-+
-+            <TextView
-+                android:id="@+id/subtitle_1"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#94A3B8"
-+                android:textSize="9sp" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 2 -->
-+        <LinearLayout
-+            android:id="@+id/slot_2"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="8dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_2"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="22dp"
-+                    android:layout_height="22dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_2"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="3dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_2"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:layout_marginTop="2dp"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="11sp"
-+                android:textStyle="bold" />
-+
-+            <TextView
-+                android:id="@+id/subtitle_2"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#94A3B8"
-+                android:textSize="9sp" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 3 -->
-+        <LinearLayout
-+            android:id="@+id/slot_3"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="8dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_3"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="22dp"
-+                    android:layout_height="22dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_3"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="3dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_3"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:layout_marginTop="2dp"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="11sp"
-+                android:textStyle="bold" />
-+
-+            <TextView
-+                android:id="@+id/subtitle_3"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#94A3B8"
-+                android:textSize="9sp" />
-+        </LinearLayout>
-+
-+        <!-- SLOT 4 (Attivo su 5 colonne) -->
-+        <LinearLayout
-+            android:id="@+id/slot_4"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="8dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+
-+                <ImageView
-+                    android:id="@+id/poster_4"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+                <ImageView
-+                    android:layout_width="22dp"
-+                    android:layout_height="22dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+
-+            <ProgressBar
-+                android:id="@+id/progress_4"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="3dp"
-+                android:layout_marginTop="3dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+
-+            <TextView
-+                android:id="@+id/title_4"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:layout_marginTop="2dp"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="11sp"
-+                android:textStyle="bold" />
-+
-+            <TextView
-+                android:id="@+id/subtitle_4"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#94A3B8"
-+                android:textSize="9sp" />
-+        </LinearLayout>
-+    </LinearLayout>
-+</LinearLayout>
-diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
-new file mode 100644
-index 0000000..b09ede2
---- /dev/null
-+++ b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
-@@ -0,0 +1,114 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-+    android:layout_width="match_parent"
-+    android:layout_height="match_parent"
-+    android:background="@drawable/widget_background"
-+    android:orientation="vertical"
-+    android:padding="10dp">
-+
-+    <!-- Header Scorciatoie: Libreria, Live TV, Cerca -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="wrap_content"
-+        android:gravity="center"
-+        android:orientation="horizontal">
-+
-+        <ImageButton
-+            android:id="@+id/btn_library"
-+            android:layout_width="32dp"
-+            android:layout_height="32dp"
-+            android:background="@drawable/widget_button_bg"
-+            android:contentDescription="Libreria"
-+            android:padding="6dp"
-+            android:scaleType="fitCenter"
-+            android:src="@drawable/ic_widget_library" />
-+
-+        <ImageButton
-+            android:id="@+id/btn_livetv"
-+            android:layout_width="32dp"
-+            android:layout_height="32dp"
-+            android:layout_marginStart="8dp"
-+            android:background="@drawable/widget_button_bg"
-+            android:contentDescription="Live TV"
-+            android:padding="6dp"
-+            android:scaleType="fitCenter"
-+            android:src="@drawable/ic_widget_livetv" />
++        android:layout_height="28dp">
 +
 +        <ImageButton
 +            android:id="@+id/btn_search"
-+            android:layout_width="32dp"
-+            android:layout_height="32dp"
-+            android:layout_marginStart="8dp"
-+            android:background="@drawable/widget_button_bg"
++            android:layout_width="26dp"
++            android:layout_height="26dp"
++            android:layout_alignParentStart="true"
++            android:layout_centerVertical="true"
++            android:background="?android:attr/selectableItemBackgroundBorderless"
 +            android:contentDescription="Cerca"
-+            android:padding="6dp"
++            android:padding="3dp"
 +            android:scaleType="fitCenter"
 +            android:src="@drawable/ic_widget_search" />
-+    </LinearLayout>
 +
-+    <!-- Card Singola Verticale -->
++        <LinearLayout
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_centerInParent="true"
++            android:gravity="center"
++            android:orientation="horizontal">
++
++            <ImageView
++                android:layout_width="14dp"
++                android:layout_height="14dp"
++                android:contentDescription="Nuvio"
++                android:src="@drawable/ic_widget_brand_logo" />
++
++            <TextView
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_marginStart="4dp"
++                android:letterSpacing="-0.02"
++                android:text="nuvio"
++                android:textColor="#FFFFFF"
++                android:textSize="15sp"
++                android:textStyle="bold" />
++        </LinearLayout>
++
++        <ImageButton
++            android:id="@+id/btn_livetv"
++            android:layout_width="26dp"
++            android:layout_height="26dp"
++            android:layout_alignParentEnd="true"
++            android:layout_centerVertical="true"
++            android:background="?android:attr/selectableItemBackgroundBorderless"
++            android:contentDescription="Live TV"
++            android:padding="3dp"
++            android:scaleType="fitCenter"
++            android:src="@drawable/ic_widget_livetv" />
++    </RelativeLayout>
++
++    <!-- SLOT 1 (Superiore) -->
 +    <LinearLayout
-+        android:id="@+id/item_container_1"
++        android:id="@+id/slot_1"
 +        android:layout_width="match_parent"
 +        android:layout_height="0dp"
 +        android:layout_marginTop="8dp"
 +        android:layout_weight="1"
 +        android:clickable="true"
-+        android:gravity="center"
 +        android:orientation="vertical">
 +
 +        <FrameLayout
@@ -2018,23 +2070,7 @@ index 0000000..b09ede2
 +                android:layout_height="match_parent"
 +                android:scaleType="centerCrop"
 +                android:src="@drawable/ic_widget_poster_placeholder" />
-+
-+            <ImageView
-+                android:layout_width="28dp"
-+                android:layout_height="28dp"
-+                android:layout_gravity="center"
-+                android:src="@drawable/ic_widget_play" />
 +        </FrameLayout>
-+
-+        <ProgressBar
-+            android:id="@+id/progress_1"
-+            style="?android:attr/progressBarStyleHorizontal"
-+            android:layout_width="match_parent"
-+            android:layout_height="3dp"
-+            android:layout_marginTop="4dp"
-+            android:max="100"
-+            android:progress="0"
-+            android:progressDrawable="@drawable/widget_progress_bar" />
 +
 +        <TextView
 +            android:id="@+id/title_1"
@@ -2042,11 +2078,9 @@ index 0000000..b09ede2
 +            android:layout_height="wrap_content"
 +            android:layout_marginTop="3dp"
 +            android:ellipsize="end"
-+            android:gravity="center"
 +            android:maxLines="1"
-+            android:text="Nuvio"
 +            android:textColor="#FFFFFF"
-+            android:textSize="11sp"
++            android:textSize="12sp"
 +            android:textStyle="bold" />
 +
 +        <TextView
@@ -2054,841 +2088,156 @@ index 0000000..b09ede2
 +            android:layout_width="match_parent"
 +            android:layout_height="wrap_content"
 +            android:ellipsize="end"
-+            android:gravity="center"
 +            android:maxLines="1"
-+            android:text="Continua"
-+            android:textColor="#94A3B8"
++            android:textColor="#8E8E93"
++            android:textSize="10sp" />
++    </LinearLayout>
++
++    <!-- SLOT 2 (Centrale) -->
++    <LinearLayout
++        android:id="@+id/slot_2"
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_marginTop="6dp"
++        android:layout_weight="1"
++        android:clickable="true"
++        android:orientation="vertical">
++
++        <FrameLayout
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_weight="1"
++            android:background="@drawable/widget_card_bg">
++
++            <ImageView
++                android:id="@+id/poster_2"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:scaleType="centerCrop"
++                android:src="@drawable/ic_widget_poster_placeholder" />
++        </FrameLayout>
++
++        <TextView
++            android:id="@+id/title_2"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="3dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="#FFFFFF"
++            android:textSize="12sp"
++            android:textStyle="bold" />
++
++        <TextView
++            android:id="@+id/subtitle_2"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="#8E8E93"
++            android:textSize="10sp" />
++    </LinearLayout>
++
++    <!-- SLOT 3 (Inferiore) -->
++    <LinearLayout
++        android:id="@+id/slot_3"
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_marginTop="6dp"
++        android:layout_weight="1"
++        android:clickable="true"
++        android:orientation="vertical">
++
++        <FrameLayout
++            android:layout_width="match_parent"
++            android:layout_height="0dp"
++            android:layout_weight="1"
++            android:background="@drawable/widget_card_bg">
++
++            <ImageView
++                android:id="@+id/poster_3"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:scaleType="centerCrop"
++                android:src="@drawable/ic_widget_poster_placeholder" />
++        </FrameLayout>
++
++        <TextView
++            android:id="@+id/title_3"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="3dp"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="#FFFFFF"
++            android:textSize="12sp"
++            android:textStyle="bold" />
++
++        <TextView
++            android:id="@+id/subtitle_3"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:ellipsize="end"
++            android:maxLines="1"
++            android:textColor="#8E8E93"
 +            android:textSize="10sp" />
 +    </LinearLayout>
 +</LinearLayout>
-diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
-new file mode 100644
-index 0000000..268caf8
---- /dev/null
-+++ b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
-@@ -0,0 +1,802 @@
-+<?xml version="1.0" encoding="utf-8"?>
-+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-+    android:layout_width="match_parent"
-+    android:layout_height="match_parent"
-+    android:background="@drawable/widget_background"
-+    android:orientation="vertical"
-+    android:paddingStart="12dp"
-+    android:paddingTop="10dp"
-+    android:paddingEnd="12dp"
-+    android:paddingBottom="10dp">
-+
-+    <!-- Header: Brand + Sezione + Scorciatoie -->
-+    <RelativeLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="32dp">
-+
-+        <TextView
-+            android:layout_width="wrap_content"
-+            android:layout_height="wrap_content"
-+            android:layout_alignParentStart="true"
-+            android:layout_centerVertical="true"
-+            android:text="NUVIO ├ö├ç├│ CONTINUA A GUARDARE"
-+            android:textColor="#FFFFFF"
-+            android:textSize="11sp"
-+            android:textStyle="bold" />
-+
-+        <LinearLayout
-+            android:layout_width="wrap_content"
-+            android:layout_height="match_parent"
-+            android:layout_alignParentEnd="true"
-+            android:gravity="center_vertical"
-+            android:orientation="horizontal">
-+
-+            <ImageButton
-+                android:id="@+id/btn_library"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Libreria"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_library" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_livetv"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Live TV"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_livetv" />
-+
-+            <ImageButton
-+                android:id="@+id/btn_search"
-+                android:layout_width="30dp"
-+                android:layout_height="30dp"
-+                android:layout_marginStart="6dp"
-+                android:background="@drawable/widget_button_bg"
-+                android:contentDescription="Cerca"
-+                android:padding="6dp"
-+                android:scaleType="fitCenter"
-+                android:src="@drawable/ic_widget_search" />
-+        </LinearLayout>
-+    </RelativeLayout>
-+
-+    <!-- RIGA 1 (Slot 1..5) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="6dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <LinearLayout
-+            android:id="@+id/slot_1"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_1"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_1"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_1"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_2"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_2"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_2"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_2"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_3"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_3"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_3"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_3"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_4"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_4"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_4"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_4"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_5"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_5"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_5"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_5"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+    </LinearLayout>
-+
-+    <!-- RIGA 2 (Slot 6..10) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="6dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <LinearLayout
-+            android:id="@+id/slot_6"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_6"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_6"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_6"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_7"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_7"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_7"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_7"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_8"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_8"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_8"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_8"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_9"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_9"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_9"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_9"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_10"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_10"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_10"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_10"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+    </LinearLayout>
-+
-+    <!-- RIGA 3 (Slot 11..15) -->
-+    <LinearLayout
-+        android:layout_width="match_parent"
-+        android:layout_height="0dp"
-+        android:layout_marginTop="6dp"
-+        android:layout_weight="1"
-+        android:orientation="horizontal">
-+
-+        <LinearLayout
-+            android:id="@+id/slot_11"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_11"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_11"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_11"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_12"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_12"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_12"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_12"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_13"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_13"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_13"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_13"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_14"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_14"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_14"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_14"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+
-+        <LinearLayout
-+            android:id="@+id/slot_15"
-+            android:layout_width="0dp"
-+            android:layout_height="match_parent"
-+            android:layout_marginStart="6dp"
-+            android:layout_weight="1"
-+            android:clickable="true"
-+            android:gravity="center_horizontal"
-+            android:orientation="vertical"
-+            android:visibility="gone">
-+            <FrameLayout
-+                android:layout_width="match_parent"
-+                android:layout_height="0dp"
-+                android:layout_weight="1"
-+                android:background="@drawable/widget_card_bg">
-+                <ImageView
-+                    android:id="@+id/poster_15"
-+                    android:layout_width="match_parent"
-+                    android:layout_height="match_parent"
-+                    android:scaleType="centerCrop"
-+                    android:src="@drawable/ic_widget_poster_placeholder" />
-+                <ImageView
-+                    android:layout_width="18dp"
-+                    android:layout_height="18dp"
-+                    android:layout_gravity="center"
-+                    android:src="@drawable/ic_widget_play" />
-+            </FrameLayout>
-+            <ProgressBar
-+                android:id="@+id/progress_15"
-+                style="?android:attr/progressBarStyleHorizontal"
-+                android:layout_width="match_parent"
-+                android:layout_height="2dp"
-+                android:layout_marginTop="2dp"
-+                android:max="100"
-+                android:progress="0"
-+                android:progressDrawable="@drawable/widget_progress_bar" />
-+            <TextView
-+                android:id="@+id/title_15"
-+                android:layout_width="match_parent"
-+                android:layout_height="wrap_content"
-+                android:ellipsize="end"
-+                android:gravity="center_horizontal"
-+                android:maxLines="1"
-+                android:textColor="#FFFFFF"
-+                android:textSize="9sp"
-+                android:textStyle="bold" />
-+        </LinearLayout>
-+    </LinearLayout>
-+</LinearLayout>
+diff --git a/composeApp/src/androidMain/res/values/strings.xml b/composeApp/src/androidMain/res/values/strings.xml
+index 1a6cd81..b3cf4c0 100644
+--- a/composeApp/src/androidMain/res/values/strings.xml
++++ b/composeApp/src/androidMain/res/values/strings.xml
+@@ -1,3 +1,9 @@
+ <resources>
+     <string name="app_name">Nuvio Plus</string>
++    <string name="widget_continue_watching_name">Continua a guardare</string>
++    <string name="widget_navbar_name">Barra di navigazione</string>
++    <string name="widget_nav_search">Cerca</string>
++    <string name="widget_nav_livetv">Live TV</string>
++    <string name="widget_nav_library">Libreria</string>
++    <string name="widget_nav_offline">Offline</string>
+ </resources>
+\ No newline at end of file
 diff --git a/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml b/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml
 new file mode 100644
-index 0000000..6feed0a
+index 0000000..01c720d
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml
 @@ -0,0 +1,15 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-+    android:description="@string/app_name"
++    android:description="@string/widget_continue_watching_name"
 +    android:initialLayout="@layout/widget_nuvio_medium"
 +    android:minWidth="110dp"
-+    android:minHeight="45dp"
++    android:minHeight="110dp"
 +    android:minResizeWidth="110dp"
-+    android:minResizeHeight="45dp"
++    android:minResizeHeight="110dp"
 +    android:maxResizeWidth="750dp"
 +    android:maxResizeHeight="600dp"
 +    android:resizeMode="horizontal|vertical"
 +    android:targetCellWidth="4"
 +    android:targetCellHeight="2"
 +    android:updatePeriodMillis="1800000"
++    android:widgetCategory="home_screen" />
+diff --git a/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml b/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml
+new file mode 100644
+index 0000000..a323067
+--- /dev/null
++++ b/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
++    android:description="@string/widget_navbar_name"
++    android:initialLayout="@layout/widget_nuvio_navbar"
++    android:minWidth="140dp"
++    android:minHeight="40dp"
++    android:minResizeWidth="120dp"
++    android:minResizeHeight="40dp"
++    android:maxResizeHeight="80dp"
++    android:resizeMode="horizontal"
++    android:targetCellWidth="4"
++    android:targetCellHeight="1"
++    android:updatePeriodMillis="86400000"
 +    android:widgetCategory="home_screen" />
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 index 443cf0b..6895542 100644
