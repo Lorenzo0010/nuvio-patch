@@ -1,5 +1,5 @@
 diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
-index 3d00b858..4b90d61e 100644
+index 3d00b85..4b90d61 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
 @@ -37,8 +37,12 @@ val sentryOrg = envOrLocalProperty("SENTRY_ORG")
@@ -17,7 +17,7 @@ index 3d00b858..4b90d61e 100644
      ?.toIntOrNull()
      ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
 diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/AndroidManifest.xml
-index eb08c54d..e536c4da 100644
+index eb08c54..e536c4d 100644
 --- a/androidApp/src/main/AndroidManifest.xml
 +++ b/androidApp/src/main/AndroidManifest.xml
 @@ -7,6 +7,7 @@
@@ -42,7 +42,7 @@ index eb08c54d..e536c4da 100644
              android:name="com.nuvio.app.features.player.PlayerNowPlayingActionReceiver"
              android:exported="false" />
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 83d575b5..164538d6 100644
+index 83d575b..164538d 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -206,8 +206,12 @@ val supabaseProps = Properties().apply {
@@ -80,7 +80,7 @@ index 83d575b5..164538d6 100644
                  implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt
 new file mode 100644
-index 00000000..aff23ebc
+index 0000000..aff23eb
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt
 @@ -0,0 +1,8 @@
@@ -94,7 +94,7 @@ index 00000000..aff23ebc
 +    SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt
 new file mode 100644
-index 00000000..b68a1b77
+index 0000000..b68a1b7
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt
 @@ -0,0 +1,127 @@
@@ -227,7 +227,7 @@ index 00000000..b68a1b77
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt
 new file mode 100644
-index 00000000..88381599
+index 0000000..8838159
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt
 @@ -0,0 +1,49 @@
@@ -282,7 +282,7 @@ index 00000000..88381599
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 new file mode 100644
-index 00000000..528f4e1e
+index 0000000..528f4e1
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 @@ -0,0 +1,67 @@
@@ -355,7 +355,7 @@ index 00000000..528f4e1e
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
 new file mode 100644
-index 00000000..a988ccd7
+index 0000000..a988ccd
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
 @@ -0,0 +1,266 @@
@@ -626,7 +626,7 @@ index 00000000..a988ccd7
 +    )
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
-index b4bed543..89277739 100644
+index b4bed54..8927773 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
 @@ -12,7 +12,6 @@ import androidx.core.app.NotificationCompat
@@ -779,7 +779,7 @@ index b4bed543..89277739 100644
      )
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
-index be7b3c66..803b5065 100644
+index be7b3c6..803b506 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
 @@ -18,12 +18,14 @@ class DownloadsNotificationActionReceiver : BroadcastReceiver() {
@@ -798,10 +798,10 @@ index be7b3c66..803b5065 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 8bda6002..45f0c723 100644
+index 8bda600..44cb314 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,12 +2,23 @@ package com.nuvio.app.features.downloads
+@@ -2,27 +2,57 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -825,8 +825,14 @@ index 8bda6002..45f0c723 100644
  import kotlinx.coroutines.ensureActive
  import kotlinx.coroutines.launch
  import kotlinx.coroutines.runBlocking
-@@ -18,11 +29,22 @@ import nuvio.composeapp.generated.resources.*
+ import okhttp3.Call
++import okhttp3.ConnectionPool
++import okhttp3.Dispatcher
+ import okhttp3.OkHttpClient
+ import okhttp3.Request
+ import nuvio.composeapp.generated.resources.*
  import org.jetbrains.compose.resources.getString
++import java.io.BufferedOutputStream
  import java.io.File
  import java.io.FileOutputStream
 +import java.io.InputStream
@@ -845,11 +851,16 @@ index 8bda6002..45f0c723 100644
  private val downloadHttpClient = OkHttpClient.Builder()
 -    .connectTimeout(60, TimeUnit.SECONDS)
 +    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
++    .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
++    .dispatcher(Dispatcher().apply {
++        maxRequests = 32
++        maxRequestsPerHost = 16
++    })
 +    .connectTimeout(30, TimeUnit.SECONDS)
      .readTimeout(60, TimeUnit.SECONDS)
      .writeTimeout(60, TimeUnit.SECONDS)
      .followRedirects(true)
-@@ -32,6 +54,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
+@@ -32,6 +62,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
  internal actual object DownloadsPlatformDownloader {
      private var appContext: Context? = null
  
@@ -871,7 +882,7 @@ index 8bda6002..45f0c723 100644
      fun initialize(context: Context) {
          appContext = context.applicationContext
      }
-@@ -39,26 +76,79 @@ internal actual object DownloadsPlatformDownloader {
+@@ -39,26 +84,79 @@ internal actual object DownloadsPlatformDownloader {
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -957,7 +968,7 @@ index 8bda6002..45f0c723 100644
  
                  fun buildRequest(rangeStart: Long?): Request {
                      val requestBuilder = Request.Builder().url(request.sourceUrl)
-@@ -120,7 +210,7 @@ internal actual object DownloadsPlatformDownloader {
+@@ -120,7 +218,7 @@ internal actual object DownloadsPlatformDownloader {
                      onProgress(downloadedBytes, totalBytes)
  
                      body.byteStream().use { input ->
@@ -966,7 +977,7 @@ index 8bda6002..45f0c723 100644
                              val buffer = ByteArray(16 * 1024)
                              while (true) {
                                  ensureActive()
-@@ -138,20 +228,23 @@ internal actual object DownloadsPlatformDownloader {
+@@ -138,20 +236,23 @@ internal actual object DownloadsPlatformDownloader {
                          destination.delete()
                      }
                      if (!tempFile.renameTo(destination)) {
@@ -993,7 +1004,7 @@ index 8bda6002..45f0c723 100644
          }
  
          return AndroidDownloadsTaskHandle(job)
-@@ -159,34 +252,72 @@ internal actual object DownloadsPlatformDownloader {
+@@ -159,34 +260,72 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -1083,7 +1094,7 @@ index 8bda6002..45f0c723 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -234,14 +365,94 @@ private class AndroidDownloadsTaskHandle(
+@@ -234,14 +373,94 @@ private class AndroidDownloadsTaskHandle(
      }
  }
  
@@ -1123,8 +1134,7 @@ index 8bda6002..45f0c723 100644
 +                    input.copyTo(output)
 +                }
 +            }
-         }
--    }.getOrNull()
++        }
 +    }
 +}
 +
@@ -1179,12 +1189,13 @@ index 8bda6002..45f0c723 100644
 +            other.openOutputStream(false).use { output ->
 +                input.copyTo(output)
 +            }
-+        }
+         }
+-    }.getOrNull()
 +    }
  }
  
  private fun resolveTotalBytes(
-@@ -268,3 +479,759 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -268,3 +487,753 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -1206,8 +1217,9 @@ index 8bda6002..45f0c723 100644
 +    val (videoTarget, videoTemp) = createHlsTargets(context, customLocationUri, request.destinationFileName)
 +    if (videoTemp.exists()) videoTemp.delete()
 +
-+    val videoTempOut = videoTemp.openOutputStream(false)
-+    val videoChannel = (videoTempOut as? FileOutputStream)?.channel
++    val rawVideoTempOut = videoTemp.openOutputStream(false)
++    val videoTempOut = BufferedOutputStream(rawVideoTempOut, 128 * 1024)
++    val videoChannel = (rawVideoTempOut as? FileOutputStream)?.channel
 +
 +    val ctx = coroutineContext
 +    try {
@@ -1225,11 +1237,6 @@ index 8bda6002..45f0c723 100644
 +                        httpGet = { url, range -> androidHttpGet(url, request.sourceHeaders, range) },
 +                        appendBytes = { bytes ->
 +                            videoTempOut.write(bytes)
-+                            if (videoChannel != null) {
-+                                videoChannel.force(false)
-+                            } else {
-+                                videoTempOut.flush()
-+                            }
 +                        },
 +                        decryptAes128Cbc = ::aes128CbcDecryptAndroid,
 +                        onProgress = { downloaded, total ->
@@ -1240,6 +1247,7 @@ index 8bda6002..45f0c723 100644
 +                    )
 +
 +                    videoTempOut.flush()
++                    videoChannel?.force(false)
 +                    videoTempOut.close()
 +
 +                    val finalVideoName = hlsOutputFileName(request.destinationFileName, outcome.isFmp4)
@@ -1442,8 +1450,9 @@ index 8bda6002..45f0c723 100644
 +    val (finalTarget, tempTarget) = createHlsTargets(context, customLocationUri, tempName)
 +    if (tempTarget.exists()) tempTarget.delete()
 +
-+    val out = tempTarget.openOutputStream(false)
-+    val channel = (out as? FileOutputStream)?.channel
++    val rawOut = tempTarget.openOutputStream(false)
++    val out = BufferedOutputStream(rawOut, 128 * 1024)
++    val channel = (rawOut as? FileOutputStream)?.channel
 +
 +    try {
 +        val outcome = downloadHlsToFile(
@@ -1451,11 +1460,6 @@ index 8bda6002..45f0c723 100644
 +            httpGet = { u, range -> androidHttpGet(u, headers, range) },
 +            appendBytes = { bytes ->
 +                out.write(bytes)
-+                if (channel != null) {
-+                    channel.force(false)
-+                } else {
-+                    out.flush()
-+                }
 +            },
 +            decryptAes128Cbc = ::aes128CbcDecryptAndroid,
 +            onProgress = { downloaded, total ->
@@ -1465,6 +1469,7 @@ index 8bda6002..45f0c723 100644
 +        )
 +
 +        out.flush()
++        channel?.force(false)
 +        out.close()
 +
 +        val actualFinalName = hlsOutputFileName(finalName, outcome.isFmp4)
@@ -1945,7 +1950,7 @@ index 8bda6002..45f0c723 100644
 +
 +
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
-index 01ad3280..fcd0f5d5 100644
+index 01ad328..fcd0f5d 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
 @@ -7,6 +7,7 @@ import com.nuvio.app.core.storage.ProfileScopedKey
@@ -1979,7 +1984,7 @@ index 01ad3280..fcd0f5d5 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 new file mode 100644
-index 00000000..4a2954a5
+index 0000000..4a2954a
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 @@ -0,0 +1,10 @@
@@ -1995,7 +2000,7 @@ index 00000000..4a2954a5
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
 new file mode 100644
-index 00000000..515bac48
+index 0000000..515bac4
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
 @@ -0,0 +1,37 @@
@@ -2037,7 +2042,7 @@ index 00000000..515bac48
 +    return androidUri.path?.substringAfterLast(':') ?: uri
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index cc827e54..7ed945a6 100644
+index cc827e5..7ed945a 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
 @@ -1948,4 +1948,59 @@
@@ -2101,7 +2106,7 @@ index cc827e54..7ed945a6 100644
 +  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 58d554ab..42e3e34c 100644
+index 58d554a..42e3e34 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -627,6 +627,24 @@
@@ -2171,7 +2176,7 @@ index 58d554ab..42e3e34c 100644
 +    <string name="compose_nav_downloads">Offline</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 892da4ba..5f494436 100644
+index 892da4b..5f49443 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.statusBars
@@ -2314,7 +2319,7 @@ index 892da4ba..5f494436 100644
                      label = stringResource(Res.string.compose_nav_library),
                      selected = selectedTab == AppScreenTab.Library,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 6cd32c43..443cf0b5 100644
+index 6cd32c4..443cf0b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -48,6 +48,8 @@ import androidx.navigation3.ui.LocalNavAnimatedContentScope
@@ -2395,7 +2400,7 @@ index 6cd32c43..443cf0b5 100644
                                  onSettingsPageClick = if (useNativeNavigation && !isTabletLayout) {
                                      { pageName, title ->
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 2d6219a9..060557fa 100644
+index 2d6219a..060557f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 @@ -40,6 +40,12 @@ import nuvio.composeapp.generated.resources.sidebar_library
@@ -2458,7 +2463,7 @@ index 2d6219a9..060557fa 100644
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt
 new file mode 100644
-index 00000000..6cf99178
+index 0000000..6cf9917
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogWriter.kt
 @@ -0,0 +1,28 @@
@@ -2492,7 +2497,7 @@ index 00000000..6cf99178
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt
 new file mode 100644
-index 00000000..e4cba788
+index 0000000..e4cba78
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt
 @@ -0,0 +1,168 @@
@@ -2666,7 +2671,7 @@ index 00000000..e4cba788
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt
 new file mode 100644
-index 00000000..28ee667d
+index 0000000..28ee667
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt
 @@ -0,0 +1,5 @@
@@ -2676,7 +2681,7 @@ index 00000000..28ee667d
 +    fun shareFile(filePath: String, title: String, mimeType: String)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
-index 87d6d7fc..a8ee9f98 100644
+index 87d6d7f..a8ee9f9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
 @@ -139,3 +139,14 @@ private fun NuvioBottomSheetDragHandle() {
@@ -2695,7 +2700,7 @@ index 87d6d7fc..a8ee9f98 100644
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
-index 23c8d9b1..c28280a4 100644
+index 23c8d9b..c28280a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 @@ -5,15 +5,18 @@ import androidx.compose.foundation.clickable
@@ -2873,7 +2878,7 @@ index 23c8d9b1..c28280a4 100644
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/EpisodeCodeFormat.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/EpisodeCodeFormat.kt
 new file mode 100644
-index 00000000..b271ad42
+index 0000000..b271ad4
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/EpisodeCodeFormat.kt
 @@ -0,0 +1,28 @@
@@ -2907,7 +2912,7 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
 new file mode 100644
-index 00000000..f82780cc
+index 0000000..f82780c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
 @@ -0,0 +1,6 @@
@@ -2919,7 +2924,7 @@ index 00000000..f82780cc
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..68acf394
+index 0000000..68acf39
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 @@ -0,0 +1,345 @@
@@ -3269,7 +3274,7 @@ index 00000000..68acf394
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
-index 48da488c..2c91b1be 100644
+index 48da488..2c91b1b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.downloads
@@ -3356,7 +3361,7 @@ index 48da488c..2c91b1be 100644
      sortedWith(downloadSeriesEpisodeComparator)
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
-index 077b8530..82a08eec 100644
+index 077b853..82a08ee 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 @@ -1,9 +1,24 @@
@@ -3406,7 +3411,7 @@ index 077b8530..82a08eec 100644
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index b0440dc8..a79ab777 100644
+index b0440dc..a79ab77 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 @@ -1,6 +1,13 @@
@@ -3935,7 +3940,7 @@ index b0440dc8..a79ab777 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..25bd1ab9 100644
+index 7019a10..25bd1ab 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -4384,7 +4389,7 @@ index 7019a10c..25bd1ab9 100644
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
 new file mode 100644
-index 00000000..3150accc
+index 0000000..3150acc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
 @@ -0,0 +1,28 @@
@@ -4417,7 +4422,7 @@ index 00000000..3150accc
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
-index 4721842a..48dcc920 100644
+index 4721842..48dcc92 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
 @@ -3,4 +3,6 @@ package com.nuvio.app.features.downloads
@@ -4429,11 +4434,19 @@ index 4721842a..48dcc920 100644
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
 new file mode 100644
-index 00000000..2b1fc70d
+index 0000000..95cea8d
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,230 @@
 +package com.nuvio.app.features.downloads
++
++import kotlinx.coroutines.channels.Channel
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withLock
 +
 +internal class HlsHttpResult(
 +    val status: Int,
@@ -4451,10 +4464,17 @@ index 00000000..2b1fc70d
 +private const val MAX_PLAYLIST_REDIRECTS = 4
 +private const val AES_128 = "AES-128"
 +private const val BITRATE_WARMUP_FRACTION = 0.08
++private const val DEFAULT_SEGMENT_CONCURRENCY = 5
 +
 +private class ResolvedHlsMedia(
 +    val playlist: HlsMediaPlaylist,
 +    val declaredBitsPerSecond: Long?,
++)
++
++private class IndexedSegmentPayload(
++    val index: Int,
++    val segment: HlsSegment,
++    val payload: ByteArray,
 +)
 +
 +internal suspend fun downloadHlsToFile(
@@ -4475,6 +4495,7 @@ index 00000000..2b1fc70d
 +    onProgress(0L, null)
 +    var cumulativeBytes = 0L
 +    val keyCache = HashMap<String, ByteArray>()
++    val keyMutex = Mutex()
 +
 +    media.initSection?.let { init ->
 +        ensureActive()
@@ -4492,33 +4513,75 @@ index 00000000..2b1fc70d
 +    var elapsedDuration = 0.0
 +    val totalSegments = segments.size
 +
-+    segments.forEachIndexed { index, segment ->
-+        ensureActive()
-+        val response = httpGet(segment.url, segment.byteRange)
-+        if (response.status !in 200..299) {
-+            throw HlsDownloadException(
-+                "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
-+            )
++    val concurrency = DEFAULT_SEGMENT_CONCURRENCY.coerceAtMost(totalSegments).coerceAtLeast(1)
++    val channel = Channel<IndexedSegmentPayload>(capacity = concurrency * 2)
++
++    coroutineScope {
++        val producer = launch {
++            val semaphore = Semaphore(concurrency)
++            try {
++                segments.forEachIndexed { index, segment ->
++                    ensureActive()
++                    semaphore.acquire()
++                    launch {
++                        try {
++                            ensureActive()
++                            val response = httpGet(segment.url, segment.byteRange)
++                            if (response.status !in 200..299) {
++                                throw HlsDownloadException(
++                                    "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
++                                )
++                            }
++
++                            val payload = decryptSegmentIfNeeded(
++                                data = response.body,
++                                encryption = segment.encryption,
++                                sequenceNumber = segment.sequenceNumber,
++                                keyCache = keyCache,
++                                keyMutex = keyMutex,
++                                httpGet = httpGet,
++                                decryptAes128Cbc = decryptAes128Cbc,
++                                ensureActive = ensureActive,
++                            )
++
++                            channel.send(IndexedSegmentPayload(index, segment, payload))
++                        } finally {
++                            semaphore.release()
++                        }
++                    }
++                }
++            } catch (e: Throwable) {
++                channel.close(e)
++                throw e
++            }
 +        }
 +
-+        val payload = decryptSegmentIfNeeded(
-+            data = response.body,
-+            encryption = segment.encryption,
-+            sequenceNumber = segment.sequenceNumber,
-+            keyCache = keyCache,
-+            httpGet = httpGet,
-+            decryptAes128Cbc = decryptAes128Cbc,
-+            ensureActive = ensureActive,
-+        )
++        var nextExpected = 0
++        val pending = mutableMapOf<Int, IndexedSegmentPayload>()
++        try {
++            for (item in channel) {
++                pending[item.index] = item
++                while (pending.containsKey(nextExpected)) {
++                    val next = pending.remove(nextExpected)!!
++                    ensureActive()
++                    appendBytes(next.payload)
++                    cumulativeBytes += next.payload.size.toLong()
++                    elapsedDuration += next.segment.durationSeconds
 +
-+        appendBytes(payload)
-+        cumulativeBytes += payload.size.toLong()
-+        elapsedDuration += segment.durationSeconds
-+
-+        if (totalBytesEstimate == null && totalDuration > 0.0 && elapsedDuration >= warmupDuration) {
-+            totalBytesEstimate = (cumulativeBytes.toDouble() / elapsedDuration * totalDuration).toLong()
++                    if (totalBytesEstimate == null && totalDuration > 0.0 && elapsedDuration >= warmupDuration) {
++                        totalBytesEstimate = (cumulativeBytes.toDouble() / elapsedDuration * totalDuration).toLong()
++                    }
++                    onProgress(cumulativeBytes, totalBytesEstimate?.coerceAtLeast(cumulativeBytes))
++                    nextExpected++
++                }
++                if (nextExpected == totalSegments) {
++                    break
++                }
++            }
++        } finally {
++            channel.close()
++            producer.cancel()
 +        }
-+        onProgress(cumulativeBytes, totalBytesEstimate?.coerceAtLeast(cumulativeBytes))
 +    }
 +
 +    return HlsDownloadOutcome(isFmp4 = media.isFmp4, totalBytes = cumulativeBytes)
@@ -4529,6 +4592,7 @@ index 00000000..2b1fc70d
 +    encryption: HlsSegmentEncryption?,
 +    sequenceNumber: Long,
 +    keyCache: MutableMap<String, ByteArray>,
++    keyMutex: Mutex,
 +    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
 +    decryptAes128Cbc: (data: ByteArray, key: ByteArray, iv: ByteArray) -> ByteArray,
 +    ensureActive: () -> Unit,
@@ -4538,7 +4602,10 @@ index 00000000..2b1fc70d
 +        throw HlsDownloadException("Unsupported HLS encryption method: ${encryption.method}")
 +    }
 +
-+    val key = keyCache.getOrPut(encryption.keyUrl) {
++    val cachedKey = keyMutex.withLock { keyCache[encryption.keyUrl] }
++    val key = if (cachedKey != null) {
++        cachedKey
++    } else {
 +        ensureActive()
 +        val keyResponse = httpGet(encryption.keyUrl, null)
 +        if (keyResponse.status !in 200..299) {
@@ -4547,7 +4614,9 @@ index 00000000..2b1fc70d
 +        if (keyResponse.body.size < 16) {
 +            throw HlsDownloadException("HLS key was not 16 bytes")
 +        }
-+        keyResponse.body.copyOf(16)
++        val fetchedKey = keyResponse.body.copyOf(16)
++        keyMutex.withLock { keyCache[encryption.keyUrl] = fetchedKey }
++        fetchedKey
 +    }
 +
 +    val iv = encryption.iv ?: hlsSequenceIv(sequenceNumber)
@@ -4601,7 +4670,7 @@ index 00000000..2b1fc70d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 00000000..ea3a5f35
+index 0000000..ea3a5f3
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 @@ -0,0 +1,462 @@
@@ -5068,7 +5137,7 @@ index 00000000..ea3a5f35
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 02ecc316..507c6fdb 100644
+index 02ecc31..507c6fd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -183,6 +183,7 @@ internal class PlayerScreenRuntime(
@@ -5080,7 +5149,7 @@ index 02ecc316..507c6fdb 100644
      var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
      var selectedAudioIndex by mutableStateOf(-1)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 8821d33f..62c48a5b 100644
+index 8821d33..62c48a5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -214,6 +214,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
@@ -5114,7 +5183,7 @@ index 8821d33f..62c48a5b 100644
                      val loadedSubtitles = addonSubtitles
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
 new file mode 100644
-index 00000000..0870034a
+index 0000000..0870034
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
 @@ -0,0 +1,66 @@
@@ -5186,7 +5255,7 @@ index 00000000..0870034a
 +internal expect fun formatUriForDisplay(uri: String): String
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
 new file mode 100644
-index 00000000..d63659c0
+index 0000000..d63659c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
 @@ -0,0 +1,41 @@
@@ -5233,7 +5302,7 @@ index 00000000..d63659c0
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt
 new file mode 100644
-index 00000000..602b8e1b
+index 0000000..602b8e1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt
 @@ -0,0 +1,98 @@
@@ -5336,7 +5405,7 @@ index 00000000..602b8e1b
 +
 +var globalNetworkSettingsRepository: NetworkSettingsRepository? = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index d6f6f988..cdb3f9bd 100644
+index d6f6f98..cdb3f9b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 @@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -5422,7 +5491,7 @@ index d6f6f988..cdb3f9bd 100644
  
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt
 new file mode 100644
-index 00000000..aff23ebc
+index 0000000..aff23eb
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt
 @@ -0,0 +1,8 @@
@@ -5436,7 +5505,7 @@ index 00000000..aff23ebc
 +    SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt
 new file mode 100644
-index 00000000..82046343
+index 0000000..8204634
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt
 @@ -0,0 +1,5 @@
@@ -5447,7 +5516,7 @@ index 00000000..82046343
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
 new file mode 100644
-index 00000000..3d1ab5a7
+index 0000000..3d1ab5a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
 @@ -0,0 +1,6 @@
@@ -5459,7 +5528,7 @@ index 00000000..3d1ab5a7
 +actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
 new file mode 100644
-index 00000000..2a9a1c8e
+index 0000000..2a9a1c8
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
 @@ -0,0 +1,5 @@
@@ -5470,7 +5539,7 @@ index 00000000..2a9a1c8e
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
 new file mode 100644
-index 00000000..92e4807a
+index 0000000..92e4807
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
 @@ -0,0 +1,5 @@
@@ -5481,7 +5550,7 @@ index 00000000..92e4807a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 new file mode 100644
-index 00000000..1f11f57b
+index 0000000..1f11f57
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 @@ -0,0 +1,98 @@
@@ -5585,7 +5654,7 @@ index 00000000..1f11f57b
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 new file mode 100644
-index 00000000..b3c0d234
+index 0000000..b3c0d23
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 @@ -0,0 +1,21 @@
@@ -5612,7 +5681,7 @@ index 00000000..b3c0d234
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
 new file mode 100644
-index 00000000..8812bcda
+index 0000000..8812bcd
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
 @@ -0,0 +1,15 @@
@@ -5633,7 +5702,7 @@ index 00000000..8812bcda
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt
 new file mode 100644
-index 00000000..5a0c6716
+index 0000000..5a0c671
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt
 @@ -0,0 +1,10 @@
@@ -5649,7 +5718,7 @@ index 00000000..5a0c6716
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt
 new file mode 100644
-index 00000000..162c3041
+index 0000000..162c304
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt
 @@ -0,0 +1,31 @@
@@ -5686,7 +5755,7 @@ index 00000000..162c3041
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
 new file mode 100644
-index 00000000..3d1ab5a7
+index 0000000..3d1ab5a
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
 @@ -0,0 +1,6 @@
@@ -5697,7 +5766,7 @@ index 00000000..3d1ab5a7
 +@Composable
 +actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
-index 2cd1d315..5b9cd310 100644
+index 2cd1d31..5b9cd31 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
 @@ -20,6 +20,7 @@ internal actual object DownloadsLiveStatusPlatform {
@@ -5717,7 +5786,7 @@ index 2cd1d315..5b9cd310 100644
          DownloadStatus.Failed -> 2
          DownloadStatus.Completed -> 3
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
-index dd37f8e6..bf9b5314 100644
+index dd37f8e..bf9b531 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 @@ -2,13 +2,21 @@ package com.nuvio.app.features.downloads
@@ -6237,7 +6306,7 @@ index dd37f8e6..bf9b5314 100644
 +    return if (produced == outputCapacity) output else output.copyOf(produced)
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
-index 1fe7cbf6..d363f62d 100644
+index 1fe7cbf..d363f62 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
 @@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
@@ -6266,7 +6335,7 @@ index 1fe7cbf6..d363f62d 100644
  }
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
 new file mode 100644
-index 00000000..03d3deea
+index 0000000..03d3dee
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
 @@ -0,0 +1,16 @@
@@ -6287,7 +6356,7 @@ index 00000000..03d3deea
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
-index 50a3d7f9..690cc4c7 100644
+index 50a3d7f..690cc4c 100644
 --- a/gradle/libs.versions.toml
 +++ b/gradle/libs.versions.toml
 @@ -33,6 +33,8 @@ reorderable = "3.0.0"
