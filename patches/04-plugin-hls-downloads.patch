@@ -12,7 +12,7 @@ index 3d00b85..4b90d61 100644
 +} catch (e: Exception) { "" }
 +val baseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
      ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
-+val releaseAppVersionName = if (gitCommitHash.isNotEmpty()) "$baseAppVersionName-$gitCommitHash" else baseAppVersionName
++val releaseAppVersionName = baseAppVersionName
  val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
      ?.toIntOrNull()
      ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
@@ -55,7 +55,7 @@ index 83d575b..164538d 100644
 +} catch (e: Exception) { "" }
 +val baseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
      ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
-+val releaseAppVersionName = if (gitCommitHash.isNotEmpty()) "$baseAppVersionName-$gitCommitHash" else baseAppVersionName
++val releaseAppVersionName = baseAppVersionName
  val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
      ?.toIntOrNull()
      ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")

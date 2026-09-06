@@ -10,12 +10,18 @@ Mantenere il fork e le patch personalizzate perfettamente allineate con l'upstre
 ---
 
 ## 🏷️ Regola di Versionamento Obbligatoria
-1. **Versione Base Upstream (`0.4.14`)**: La versione base (es. `0.4.14`) rispecchia la versione ufficiale dell'app upstream rilasciata. Non deve mai essere incrementata a versioni successive a meno che non ci sia una nuova release ufficiale upstream.
-2. **Incremento Patch Utente (`0.4.14.x`)**: Tutte le modifiche, nuove funzionalità (come il Launcher Widget, HLS default), bugfix o personalizzazioni richieste dall'utente devono essere rilasciate incrementando **esclusivamente il quarto numero (`.x`)**:
-   - Prima modifica: `0.4.14.1`
-   - Seconda modifica: `0.4.14.2`, ecc.
-   Non modificare o avanzare mai i primi tre numeri per modifiche dell'utente.
-3. **Aggiornamento in-app e Tag Release**: L'incremento `0.4.14.x` va impostato in `iosApp/Configuration/Version.xcconfig` e utilizzato nel tag di release (formato: `<versione>-<short_sha>`, es. `0.4.14.1-7950aba`). Questo consente all'updater in-app di rilevare e proporre sempre l'aggiornamento senza blocchi.
+1. **Controllo delle Prime 3 Parti (`X.Y.Z`, es. `0.4.14`)**: Le prime tre parti della versione sono controllate **esclusivamente dal repository upstream ufficiale** (`https://github.com/NuvioMedia/NuvioMobile.git`). Non devono MAI essere modificate o avanzate arbitrariamente. Cambiano solo ed esclusivamente quando viene rilasciata una nuova versione ufficiale upstream (es. quando l'upstream rilascerà `0.4.15`).
+2. **Controllo Utente della Quarta Parte (`.x`, es. `0.4.14.1`, `0.4.14.2`, ecc.)**: Tutte le modifiche, patch aggiuntive, nuove feature (Live TV, Download HLS, Launcher Widget, Patches Plus, Stream prefetch, ecc.), bugfix o personalizzazioni sono gestite dall'utente incrementando **esclusivamente il quarto numero (`.x`)**:
+   - Prima release fork: `0.4.14.1`
+   - Seconda release fork: `0.4.14.2`
+   - Terza release fork: `0.4.14.3`
+   - Quarta release fork: `0.4.14.4`, ecc.
+3. **Nessun Tag o Suffisso dopo il Numero di Versione**:
+   - È **tassativamente vietato inserire tag, commit hash o suffissi dopo il numero di versione** (NON usare `-<short_sha>`, `-7950aba`, `-alpha`, ecc.).
+   - La versione deve essere sempre e unicamente pulita: `<versione>` (es. `0.4.14.4`).
+   - In `androidApp/build.gradle.kts` e `composeApp/build.gradle.kts`, `releaseAppVersionName` deve essere uguale a `baseAppVersionName` senza appendere `-$gitCommitHash`.
+   - Il Tag della release su GitHub deve essere esattamente `<versione>` (es. `0.4.14.4`).
+   - Gli APK prodotti devono seguire la nomenclatura pulita senza hash: `nuvio_plus_<versione>_universal.apk`, `nuvio_plus_<versione>_<abi>.apk` (es. `nuvio_plus_0.4.14.4_universal.apk`, `nuvio_plus_0.4.14.4_arm64-v8a.apk`, ecc.).
 4. **Firma APK Persistente**: Tutti gli APK devono essere firmati con il keystore persistente in `assets/keystore/nuvio-release.keystore` (impronta SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`). Non cambiare mai keystore tra le release per evitare l'errore Android di firma non corrispondente.
 
 ---
@@ -73,23 +79,25 @@ Se una patch fallisce (ad esempio `03-live-tv.patch` a causa di modifiche alla n
 ---
 
 ### Fase 5: Compilazione Locale, Commit e Pubblicazione
-1. **Compilazione Locale**: Al termine di qualsiasi modifica o aggiornamento, compila l'APK in locale (ad es. eseguendo `./gradlew assembleRelease -Pnuvio.android.distribution=full` nella directory con le patch applicate). Assicurati di usare il keystore persistente `assets/keystore/nuvio-release.keystore`.
-2. **Rinomina APK**: Rinomina l'APK appena generato utilizzando il formato `nuvio_plus_<versione>_<tagunivoco>.apk` (es. `nuvio_plus_0.4.13.1_9b09045.apk`).
-3. **Commit e Push**: Aggiorna `.last_built_upstream_sha` (se in fase di sync upstream), ed esegui il commit e il push di tutte le modifiche (patch aggiornate, script, ecc.) sul repository remoto.
-4. **Pubblicazione Release (Caricamento Locale)**: Poiché il workflow di GitHub Actions non è affidabile, crea direttamente una nuova Release su GitHub:
-   - `gh release create <tag> <percorso_apk_locale> --title "Nuvio Plus <versione>" --notes "Note di rilascio"`
+1. **Compilazione Locale**: Al termine di qualsiasi modifica o aggiornamento (quando esplicitamente richiesto o approvato dall'utente), compila l'APK in locale (ad es. eseguendo `./gradlew assembleRelease -Pnuvio.android.distribution=full` nella directory con le patch applicate). Assicurati di usare il keystore persistente `assets/keystore/nuvio-release.keystore`.
+2. **Rinomina APK**: Rinomina gli APK generati utilizzando il formato pulito senza tag o commit hash: `nuvio_plus_<versione>_<arch>.apk` (es. `nuvio_plus_0.4.14.4_universal.apk`, `nuvio_plus_0.4.14.4_arm64-v8a.apk`, ecc.).
+3. **Commit e Push**: Aggiorna `.last_built_upstream_sha` (se in fase di sync upstream), ed esegui il commit e il push di tutte le modifiche (patch aggiornate, script, documentazione, ecc.) sul repository remoto.
+4. **Pubblicazione Release (Caricamento Locale)**: Quando si crea una nuova release su GitHub:
+   - `gh release create <versione> <percorso_apk_locale> --title "Nuvio Plus <versione>" --notes "Note di rilascio"`
+   - Il tag coincide esattamente con la versione pulita `<versione>` (es. `0.4.14.4`), senza tag o hash suffissi.
    - Specifica i file APK generati (universale e per architettura ABI).
 
 ---
 
 ## 📌 Checklist Rapida per l'Agente
 - [ ] Verificato ultimo commit upstream via `git ls-remote`
-- [ ] Applicata la regola di versionamento `0.4.13.x` (la versione base cambia solo con upstream)
-- [ ] Testata l'applicazione di tutte le patch `patches/01-*` .. `05-*`
+- [ ] Applicata la regola di versionamento: le prime 3 parti (`0.4.14`) rispecchiano upstream, la quarta parte (`0.4.14.x`) è gestita dall'utente
+- [ ] Verificato che nessun tag/hash suffisso sia presente nella versione o nel release tag (formato pulito `<versione>`, es. `0.4.14.4`)
+- [ ] Testata l'applicazione di tutte le patch `patches/01-*` .. `07-*`
 - [ ] Conflitti risolti preservando il codice upstream e le feature Plus
 - [ ] Patch aggiornate e salvate in `patches/`
-- [ ] Aggiornato `.last_built_upstream_sha`
-- [ ] Compilato l'APK in locale firmato con keystore persistente `assets/keystore/nuvio-release.keystore`
-- [ ] Ridenominati gli APK secondo lo standard `nuvio_plus_<versione>_<tag>.apk`
+- [ ] Aggiornato `.last_built_upstream_sha` (se sync upstream)
+- [ ] Compilato l'APK in locale firmato con keystore persistente `assets/keystore/nuvio-release.keystore` (quando richiesto)
+- [ ] Ridenominati gli APK secondo lo standard pulito `nuvio_plus_<versione>_<arch>.apk`
 - [ ] Effettuato il commit e push su GitHub
-- [ ] Creata la GitHub Release con `gh release create` e notificato all'utente
+- [ ] Creata la GitHub Release con `gh release create <versione>` (quando richiesto) e notificato all'utente
