@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
-index d0b40fc..99e52f8 100644
+index d0b40fc8..d8f6a727 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/updater/AppUpdater.kt
 @@ -23,10 +23,10 @@ import kotlinx.coroutines.runBlocking
@@ -16,49 +16,50 @@ index d0b40fc..99e52f8 100644
  
  data class AppUpdate(
      val tag: String,
-@@ -86,32 +86,34 @@ private object VersionUtils {
-         return raw.trim().removePrefix("v").removePrefix("V")
-     }
+@@ -90,28 +90,41 @@ private object VersionUtils {
+         val normalized = normalize(raw)
+         if (normalized.isBlank()) return null
  
--    fun parseVersionParts(raw: String?): List<Int>? {
--        val normalized = normalize(raw)
--        if (normalized.isBlank()) return null
--
 -        val parts = normalized.split('.', '-', '_')
--            .filter { it.isNotBlank() }
--            .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
--
++        // Ignore commit hashes, pre-release suffixes or build metadata (e.g. "-7950aba", "+build")
++        val versionBase = normalized.substringBefore('-').substringBefore('+').trim()
++        if (versionBase.isBlank()) return null
++
++        val parts = versionBase.split('.', '_')
+             .filter { it.isNotBlank() }
+             .mapNotNull { token -> token.takeWhile { it.isDigit() }.toIntOrNull() }
++            .toMutableList()
++
++        if (parts.isEmpty()) return null
++
++        // 4-digit rule: pad with 0 if fewer than 4 components are present (e.g. "0.4.14" -> [0, 4, 14, 0])
++        while (parts.size < 4) {
++            parts.add(0)
++        }
+ 
 -        return parts.takeIf { it.isNotEmpty() }
-+    fun parseVersionParts(version: String?): List<Int>? {
-+        return version?.split(".")
-+            ?.mapNotNull { it.filter { char -> char.isDigit() }.toIntOrNull() }
-+            ?.takeIf { it.isNotEmpty() }
++        return parts
      }
  
      fun isRemoteNewer(remote: String?, local: String?): Boolean {
 -        val remoteParts = parseVersionParts(remote)
 -        val localParts = parseVersionParts(local)
--
++        val remoteNormalized = normalize(remote)
++        val localNormalized = normalize(local)
+ 
 -        if (remoteParts == null || localParts == null) {
 -            val remoteValue = normalize(remote)
 -            val localValue = normalize(local)
 -            return remoteValue.isNotBlank() && localValue.isNotBlank() && remoteValue != localValue
-+        val remoteClean = remote?.trim() ?: ""
-+        val localClean = local?.trim() ?: ""
-+        
-+        if (remoteClean == localClean) return false
-+        
-+        val remoteBase = remoteClean.substringBefore("-")
-+        val localBase = localClean.substringBefore("-")
-+        
-+        if (remoteBase == localBase) {
-+            return false
-         }
- 
-+        val remoteParts = parseVersionParts(remoteBase) ?: return false
-+        val localParts = parseVersionParts(localBase) ?: return false
+-        }
++        if (remoteNormalized.isBlank() || localNormalized.isBlank()) return false
++        if (remoteNormalized == localNormalized) return false
 +
-         val maxSize = maxOf(remoteParts.size, localParts.size)
++        val remoteParts = parseVersionParts(remoteNormalized) ?: return false
++        val localParts = parseVersionParts(localNormalized) ?: return false
+ 
+-        val maxSize = maxOf(remoteParts.size, localParts.size)
++        val maxSize = maxOf(remoteParts.size, localParts.size, 4)
          for (index in 0 until maxSize) {
 -            val remoteValue = remoteParts.getOrElse(index) { 0 }
 -            val localValue = localParts.getOrElse(index) { 0 }
@@ -70,7 +71,7 @@ index d0b40fc..99e52f8 100644
          }
          return false
      }
-@@ -160,9 +162,14 @@ private object AppUpdaterRepository {
+@@ -160,9 +173,14 @@ private object AppUpdaterRepository {
              return true
          }
  
@@ -87,23 +88,12 @@ index d0b40fc..99e52f8 100644
      }
  
      private fun chooseBestApkAsset(assets: List<GitHubAssetDto>): GitHubAssetDto? {
-@@ -235,8 +242,8 @@ class AppUpdaterController internal constructor(
+@@ -230,7 +248,7 @@ class AppUpdaterController internal constructor(
+             result.onSuccess { update ->
+                 val remoteNewer = VersionUtils.isRemoteNewer(update.tag, AppVersionConfig.VERSION_NAME)
+                 val ignored = ignoredTag != null && ignoredTag == update.tag
+-                val shouldShowDialog = force || (remoteNewer && !ignored)
++                val shouldShowDialog = remoteNewer && (force || !ignored)
+ 
                  _uiState.update { state ->
                      state.copy(
-                         isChecking = false,
--                        update = update.takeIf { remoteNewer },
--                        isUpdateAvailable = remoteNewer,
-+                        update = if (force) update else update.takeIf { remoteNewer },
-+                        isUpdateAvailable = force || remoteNewer,
-                         isDownloading = false,
-                         downloadProgress = null,
-                         downloadedApkPath = state.downloadedApkPath.takeIf { remoteNewer },
-@@ -246,7 +253,7 @@ class AppUpdaterController internal constructor(
-                     )
-                 }
- 
--                if (showNoUpdateFeedback && !remoteNewer) {
-+                if (showNoUpdateFeedback && !remoteNewer && !force) {
-                     NuvioToastController.show(getString(Res.string.updates_latest_version))
-                 }
-             }.onFailure { error ->
