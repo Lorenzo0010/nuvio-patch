@@ -39,7 +39,7 @@ try {
     $failed = $false
     foreach ($patch in $patchFiles) {
         Write-Host "`nTest applicazione patch: $($patch.Name)..." -ForegroundColor Yellow
-        git apply --3way "$($patch.FullName)"
+        git apply --ignore-space-change --3way "$($patch.FullName)"
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ Errore durante l'applicazione di '$($patch.Name)'!" -ForegroundColor Red
             $failed = $true

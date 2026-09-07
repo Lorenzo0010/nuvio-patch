@@ -1,5 +1,5 @@
 diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
-index 3d00b85..4b90d61 100644
+index 3d00b85..812dd09 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
 @@ -37,8 +37,12 @@ val sentryOrg = envOrLocalProperty("SENTRY_ORG")
@@ -42,7 +42,7 @@ index eb08c54..e536c4d 100644
              android:name="com.nuvio.app.features.player.PlayerNowPlayingActionReceiver"
              android:exported="false" />
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 83d575b..164538d 100644
+index 83d575b..7fbe566 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -206,8 +206,12 @@ val supabaseProps = Properties().apply {
@@ -798,10 +798,10 @@ index be7b3c6..803b506 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 8bda600..44cb314 100644
+index 8bda600..784071a 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,27 +2,57 @@ package com.nuvio.app.features.downloads
+@@ -2,27 +2,65 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -845,8 +845,16 @@ index 8bda600..44cb314 100644
 +import javax.crypto.spec.SecretKeySpec
 +import android.util.Log as AndroidLog
 +import com.nuvio.app.core.logging.InAppLogger
++import com.nuvio.app.features.player.PlayerPlaybackNetworking
 +import kotlin.coroutines.coroutineContext
 +import kotlinx.coroutines.withContext
++
++private fun withDefaultUserAgent(headers: Map<String, String>): Map<String, String> {
++    if (headers.keys.any { it.equals("User-Agent", ignoreCase = true) }) {
++        return headers
++    }
++    return headers + ("User-Agent" to PlayerPlaybackNetworking.DEFAULT_USER_AGENT)
++}
  
  private val downloadHttpClient = OkHttpClient.Builder()
 -    .connectTimeout(60, TimeUnit.SECONDS)
@@ -860,7 +868,7 @@ index 8bda600..44cb314 100644
      .readTimeout(60, TimeUnit.SECONDS)
      .writeTimeout(60, TimeUnit.SECONDS)
      .followRedirects(true)
-@@ -32,6 +62,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
+@@ -32,6 +70,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
  internal actual object DownloadsPlatformDownloader {
      private var appContext: Context? = null
  
@@ -882,7 +890,7 @@ index 8bda600..44cb314 100644
      fun initialize(context: Context) {
          appContext = context.applicationContext
      }
-@@ -39,26 +84,79 @@ internal actual object DownloadsPlatformDownloader {
+@@ -39,30 +92,83 @@ internal actual object DownloadsPlatformDownloader {
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -968,7 +976,12 @@ index 8bda600..44cb314 100644
  
                  fun buildRequest(rangeStart: Long?): Request {
                      val requestBuilder = Request.Builder().url(request.sourceUrl)
-@@ -120,7 +218,7 @@ internal actual object DownloadsPlatformDownloader {
+-                    request.sourceHeaders.forEach { (key, value) ->
++                    withDefaultUserAgent(request.sourceHeaders).forEach { (key, value) ->
+                         requestBuilder.header(key, value)
+                     }
+                     if (rangeStart != null && rangeStart > 0L) {
+@@ -120,7 +226,7 @@ internal actual object DownloadsPlatformDownloader {
                      onProgress(downloadedBytes, totalBytes)
  
                      body.byteStream().use { input ->
@@ -977,7 +990,7 @@ index 8bda600..44cb314 100644
                              val buffer = ByteArray(16 * 1024)
                              while (true) {
                                  ensureActive()
-@@ -138,20 +236,23 @@ internal actual object DownloadsPlatformDownloader {
+@@ -138,20 +244,23 @@ internal actual object DownloadsPlatformDownloader {
                          destination.delete()
                      }
                      if (!tempFile.renameTo(destination)) {
@@ -1004,7 +1017,7 @@ index 8bda600..44cb314 100644
          }
  
          return AndroidDownloadsTaskHandle(job)
-@@ -159,34 +260,72 @@ internal actual object DownloadsPlatformDownloader {
+@@ -159,34 +268,101 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -1079,7 +1092,7 @@ index 8bda600..44cb314 100644
 +    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
 +        return try {
 +            val requestBuilder = Request.Builder().url(url)
-+            headers.forEach { (key, value) ->
++            withDefaultUserAgent(headers).forEach { (key, value) ->
 +                requestBuilder.header(key, value)
 +            }
 +            val response = downloadHttpClient.newCall(requestBuilder.get().build()).execute()
@@ -1091,10 +1104,39 @@ index 8bda600..44cb314 100644
 +        } catch (_: Exception) {
 +            null
 +        }
++    }
++
++    actual fun probeIsHls(url: String, headers: Map<String, String>): Boolean {
++        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
++            return false
++        }
++        val effectiveHeaders = withDefaultUserAgent(headers)
++        return try {
++            val headBuilder = Request.Builder().url(url).head()
++            effectiveHeaders.forEach { (key, value) -> headBuilder.header(key, value) }
++            val headResp = downloadHttpClient.newCall(headBuilder.build()).execute()
++            val headContentType = headResp.header("Content-Type")?.lowercase().orEmpty()
++            headResp.close()
++            if (headContentType.contains("mpegurl") || headContentType.contains("m3u8")) {
++                return true
++            }
++
++            val getBuilder = Request.Builder().url(url).header("Range", "bytes=0-512")
++            effectiveHeaders.forEach { (key, value) -> getBuilder.header(key, value) }
++            val getResp = downloadHttpClient.newCall(getBuilder.build()).execute()
++            getResp.use { resp ->
++                val ct = resp.header("Content-Type")?.lowercase().orEmpty()
++                if (ct.contains("mpegurl") || ct.contains("m3u8")) return true
++                val snippet = resp.body?.string()?.trimStart().orEmpty()
++                snippet.startsWith("#EXTM3U")
++            }
++        } catch (_: Exception) {
++            false
++        }
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -234,14 +373,94 @@ private class AndroidDownloadsTaskHandle(
+@@ -234,14 +410,94 @@ private class AndroidDownloadsTaskHandle(
      }
  }
  
@@ -1134,7 +1176,8 @@ index 8bda600..44cb314 100644
 +                    input.copyTo(output)
 +                }
 +            }
-+        }
+         }
+-    }.getOrNull()
 +    }
 +}
 +
@@ -1189,13 +1232,12 @@ index 8bda600..44cb314 100644
 +            other.openOutputStream(false).use { output ->
 +                input.copyTo(output)
 +            }
-         }
--    }.getOrNull()
++        }
 +    }
  }
  
  private fun resolveTotalBytes(
-@@ -268,3 +487,753 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -268,3 +524,753 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -1291,7 +1333,7 @@ index 8bda600..44cb314 100644
 +                            headers = request.sourceHeaders,
 +                            finalName = audioFinalName,
 +                            tempName = audioTempName,
-+                            onProgress = onProgress,
++                            onProgress = { _, _ -> },
 +                            ctx = ctx,
 +                            trackName = "audio_$audioIndex",
 +                            onTrackProgress = onTrackProgress,
@@ -1328,7 +1370,7 @@ index 8bda600..44cb314 100644
 +                            headers = request.sourceHeaders,
 +                            finalName = subFinalName,
 +                            tempName = subTempName,
-+                            onProgress = onProgress,
++                            onProgress = { _, _ -> },
 +                            ctx = ctx,
 +                            trackName = "subs_$subIndex",
 +                            onTrackProgress = onTrackProgress,
@@ -1528,7 +1570,7 @@ index 8bda600..44cb314 100644
 +    range: HlsByteRange?,
 +): HlsHttpResult {
 +    val requestBuilder = Request.Builder().url(url)
-+    headers.forEach { (key, value) ->
++    withDefaultUserAgent(headers).forEach { (key, value) ->
 +        requestBuilder.header(key, value)
 +    }
 +    if (range != null) {
@@ -2924,7 +2966,7 @@ index 0000000..f82780c
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..f178b012
+index 0000000..f178b01
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 @@ -0,0 +1,403 @@
@@ -3419,7 +3461,7 @@ index 48da488..2c91b1b 100644
      sortedWith(downloadSeriesEpisodeComparator)
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
-index 077b853..82a08ee 100644
+index 077b853..2ed0501 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 @@ -1,9 +1,24 @@
@@ -3460,19 +3502,21 @@ index 077b853..82a08ee 100644
      ): DownloadsTaskHandle
  
      fun removeFile(localFileUri: String?): Boolean
-@@ -24,5 +42,7 @@ internal expect object DownloadsPlatformDownloader {
+@@ -24,5 +42,9 @@ internal expect object DownloadsPlatformDownloader {
  
      fun resolveLocalFileUri(localFileUri: String?, destinationFileName: String): String?
  
 +    fun fetchUrlAsString(url: String, headers: Map<String, String>): String?
 +
++    fun probeIsHls(url: String, headers: Map<String, String>): Boolean
++
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index b0440dc..a79ab77 100644
+index b0440dc..dfe4b28 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-@@ -1,6 +1,13 @@
+@@ -1,6 +1,14 @@
  package com.nuvio.app.features.downloads
  
 +import com.nuvio.app.core.logging.InAppLogger
@@ -3483,10 +3527,11 @@ index b0440dc..a79ab77 100644
 +import kotlinx.coroutines.SupervisorJob
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
  import kotlinx.coroutines.runBlocking
  import kotlinx.coroutines.flow.MutableStateFlow
  import kotlinx.coroutines.flow.StateFlow
-@@ -17,22 +24,36 @@ object DownloadsRepository {
+@@ -17,22 +25,36 @@ object DownloadsRepository {
      private val _uiState = MutableStateFlow(DownloadsUiState())
      val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
  
@@ -3523,7 +3568,7 @@ index b0440dc..a79ab77 100644
          hasLoaded = false
          _uiState.value = DownloadsUiState()
          notifyLiveStatusPlatform()
-@@ -100,6 +121,13 @@ object DownloadsRepository {
+@@ -100,6 +122,13 @@ object DownloadsRepository {
          return resolvedUri
      }
  
@@ -3537,7 +3582,7 @@ index b0440dc..a79ab77 100644
      fun enqueueFromStream(
          contentType: String,
          videoId: String,
-@@ -126,6 +154,162 @@ object DownloadsRepository {
+@@ -126,6 +155,66 @@ object DownloadsRepository {
              return DownloadEnqueueResult.UnsupportedFormat
          }
  
@@ -3561,6 +3606,14 @@ index b0440dc..a79ab77 100644
 +            stream = stream,
 +            sourceUrl = sourceUrl,
 +        )
++    }
++
++    suspend fun probeIsHls(stream: StreamItem): Boolean {
++        val sourceUrl = stream.playableDirectUrl?.trim()?.takeIf { it.isNotBlank() } ?: return false
++        val headers = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request)
++        return withContext(Dispatchers.IO) {
++            DownloadsPlatformDownloader.probeIsHls(sourceUrl, headers)
++        }
 +    }
 +
 +    fun fetchHlsMasterPlaylist(stream: StreamItem): HlsStreamMetadata? {
@@ -3593,19 +3646,13 @@ index b0440dc..a79ab77 100644
 +    ): DownloadEnqueueResult {
 +        ensureLoaded()
 +
-+        val now = DownloadsClock.nowEpochMs()
-+        val logicalKey = buildLogicalKey(
-+            parentMetaId = parentMetaId,
-+            seasonNumber = seasonNumber,
-+            episodeNumber = episodeNumber,
-+        )
-+
-+        var replacedExisting = false
-+        val currentItems = _uiState.value.items.toMutableList()
-+        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
-+        if (existing != null) {
-+            replacedExisting = true
-+            activeHandles.remove(existing.id)?.cancel()
+         val now = DownloadsClock.nowEpochMs()
+         val logicalKey = buildLogicalKey(
+             parentMetaId = parentMetaId,
+@@ -139,6 +228,112 @@ object DownloadsRepository {
+         if (existing != null) {
+             replacedExisting = true
+             activeHandles.remove(existing.id)?.cancel()
 +            processingRemovalJobs.remove(existing.id)?.cancel()
 +            _trackProgress.update { it - existing.id }
 +            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
@@ -3697,19 +3744,25 @@ index b0440dc..a79ab77 100644
 +        stream: StreamItem,
 +        sourceUrl: String,
 +    ): DownloadEnqueueResult {
-         val now = DownloadsClock.nowEpochMs()
-         val logicalKey = buildLogicalKey(
-             parentMetaId = parentMetaId,
-@@ -139,6 +323,8 @@ object DownloadsRepository {
-         if (existing != null) {
-             replacedExisting = true
-             activeHandles.remove(existing.id)?.cancel()
++        val now = DownloadsClock.nowEpochMs()
++        val logicalKey = buildLogicalKey(
++            parentMetaId = parentMetaId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++        )
++
++        var replacedExisting = false
++        val currentItems = _uiState.value.items.toMutableList()
++        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
++        if (existing != null) {
++            replacedExisting = true
++            activeHandles.remove(existing.id)?.cancel()
 +            processingRemovalJobs.remove(existing.id)?.cancel()
 +            _trackProgress.update { it - existing.id }
              DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
              DownloadsPlatformDownloader.removePartialFile(existing.fileName)
              currentItems.removeAll { it.id == existing.id }
-@@ -152,6 +338,7 @@ object DownloadsRepository {
+@@ -152,6 +347,7 @@ object DownloadsRepository {
              episodeTitle = episodeTitle,
              fallbackTitle = stream.streamLabel,
              sourceUrl = sourceUrl,
@@ -3717,7 +3770,7 @@ index b0440dc..a79ab77 100644
              nowEpochMs = now,
          )
  
-@@ -247,6 +434,8 @@ object DownloadsRepository {
+@@ -247,6 +443,8 @@ object DownloadsRepository {
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
  
          activeHandles.remove(downloadId)?.cancel()
@@ -3726,7 +3779,7 @@ index b0440dc..a79ab77 100644
          DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
          DownloadsPlatformDownloader.removePartialFile(item.fileName)
  
-@@ -291,11 +480,34 @@ object DownloadsRepository {
+@@ -291,11 +489,34 @@ object DownloadsRepository {
  
      private fun startDownload(item: DownloadItem) {
          val request = DownloadPlatformRequest(
@@ -3761,7 +3814,7 @@ index b0440dc..a79ab77 100644
          val handle = DownloadsPlatformDownloader.start(
              request = request,
              onProgress = { downloadedBytes, totalBytes ->
-@@ -311,28 +523,82 @@ object DownloadsRepository {
+@@ -311,28 +532,82 @@ object DownloadsRepository {
                          )
                      }
                  }
@@ -3846,7 +3899,7 @@ index b0440dc..a79ab77 100644
                          current
                      } else {
                          current.copy(
-@@ -343,33 +609,49 @@ object DownloadsRepository {
+@@ -343,33 +618,49 @@ object DownloadsRepository {
                      }
                  }
              },
@@ -3911,7 +3964,7 @@ index b0440dc..a79ab77 100644
      }
  
      private fun publish(items: List<DownloadItem>) {
-@@ -495,6 +777,7 @@ private fun buildFileName(
+@@ -495,6 +786,7 @@ private fun buildFileName(
      episodeTitle: String?,
      fallbackTitle: String,
      sourceUrl: String,
@@ -3919,7 +3972,7 @@ index b0440dc..a79ab77 100644
      nowEpochMs: Long,
  ): String {
      val baseTitle = if (seasonNumber != null && episodeNumber != null) {
-@@ -513,7 +796,7 @@ private fun buildFileName(
+@@ -513,7 +805,7 @@ private fun buildFileName(
          title.ifBlank { fallbackTitle }
      }
  
@@ -3928,7 +3981,7 @@ index b0440dc..a79ab77 100644
      return buildString {
          append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(92))
          append('_')
-@@ -523,6 +806,44 @@ private fun buildFileName(
+@@ -523,6 +815,44 @@ private fun buildFileName(
      }
  }
  
@@ -3973,7 +4026,7 @@ index b0440dc..a79ab77 100644
  private fun String.sanitizeFileName(): String =
      trim().replace(Regex("[^A-Za-z0-9._ -]"), "_")
  
-@@ -542,8 +863,22 @@ private fun String.fileExtensionFromUrl(): String {
+@@ -542,8 +872,22 @@ private fun String.fileExtensionFromUrl(): String {
  private fun String.isSupportedDownloadUrl(): Boolean {
      val normalized = trim().lowercase()
      if (normalized.startsWith("magnet:")) return false
@@ -4728,10 +4781,10 @@ index 0000000..95cea8d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 0000000..ea3a5f3
+index 0000000..4b5a030
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
-@@ -0,0 +1,462 @@
+@@ -0,0 +1,490 @@
 +package com.nuvio.app.features.downloads
 +
 +internal sealed interface HlsPlaylist {
@@ -5073,17 +5126,33 @@ index 0000000..ea3a5f3
 +private val ABSOLUTE_URL_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.\\-]*://")
 +
 +object HlsPlaylistParser {
++    private val HLS_DISGUISED_STREAM_REGEX = Regex(
++        """(?:^|/)(?:m\d{3,4}p|master|playlist|chunklist|index)\.(?:mp4|m3u8)(?:[?#]|$)""",
++        RegexOption.IGNORE_CASE,
++    )
++
 +    fun isHlsUrl(url: String): Boolean {
 +        val lower = url.trim().lowercase()
 +        return lower.endsWith(".m3u8") ||
 +            lower.contains(".m3u8?") ||
 +            lower.contains("/playlist/") ||
 +            lower.contains("/master/") ||
-+            lower.contains("/chunklist/")
++            lower.contains("/chunklist/") ||
++            lower.contains("/hls/") ||
++            lower.contains(".hls") ||
++            lower.contains("format=hls") ||
++            lower.contains("type=hls") ||
++            HLS_DISGUISED_STREAM_REGEX.containsMatchIn(lower)
 +    }
 +
 +    fun isHlsStream(streamType: String?): Boolean =
 +        streamType?.trim().equals("hls", ignoreCase = true)
++
++    private fun extractResolutionHint(url: String): String? {
++        val lower = url.lowercase()
++        val match = Regex("""(?:m|_)(\d{3,4}p)""").find(lower) ?: Regex("""(\d{3,4}p)""").find(lower)
++        return match?.groupValues?.getOrNull(1)
++    }
 +
 +    fun parseMasterPlaylist(content: String, baseUrl: String): HlsMasterPlaylist {
 +        val lines = content.lines()
@@ -5132,6 +5201,18 @@ index 0000000..ea3a5f3
 +                }
 +            }
 +            i++
++        }
++
++        if (variants.isEmpty() && (content.contains("#EXTINF:") || content.contains("#EXT-X-TARGETDURATION:"))) {
++            val inferredResolution = extractResolutionHint(baseUrl)
++            variants.add(
++                HlsVariant(
++                    url = baseUrl,
++                    bandwidth = 0L,
++                    resolution = inferredResolution,
++                    codecs = null,
++                )
++            )
 +        }
 +
 +        return HlsMasterPlaylist(variants, audioTracks, subtitleTracks)
@@ -5195,10 +5276,10 @@ index 0000000..ea3a5f3
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 02ecc31..507c6fd 100644
+index 5b4e16a..8f622d7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-@@ -183,6 +183,7 @@ internal class PlayerScreenRuntime(
+@@ -185,6 +185,7 @@ internal class PlayerScreenRuntime(
      var showAudioModal by mutableStateOf(false)
      var showSubtitleModal by mutableStateOf(false)
      var showVideoSettingsModal by mutableStateOf(false)
@@ -5207,10 +5288,10 @@ index 02ecc31..507c6fd 100644
      var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
      var selectedAudioIndex by mutableStateOf(-1)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 8821d33..62c48a5 100644
+index 34aa594..953573a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -214,6 +214,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -215,6 +215,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
              p2pRebufferProgress = p2pRebufferProgress,
          )
          RenderPlayerModals(displayedPositionMs = displayedPositionMs)
@@ -5227,7 +5308,7 @@ index 8821d33..62c48a5 100644
      }
  }
  
-@@ -286,6 +296,11 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+@@ -287,6 +297,11 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
              },
              onSourcesClick = if (activeVideoId != null) { { openSourcesPanel() } } else null,
              onEpisodesClick = if (isSeries) { { openEpisodesPanel() } } else null,
@@ -5463,7 +5544,7 @@ index 0000000..602b8e1
 +
 +var globalNetworkSettingsRepository: NetworkSettingsRepository? = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index d6f6f98..cdb3f9b 100644
+index d6f6f98..d455d1d 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 @@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -5485,36 +5566,119 @@ index d6f6f98..cdb3f9b 100644
      val downloadScope = rememberCoroutineScope()
      var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
      var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
-@@ -402,7 +406,14 @@ fun StreamsScreen(
+@@ -402,57 +406,66 @@ fun StreamsScreen(
                  }
              },
              onDownload = { stream ->
 -                if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
 +                val directUrl = stream.playableDirectUrl.orEmpty()
-+                val isHls = directUrl.isNotBlank() && (
++                val isKnownHls = directUrl.isNotBlank() && (
 +                    HlsPlaylistParser.isHlsUrl(directUrl) ||
 +                    HlsPlaylistParser.isHlsStream(stream.streamType)
 +                )
-+                if (isHls) {
++                if (isKnownHls) {
 +                    hlsDownloadTarget = stream
-+                } else if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
++                } else {
                      downloadScope.launch {
-                         val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
-                             stream = stream,
-@@ -452,7 +463,11 @@ fun StreamsScreen(
-                         episodeThumbnail = episodeThumbnail,
-                         stream = stream,
-                     )
+-                        val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
+-                            stream = stream,
+-                            season = seasonNumber,
+-                            episode = episodeNumber,
++                        val effectiveStream = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
++                            val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
++                                stream = stream,
++                                season = seasonNumber,
++                                episode = episodeNumber,
++                            )
++                            when (resolved) {
++                                is DirectDebridPlayableResult.Success -> resolved.stream
++                                else -> {
++                                    val message = resolved.toastMessage()
++                                    if (message != null) {
++                                        NuvioToastController.show(message)
++                                    }
++                                    return@launch
++                                }
++                            }
++                        } else {
++                            stream
++                        }
++
++                        val resolvedUrl = effectiveStream.playableDirectUrl.orEmpty()
++                        val isHlsStream = resolvedUrl.isNotBlank() && (
++                            HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
++                            HlsPlaylistParser.isHlsStream(effectiveStream.streamType) ||
++                            DownloadsRepository.probeIsHls(effectiveStream)
+                         )
+-                        when (resolved) {
+-                            is DirectDebridPlayableResult.Success -> {
+-                                val result = DownloadsRepository.enqueueFromStream(
+-                                    contentType = type,
+-                                    videoId = videoId,
+-                                    parentMetaId = parentMetaId,
+-                                    parentMetaType = parentMetaType,
+-                                    title = title,
+-                                    logo = logo,
+-                                    poster = poster,
+-                                    background = background,
+-                                    seasonNumber = seasonNumber,
+-                                    episodeNumber = episodeNumber,
+-                                    episodeTitle = episodeTitle,
+-                                    episodeThumbnail = episodeThumbnail,
+-                                    stream = resolved.stream,
+-                                )
++                        if (isHlsStream) {
++                            hlsDownloadTarget = effectiveStream
++                        } else {
++                            val result = DownloadsRepository.enqueueFromStream(
++                                contentType = type,
++                                videoId = videoId,
++                                parentMetaId = parentMetaId,
++                                parentMetaType = parentMetaType,
++                                title = title,
++                                logo = logo,
++                                poster = poster,
++                                background = background,
++                                seasonNumber = seasonNumber,
++                                episodeNumber = episodeNumber,
++                                episodeTitle = episodeTitle,
++                                episodeThumbnail = episodeThumbnail,
++                                stream = effectiveStream,
++                            )
++                            if (result == DownloadEnqueueResult.HlsNeedsSelection) {
++                                hlsDownloadTarget = effectiveStream
++                            } else {
+                                 NuvioToastController.show(result.toastMessage())
+                             }
+-                            else -> {
+-                                val message = resolved.toastMessage()
+-                                if (message != null) {
+-                                    NuvioToastController.show(message)
+-                                }
+-                            }
+                         }
+                     }
+-                } else {
+-                    val result = DownloadsRepository.enqueueFromStream(
+-                        contentType = type,
+-                        videoId = videoId,
+-                        parentMetaId = parentMetaId,
+-                        parentMetaType = parentMetaType,
+-                        title = title,
+-                        logo = logo,
+-                        poster = poster,
+-                        background = background,
+-                        seasonNumber = seasonNumber,
+-                        episodeNumber = episodeNumber,
+-                        episodeTitle = episodeTitle,
+-                        episodeThumbnail = episodeThumbnail,
+-                        stream = stream,
+-                    )
 -                    NuvioToastController.show(result.toastMessage())
-+                    if (result == DownloadEnqueueResult.HlsNeedsSelection) {
-+                        hlsDownloadTarget = stream
-+                    } else {
-+                        NuvioToastController.show(result.toastMessage())
-+                    }
                  }
              },
              onOpen = { stream, openExternally ->
-@@ -464,6 +479,32 @@ fun StreamsScreen(
+@@ -464,6 +477,32 @@ fun StreamsScreen(
                  )
              },
          )
@@ -5608,10 +5772,10 @@ index 0000000..92e4807
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 new file mode 100644
-index 0000000..1f11f57
+index 0000000..d4b3563
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,119 @@
 +package com.nuvio.app.features.downloads
 +
 +import java.io.File
@@ -5702,11 +5866,32 @@ index 0000000..1f11f57
 +    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
 +        return try {
 +            val conn = URL(url).openConnection() as HttpURLConnection
++            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
++            if (!hasUserAgent) {
++                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
++            }
 +            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
 +            conn.connect()
 +            conn.inputStream.reader().readText()
 +        } catch (_: Exception) {
 +            null
++        }
++    }
++
++    actual fun probeIsHls(url: String, headers: Map<String, String>): Boolean {
++        return try {
++            val conn = URL(url).openConnection() as HttpURLConnection
++            conn.requestMethod = "HEAD"
++            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
++            if (!hasUserAgent) {
++                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
++            }
++            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
++            conn.connect()
++            val ct = conn.contentType?.lowercase().orEmpty()
++            ct.contains("mpegurl") || ct.contains("m3u8")
++        } catch (_: Exception) {
++            false
 +        }
 +    }
 +}
@@ -5844,7 +6029,7 @@ index 2cd1d31..5b9cd31 100644
          DownloadStatus.Failed -> 2
          DownloadStatus.Completed -> 3
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
-index dd37f8e..bf9b531 100644
+index dd37f8e..da3920a 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 @@ -2,13 +2,21 @@ package com.nuvio.app.features.downloads
@@ -5952,7 +6137,7 @@ index dd37f8e..bf9b531 100644
          scope.launch {
              val downloadsDirectory = downloadsDirectoryPath()
              val destinationPath = "$downloadsDirectory/${request.destinationFileName}"
-@@ -178,6 +230,36 @@ internal actual object DownloadsPlatformDownloader {
+@@ -178,6 +230,76 @@ internal actual object DownloadsPlatformDownloader {
          }
      }
  
@@ -5965,6 +6150,10 @@ index dd37f8e..bf9b531 100644
 +                timeoutInterval = 30.0,
 +            )
 +            request.setHTTPMethod("GET")
++            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
++            if (!hasUserAgent) {
++                request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField = "User-Agent")
++            }
 +            headers.forEach { (key, value) ->
 +                request.setValue(value, forHTTPHeaderField = key)
 +            }
@@ -5986,10 +6175,46 @@ index dd37f8e..bf9b531 100644
 +        }
 +    }
 +
++    actual fun probeIsHls(url: String, headers: Map<String, String>): Boolean {
++        return try {
++            val nativeUrl = NSURL(string = url) ?: return false
++            val request = NSMutableURLRequest(
++                uRL = nativeUrl,
++                cachePolicy = NSURLRequestReloadIgnoringLocalCacheData,
++                timeoutInterval = 10.0,
++            )
++            request.setHTTPMethod("HEAD")
++            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
++            if (!hasUserAgent) {
++                request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField = "User-Agent")
++            }
++            headers.forEach { (key, value) ->
++                request.setValue(value, forHTTPHeaderField = key)
++            }
++            val semaphore = dispatch_semaphore_create(0)
++            var isHls = false
++            val task = NSURLSession.sharedSession.dataTaskWithRequest(request) { _, response, error ->
++                if (error == null && response != null) {
++                    val httpResp = response as? NSHTTPURLResponse
++                    val ct = httpResp?.MIMEType?.lowercase() ?: ""
++                    if (ct.contains("mpegurl") || ct.contains("m3u8")) {
++                        isHls = true
++                    }
++                }
++                dispatch_semaphore_signal(semaphore)
++            }
++            task.resume()
++            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
++            isHls
++        } catch (_: Exception) {
++            false
++        }
++    }
++
      actual fun openDownloadsDirectory(): Boolean {
          val url = NSURL.fileURLWithPath(downloadsDirectoryPath())
          UIApplication.sharedApplication.openURL(
-@@ -505,3 +587,373 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -505,3 +627,373 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }

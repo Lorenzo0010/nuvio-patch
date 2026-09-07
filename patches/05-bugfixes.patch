@@ -1,25 +1,3 @@
-diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 45f0c72..bdffd68 100644
---- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-+++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -574,7 +574,7 @@ private suspend fun performHlsDownloadAndroid(
-                             headers = request.sourceHeaders,
-                             finalName = audioFinalName,
-                             tempName = audioTempName,
--                            onProgress = onProgress,
-+                            onProgress = { _, _ -> },
-                             ctx = ctx,
-                             trackName = "audio_$audioIndex",
-                             onTrackProgress = onTrackProgress,
-@@ -611,7 +611,7 @@ private suspend fun performHlsDownloadAndroid(
-                             headers = request.sourceHeaders,
-                             finalName = subFinalName,
-                             tempName = subTempName,
--                            onProgress = onProgress,
-+                            onProgress = { _, _ -> },
-                             ctx = ctx,
-                             trackName = "subs_$subIndex",
-                             onTrackProgress = onTrackProgress,
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
 index f542e4a..aeaa0d8 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
