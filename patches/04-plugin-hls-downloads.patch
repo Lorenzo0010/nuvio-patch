@@ -1,4 +1,4 @@
-diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
+﻿diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
 index 3d00b85..812dd09 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
@@ -2977,20 +2977,23 @@ index 0000000..b271ad4
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 0000000..e2bdd1b
+index 0000000..dce66e1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,489 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
 +import com.nuvio.app.core.logging.InAppLogger
 +import com.nuvio.app.core.ui.NuvioToastController
++import com.nuvio.app.features.addons.AddonRepository
 +import com.nuvio.app.features.debrid.DirectDebridPlayableResult
 +import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 +import com.nuvio.app.features.details.MetaDetails
 +import com.nuvio.app.features.details.MetaVideo
 +import com.nuvio.app.features.player.PlayerStreamsRepository
++import com.nuvio.app.features.streams.AddonStreamGroup
++import com.nuvio.app.features.streams.StreamDebridCacheState
 +import com.nuvio.app.features.streams.StreamItem
 +import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 +import kotlinx.coroutines.CoroutineScope
@@ -3003,6 +3006,11 @@ index 0000000..e2bdd1b
 +import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.launch
 +
++private sealed interface StartAttemptResult {
++    data class Success(val item: DownloadItem) : StartAttemptResult
++    data class Failed(val reason: String) : StartAttemptResult
++}
++
 +object AutoStreamDownloader {
 +    private val log = Logger.withTag("AutoDownloader")
 +    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -3010,6 +3018,200 @@ index 0000000..e2bdd1b
 +    val activeSearches: StateFlow<Set<String>> = _activeSearches.asStateFlow()
 +
 +    fun isSearching(key: String): Boolean = key in _activeSearches.value
++
++    private fun isPluginGroup(group: AddonStreamGroup): Boolean =
++        group.addonId.startsWith("plugin:") || group.addonId.startsWith("plugin-repo:")
++
++    private fun isAddonGroup(group: AddonStreamGroup): Boolean =
++        !isPluginGroup(group)
++
++    private fun isPluginStream(stream: StreamItem): Boolean =
++        stream.addonId.startsWith("plugin:") ||
++        stream.addonId.startsWith("plugin-repo:") ||
++        stream.sourceName != null
++
++    private fun isAddonStream(stream: StreamItem): Boolean =
++        !isPluginStream(stream)
++
++    private suspend fun resolveEffectiveStream(
++        candidate: StreamItem,
++        seasonNumber: Int?,
++        episodeNumber: Int?,
++    ): StreamItem? {
++        if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(candidate)) {
++            val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
++                stream = candidate,
++                season = seasonNumber,
++                episode = episodeNumber,
++            )
++            return when (resolved) {
++                is DirectDebridPlayableResult.Success -> {
++                    val resolvedUrl = resolved.stream.playableDirectUrl.orEmpty().ifBlank { resolved.stream.url.orEmpty() }
++                    if (resolvedUrl.isNotBlank()) resolved.stream else null
++                }
++                else -> null
++            }
++        }
++        val directUrl = candidate.playableDirectUrl ?: candidate.url?.takeIf {
++            it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
++        }
++        if (!directUrl.isNullOrBlank()) {
++            return candidate
++        }
++        return null
++    }
++
++    private suspend fun attemptStartDownloadCandidate(
++        stream: StreamItem,
++        meta: MetaDetails,
++        contentType: String,
++        targetVideoId: String,
++        seasonNumber: Int?,
++        episodeNumber: Int?,
++        episodeTitle: String?,
++        episodeThumbnail: String?,
++        displayTitle: String,
++    ): StartAttemptResult {
++        val resolvedUrl = stream.playableDirectUrl.orEmpty().ifBlank { stream.url.orEmpty() }
++        val isHlsStream = resolvedUrl.isNotBlank() && (
++            HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
++            HlsPlaylistParser.isHlsStream(stream.streamType) ||
++            DownloadsRepository.probeIsHls(stream)
++        )
++
++        val enqueueResult: DownloadEnqueueResult = if (isHlsStream) {
++            val metadata = DownloadsRepository.fetchHlsMasterPlaylist(stream)
++            val master = metadata?.masterPlaylist
++            if (master != null && master.variants.isNotEmpty()) {
++                val bestVariant = master.variants.sortedWith(
++                    compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
++                        .thenByDescending { it.bandwidth }
++                ).first()
++
++                val audioTracks = master.audioTracks.filter { it.uri != null }
++                val italianAudio = audioTracks.firstOrNull { isItalianTrack(it) } ?: audioTracks.firstOrNull()
++                val selectedAudioUrls = listOfNotNull(italianAudio?.uri)
++
++                val displayQuality = bestVariant.resolution ?: "${(bestVariant.bandwidth / 1000)}kbps"
++                val displayAudio = italianAudio?.name.orEmpty()
++
++                val selection = HlsDownloadSelection(
++                    variantUrl = bestVariant.url,
++                    audioUrls = selectedAudioUrls,
++                    subtitleUrls = emptyList(),
++                    displayQuality = displayQuality,
++                    displayAudio = displayAudio,
++                    displaySubtitle = "",
++                )
++
++                DownloadsRepository.enqueueFromHlsSelection(
++                    contentType = contentType,
++                    videoId = targetVideoId,
++                    parentMetaId = meta.id,
++                    parentMetaType = meta.type,
++                    title = meta.name,
++                    logo = meta.logo,
++                    poster = meta.poster,
++                    background = meta.background,
++                    seasonNumber = seasonNumber,
++                    episodeNumber = episodeNumber,
++                    episodeTitle = episodeTitle,
++                    episodeThumbnail = episodeThumbnail,
++                    stream = stream,
++                    selection = selection,
++                )
++            } else {
++                DownloadsRepository.enqueueFromStream(
++                    contentType = contentType,
++                    videoId = targetVideoId,
++                    parentMetaId = meta.id,
++                    parentMetaType = meta.type,
++                    title = meta.name,
++                    logo = meta.logo,
++                    poster = meta.poster,
++                    background = meta.background,
++                    seasonNumber = seasonNumber,
++                    episodeNumber = episodeNumber,
++                    episodeTitle = episodeTitle,
++                    episodeThumbnail = episodeThumbnail,
++                    stream = stream,
++                )
++            }
++        } else {
++            DownloadsRepository.enqueueFromStream(
++                contentType = contentType,
++                videoId = targetVideoId,
++                parentMetaId = meta.id,
++                parentMetaType = meta.type,
++                title = meta.name,
++                logo = meta.logo,
++                poster = meta.poster,
++                background = meta.background,
++                seasonNumber = seasonNumber,
++                episodeNumber = episodeNumber,
++                episodeTitle = episodeTitle,
++                episodeThumbnail = episodeThumbnail,
++                stream = stream,
++            )
++        }
++
++        if (enqueueResult != DownloadEnqueueResult.Started && enqueueResult != DownloadEnqueueResult.Replaced) {
++            return StartAttemptResult.Failed(enqueueResult.toastMessage())
++        }
++
++        val logicalKey = buildLogicalKey(meta.id, seasonNumber, episodeNumber)
++        DownloadsRepository.ensureLoaded()
++        val enqueuedItem = DownloadsRepository.uiState.value.items.firstOrNull { it.logicalContentKey == logicalKey }
++            ?: return StartAttemptResult.Failed("Download non registrato")
++
++        val downloadId = enqueuedItem.id
++        log.d { "Monitoraggio avvio download ($downloadId) per: $displayTitle..." }
++
++        // Finestra di monitoraggio iniziale ("fallisce in partenza"): fino a 6 secondi
++        val monitorStartMs = DownloadsClock.nowEpochMs()
++        val monitorTimeoutMs = 6_000L
++        while (DownloadsClock.nowEpochMs() - monitorStartMs < monitorTimeoutMs) {
++            delay(250L)
++            DownloadsRepository.ensureLoaded()
++            val currentItem = DownloadsRepository.uiState.value.items.firstOrNull { it.id == downloadId }
++            if (currentItem == null) {
++                return StartAttemptResult.Failed("Download annullato o rimosso")
++            }
++            if (currentItem.status == DownloadStatus.Failed) {
++                log.w { "Download fallito in partenza: ${currentItem.errorMessage}. Pulizia e fallback..." }
++                DownloadsRepository.cancelDownload(downloadId)
++                return StartAttemptResult.Failed(currentItem.errorMessage ?: "Download fallito in partenza")
++            }
++            if (currentItem.status == DownloadStatus.Completed) {
++                return StartAttemptResult.Success(currentItem)
++            }
++            if (currentItem.downloadedBytes > 0L) {
++                // Byte ricevuti con successo! Breve conferma di stabilitÃ  (500ms)
++                delay(500L)
++                DownloadsRepository.ensureLoaded()
++                val verifyItem = DownloadsRepository.uiState.value.items.firstOrNull { it.id == downloadId }
++                if (verifyItem?.status == DownloadStatus.Failed) {
++                    DownloadsRepository.cancelDownload(downloadId)
++                    return StartAttemptResult.Failed(verifyItem.errorMessage ?: "Download fallito in partenza")
++                }
++                val safeItem: DownloadItem = verifyItem ?: currentItem
++                return StartAttemptResult.Success(safeItem)
++            }
++        }
++
++        DownloadsRepository.ensureLoaded()
++        val finalItem = DownloadsRepository.uiState.value.items.firstOrNull { it.id == downloadId }
++        return if (finalItem != null) {
++            if (finalItem.status == DownloadStatus.Failed) {
++                DownloadsRepository.cancelDownload(downloadId)
++                StartAttemptResult.Failed(finalItem.errorMessage ?: "Download fallito in partenza")
++            } else {
++                StartAttemptResult.Success(finalItem)
++            }
++        } else {
++            StartAttemptResult.Success(enqueuedItem)
++        }
++    }
 +
 +    fun isItemDownloaded(
 +        parentMetaId: String,
@@ -3072,17 +3274,17 @@ index 0000000..e2bdd1b
 +        val contentKey = buildLogicalKey(meta.id, seasonNumber, episodeNumber)
 +
 +        if (contentKey in _activeSearches.value) {
-+            NuvioToastController.show("Ricerca stream per il download già in corso...")
++            NuvioToastController.show("Ricerca stream per il download giÃ  in corso...")
 +            return
 +        }
 +
 +        DownloadsRepository.ensureLoaded()
 +        if (isItemDownloaded(meta.id, seasonNumber, episodeNumber, targetVideoId)) {
-+            NuvioToastController.show("Contenuto già scaricato")
++            NuvioToastController.show("Contenuto giÃ  scaricato")
 +            return
 +        }
 +        if (isItemDownloading(meta.id, seasonNumber, episodeNumber)) {
-+            NuvioToastController.show("Download già in corso")
++            NuvioToastController.show("Download giÃ  in corso")
 +            return
 +        }
 +
@@ -3100,130 +3302,168 @@ index 0000000..e2bdd1b
 +                )
 +
 +                val startEpochMs = DownloadsClock.nowEpochMs()
-+                var streamFound: StreamItem? = null
++                val addonWaitTimeoutMs = 14_000L
++                val totalTimeoutMs = 25_000L
 +
-+                while (DownloadsClock.nowEpochMs() - startEpochMs < 15_000L) {
-+                    val state = PlayerStreamsRepository.episodeStreamsState.value
-+                    val allStreams = state.groups.flatMap { it.streams }
-+                    val candidate = allStreams.firstOrNull { it.playableDirectUrl?.isNotBlank() == true || !it.url.isNullOrBlank() }
-+                    if (candidate != null) {
-+                        streamFound = candidate
-+                        break
++                val hasStreamAddons = try {
++                    AddonRepository.uiState.value.addons.any {
++                        it.enabled && it.manifest?.resources?.any { r -> r.name == "stream" } == true
 +                    }
-+                    if (!state.isAnyLoading && state.groups.isNotEmpty()) {
-+                        streamFound = allStreams.firstOrNull()
-+                        break
-+                    }
-+                    delay(400L)
++                } catch (_: Throwable) {
++                    true
 +                }
 +
-+                if (streamFound == null) {
-+                    NuvioToastController.show("Nessuno stream disponibile per il download")
-+                    return@launch
-+                }
++                // 1. Se sono presenti addon per gli stream, attendi che completino il caricamento
++                if (hasStreamAddons) {
++                    while (DownloadsClock.nowEpochMs() - startEpochMs < addonWaitTimeoutMs) {
++                        val state = PlayerStreamsRepository.episodeStreamsState.value
++                        val addonGroups = state.groups.filter { isAddonGroup(it) }
 +
-+                val effectiveStream = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(streamFound)) {
-+                    val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
-+                        stream = streamFound,
-+                        season = seasonNumber,
-+                        episode = episodeNumber,
-+                    )
-+                    when (resolved) {
-+                        is DirectDebridPlayableResult.Success -> resolved.stream
-+                        else -> streamFound
++                        if (addonGroups.isEmpty() && state.isAnyLoading) {
++                            delay(250L)
++                            continue
++                        }
++
++                        val addonsStillLoading = addonGroups.any { it.isLoading }
++                        if (!addonsStillLoading && addonGroups.isNotEmpty()) {
++                            // Concedi un breve margine di tolleranza (fino a 2.5s) per i flussi debrid in controllo cache
++                            val isCheckingDebrid = addonGroups.flatMap { it.streams }.any {
++                                it.debridCacheStatus?.state == StreamDebridCacheState.CHECKING
++                            }
++                            if (isCheckingDebrid && DownloadsClock.nowEpochMs() - startEpochMs < addonWaitTimeoutMs - 2_500L) {
++                                delay(250L)
++                                continue
++                            }
++                            log.d { "Tutti gli addon hanno terminato il caricamento (${addonGroups.size} gruppi addon)" }
++                            break
++                        }
++                        delay(250L)
 +                    }
-+                } else {
-+                    streamFound
 +                }
 +
-+                val resolvedUrl = effectiveStream.playableDirectUrl.orEmpty().ifBlank { effectiveStream.url.orEmpty() }
-+                val isHlsStream = resolvedUrl.isNotBlank() && (
-+                    HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
-+                    HlsPlaylistParser.isHlsStream(effectiveStream.streamType) ||
-+                    DownloadsRepository.probeIsHls(effectiveStream)
-+                )
++                val stateAfterAddons = PlayerStreamsRepository.episodeStreamsState.value
++                val addonGroups = stateAfterAddons.groups.filter { isAddonGroup(it) }
++                val rawAddonStreams = addonGroups.flatMap { it.streams }.filter { isAddonStream(it) }
 +
-+                if (isHlsStream) {
-+                    val metadata = DownloadsRepository.fetchHlsMasterPlaylist(effectiveStream)
-+                    val master = metadata?.masterPlaylist
-+                    if (master != null && master.variants.isNotEmpty()) {
-+                        val bestVariant = master.variants.sortedWith(
-+                            compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
-+                                .thenByDescending { it.bandwidth }
-+                        ).first()
++                var downloadStarted = false
++                var attemptedCount = 0
 +
-+                        val audioTracks = master.audioTracks.filter { it.uri != null }
-+                        val italianAudio = audioTracks.firstOrNull { isItalianTrack(it) } ?: audioTracks.firstOrNull()
-+                        val selectedAudioUrls = listOfNotNull(italianAudio?.uri)
++                // Prova prima gli stream forniti dagli addon (preferendo il primo stream, con fallback sequenziale)
++                if (rawAddonStreams.isNotEmpty()) {
++                    log.d { "Trovati ${rawAddonStreams.size} stream da addon. Tentativo primo stream e fallback sequenziale..." }
 +
-+                        val displayQuality = bestVariant.resolution ?: "${(bestVariant.bandwidth / 1000)}kbps"
-+                        val displayAudio = italianAudio?.name.orEmpty()
++                    for (rawStream in rawAddonStreams) {
++                        val effectiveStream = resolveEffectiveStream(rawStream, seasonNumber, episodeNumber)
++                        if (effectiveStream == null) continue
 +
-+                        val selection = HlsDownloadSelection(
-+                            variantUrl = bestVariant.url,
-+                            audioUrls = selectedAudioUrls,
-+                            subtitleUrls = emptyList(),
-+                            displayQuality = displayQuality,
-+                            displayAudio = displayAudio,
-+                            displaySubtitle = "",
-+                        )
++                        attemptedCount++
++                        log.d { "Tentativo download con addon stream #$attemptedCount: ${effectiveStream.addonName ?: "addon"} - ${effectiveStream.streamLabel}" }
 +
-+                        DownloadsRepository.enqueueFromHlsSelection(
++                        val attemptResult = attemptStartDownloadCandidate(
++                            stream = effectiveStream,
++                            meta = meta,
 +                            contentType = contentType,
-+                            videoId = targetVideoId,
-+                            parentMetaId = meta.id,
-+                            parentMetaType = meta.type,
-+                            title = meta.name,
-+                            logo = meta.logo,
-+                            poster = meta.poster,
-+                            background = meta.background,
++                            targetVideoId = targetVideoId,
 +                            seasonNumber = seasonNumber,
 +                            episodeNumber = episodeNumber,
 +                            episodeTitle = episodeTitle,
 +                            episodeThumbnail = episodeThumbnail,
-+                            stream = effectiveStream,
-+                            selection = selection,
++                            displayTitle = displayTitle,
 +                        )
-+                        NuvioToastController.show("Download avviato: $displayTitle ($displayQuality)")
++
++                        when (attemptResult) {
++                            is StartAttemptResult.Success -> {
++                                log.d { "Download avviato con successo: ${effectiveStream.addonName}" }
++                                NuvioToastController.show("Download avviato: $displayTitle")
++                                downloadStarted = true
++                                break // Si ferma al primo riuscito
++                            }
++                            is StartAttemptResult.Failed -> {
++                                log.w { "Stream ${effectiveStream.addonName} fallito in partenza: ${attemptResult.reason}. Fallback al successivo..." }
++                                NuvioToastController.show("Stream non disponibile, provo il successivo...")
++                            }
++                        }
++                    }
++                }
++
++                // 2. Se gli addon non danno risultati o tutti gli stream degli addon sono falliti in partenza, procedi con i plugin
++                if (!downloadStarted) {
++                    log.d { "Nessun risultato valido dagli addon o tutti falliti in partenza. Procedo con i risultati dei plugin..." }
++
++                    while (DownloadsClock.nowEpochMs() - startEpochMs < totalTimeoutMs) {
++                        val state = PlayerStreamsRepository.episodeStreamsState.value
++                        val pluginGroups = state.groups.filter { isPluginGroup(it) }
++                        val pluginStreams = pluginGroups.flatMap { it.streams }.filter { isPluginStream(it) }
++
++                        if (pluginStreams.isNotEmpty()) {
++                            break
++                        }
++
++                        val pluginsStillLoading = pluginGroups.any { it.isLoading }
++                        if (!pluginsStillLoading) {
++                            break
++                        }
++                        delay(250L)
++                    }
++
++                    val stateAfterPlugins = PlayerStreamsRepository.episodeStreamsState.value
++                    val pluginGroups = stateAfterPlugins.groups.filter { isPluginGroup(it) }
++                    val rawPluginStreams = pluginGroups.flatMap { it.streams }.filter { isPluginStream(it) }
++
++                    if (rawPluginStreams.isNotEmpty()) {
++                        log.d { "Trovati ${rawPluginStreams.size} stream da plugin. Tentativo sequenziale..." }
++
++                        for (rawStream in rawPluginStreams) {
++                            val effectiveStream = resolveEffectiveStream(rawStream, seasonNumber, episodeNumber)
++                            if (effectiveStream == null) continue
++
++                            attemptedCount++
++                            log.d { "Tentativo download con plugin stream #$attemptedCount: ${effectiveStream.addonName ?: "plugin"} - ${effectiveStream.streamLabel}" }
++
++                            val attemptResult = attemptStartDownloadCandidate(
++                                stream = effectiveStream,
++                                meta = meta,
++                                contentType = contentType,
++                                targetVideoId = targetVideoId,
++                                seasonNumber = seasonNumber,
++                                episodeNumber = episodeNumber,
++                                episodeTitle = episodeTitle,
++                                episodeThumbnail = episodeThumbnail,
++                                displayTitle = displayTitle,
++                            )
++
++                            when (attemptResult) {
++                                is StartAttemptResult.Success -> {
++                                    log.d { "Download plugin avviato con successo: ${effectiveStream.addonName}" }
++                                    NuvioToastController.show("Download avviato: $displayTitle")
++                                    downloadStarted = true
++                                    break // Si ferma al primo riuscito
++                                }
++                                is StartAttemptResult.Failed -> {
++                                    log.w { "Plugin stream ${effectiveStream.addonName} fallito in partenza: ${attemptResult.reason}. Fallback al successivo..." }
++                                    NuvioToastController.show("Stream non disponibile, provo il successivo...")
++                                }
++                            }
++                        }
++                    }
++                }
++
++                // 3. Notifica esplicita se nessun download Ã¨ riuscito a partire
++                if (!downloadStarted) {
++                    val failureMessage = if (attemptedCount > 0) {
++                        "Download fallito per $displayTitle: tutti gli stream disponibili sono falliti in partenza"
 +                    } else {
-+                        val result = DownloadsRepository.enqueueFromStream(
-+                            contentType = contentType,
-+                            videoId = targetVideoId,
-+                            parentMetaId = meta.id,
-+                            parentMetaType = meta.type,
-+                            title = meta.name,
-+                            logo = meta.logo,
-+                            poster = meta.poster,
-+                            background = meta.background,
-+                            seasonNumber = seasonNumber,
-+                            episodeNumber = episodeNumber,
-+                            episodeTitle = episodeTitle,
-+                            episodeThumbnail = episodeThumbnail,
-+                            stream = effectiveStream,
-+                        )
-+                        NuvioToastController.show(result.toastMessage())
++                        "Download fallito per $displayTitle: nessuno stream disponibile"
 +                    }
-+                } else {
-+                    val result = DownloadsRepository.enqueueFromStream(
-+                        contentType = contentType,
-+                        videoId = targetVideoId,
-+                        parentMetaId = meta.id,
-+                        parentMetaType = meta.type,
-+                        title = meta.name,
-+                        logo = meta.logo,
-+                        poster = meta.poster,
-+                        background = meta.background,
-+                        seasonNumber = seasonNumber,
-+                        episodeNumber = episodeNumber,
-+                        episodeTitle = episodeTitle,
-+                        episodeThumbnail = episodeThumbnail,
-+                        stream = effectiveStream,
-+                    )
-+                    NuvioToastController.show(result.toastMessage())
++                    log.e { failureMessage }
++                    NuvioToastController.show(failureMessage)
++                    DownloadsLiveStatusPlatform.notifyFailure("auto_$contentKey", displayTitle, failureMessage)
 +                }
 +            } catch (e: Throwable) {
 +                InAppLogger.error("AutoDownloader", "Errore durante l'auto download per $displayTitle: ${e.message}")
-+                NuvioToastController.show("Errore durante l'avvio del download")
++                val errorMsg = "Errore durante l'avvio del download: ${e.message ?: "sconosciuto"}"
++                NuvioToastController.show(errorMsg)
++                DownloadsLiveStatusPlatform.notifyFailure("auto_$contentKey", displayTitle, errorMsg)
 +            } finally {
 +                _activeSearches.update { it - contentKey }
 +            }
