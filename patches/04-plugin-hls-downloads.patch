@@ -798,10 +798,10 @@ index be7b3c6..803b506 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 8bda600..784071a 100644
+index 8bda600..42f4ddc 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,27 +2,65 @@ package com.nuvio.app.features.downloads
+@@ -2,27 +2,88 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -849,16 +849,39 @@ index 8bda600..784071a 100644
 +import kotlin.coroutines.coroutineContext
 +import kotlinx.coroutines.withContext
 +
++import java.security.SecureRandom
++import java.security.cert.X509Certificate
++import javax.net.ssl.HostnameVerifier
++import javax.net.ssl.SSLContext
++import javax.net.ssl.TrustManager
++import javax.net.ssl.X509TrustManager
++
 +private fun withDefaultUserAgent(headers: Map<String, String>): Map<String, String> {
 +    if (headers.keys.any { it.equals("User-Agent", ignoreCase = true) }) {
 +        return headers
 +    }
 +    return headers + ("User-Agent" to PlayerPlaybackNetworking.DEFAULT_USER_AGENT)
 +}
++
++private val trustAllManager = object : X509TrustManager {
++    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
++    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
++    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
++}
++
++private val downloadHostnameVerifier = HostnameVerifier { _, _ -> true }
++
++private val sslContext: SSLContext by lazy {
++    SSLContext.getInstance("TLS").apply {
++        init(null, arrayOf<TrustManager>(trustAllManager), SecureRandom())
++    }
++}
  
  private val downloadHttpClient = OkHttpClient.Builder()
 -    .connectTimeout(60, TimeUnit.SECONDS)
 +    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
++    .sslSocketFactory(sslContext.socketFactory, trustAllManager)
++    .hostnameVerifier(downloadHostnameVerifier)
 +    .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
 +    .dispatcher(Dispatcher().apply {
 +        maxRequests = 32
@@ -868,7 +891,7 @@ index 8bda600..784071a 100644
      .readTimeout(60, TimeUnit.SECONDS)
      .writeTimeout(60, TimeUnit.SECONDS)
      .followRedirects(true)
-@@ -32,6 +70,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
+@@ -32,6 +93,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
  internal actual object DownloadsPlatformDownloader {
      private var appContext: Context? = null
  
@@ -890,7 +913,7 @@ index 8bda600..784071a 100644
      fun initialize(context: Context) {
          appContext = context.applicationContext
      }
-@@ -39,30 +92,83 @@ internal actual object DownloadsPlatformDownloader {
+@@ -39,30 +115,83 @@ internal actual object DownloadsPlatformDownloader {
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -981,7 +1004,7 @@ index 8bda600..784071a 100644
                          requestBuilder.header(key, value)
                      }
                      if (rangeStart != null && rangeStart > 0L) {
-@@ -120,7 +226,7 @@ internal actual object DownloadsPlatformDownloader {
+@@ -120,7 +249,7 @@ internal actual object DownloadsPlatformDownloader {
                      onProgress(downloadedBytes, totalBytes)
  
                      body.byteStream().use { input ->
@@ -990,7 +1013,7 @@ index 8bda600..784071a 100644
                              val buffer = ByteArray(16 * 1024)
                              while (true) {
                                  ensureActive()
-@@ -138,20 +244,23 @@ internal actual object DownloadsPlatformDownloader {
+@@ -138,20 +267,23 @@ internal actual object DownloadsPlatformDownloader {
                          destination.delete()
                      }
                      if (!tempFile.renameTo(destination)) {
@@ -1017,7 +1040,7 @@ index 8bda600..784071a 100644
          }
  
          return AndroidDownloadsTaskHandle(job)
-@@ -159,34 +268,101 @@ internal actual object DownloadsPlatformDownloader {
+@@ -159,34 +291,101 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -1136,7 +1159,7 @@ index 8bda600..784071a 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -234,14 +410,94 @@ private class AndroidDownloadsTaskHandle(
+@@ -234,14 +433,94 @@ private class AndroidDownloadsTaskHandle(
      }
  }
  
@@ -1237,7 +1260,7 @@ index 8bda600..784071a 100644
  }
  
  private fun resolveTotalBytes(
-@@ -268,3 +524,753 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -268,3 +547,753 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -2951,6 +2974,261 @@ index 0000000..b271ad4
 +@Composable
 +fun rememberEpisodeCodeFormat(): EpisodeCodeFormat {
 +    return EpisodeCodeFormat.S01E01
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+new file mode 100644
+index 0000000..e2bdd1b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+@@ -0,0 +1,249 @@
++package com.nuvio.app.features.downloads
++
++import co.touchlab.kermit.Logger
++import com.nuvio.app.core.logging.InAppLogger
++import com.nuvio.app.core.ui.NuvioToastController
++import com.nuvio.app.features.debrid.DirectDebridPlayableResult
++import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
++import com.nuvio.app.features.details.MetaDetails
++import com.nuvio.app.features.details.MetaVideo
++import com.nuvio.app.features.player.PlayerStreamsRepository
++import com.nuvio.app.features.streams.StreamItem
++import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++
++object AutoStreamDownloader {
++    private val log = Logger.withTag("AutoDownloader")
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val _activeSearches = MutableStateFlow<Set<String>>(emptySet())
++    val activeSearches: StateFlow<Set<String>> = _activeSearches.asStateFlow()
++
++    fun isSearching(key: String): Boolean = key in _activeSearches.value
++
++    fun isItemDownloaded(
++        parentMetaId: String,
++        seasonNumber: Int? = null,
++        episodeNumber: Int? = null,
++        videoId: String? = null,
++    ): Boolean {
++        DownloadsRepository.ensureLoaded()
++        return DownloadsRepository.findPlayableDownload(
++            parentMetaId = parentMetaId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++            videoId = videoId,
++        ) != null
++    }
++
++    fun isItemDownloading(
++        parentMetaId: String,
++        seasonNumber: Int? = null,
++        episodeNumber: Int? = null,
++    ): Boolean {
++        val logicalKey = buildLogicalKey(parentMetaId, seasonNumber, episodeNumber)
++        if (logicalKey in _activeSearches.value) return true
++        DownloadsRepository.ensureLoaded()
++        val items = DownloadsRepository.uiState.value.items
++        return items.any {
++            it.logicalContentKey == logicalKey && (
++                it.status == DownloadStatus.Downloading ||
++                it.status == DownloadStatus.Processing
++            )
++        }
++    }
++
++    fun startAutoDownload(
++        meta: MetaDetails,
++        episode: MetaVideo? = null,
++    ) {
++        val isSeries = (meta.type == "series" || meta.videos.isNotEmpty()) && episode != null
++        val contentType = if (isSeries) "series" else meta.type
++        val seasonNumber = if (isSeries) episode?.season else null
++        val episodeNumber = if (isSeries) episode?.episode else null
++        val episodeTitle = if (isSeries) episode?.title else null
++        val episodeThumbnail = if (isSeries) episode?.thumbnail else null
++        val targetVideoId = if (isSeries) {
++            episode?.id?.takeIf { it.isNotBlank() } ?: buildPlaybackVideoId(
++                parentMetaId = meta.id,
++                seasonNumber = seasonNumber,
++                episodeNumber = episodeNumber,
++                fallbackVideoId = episode?.id,
++            )
++        } else {
++            meta.id
++        }
++        val displayTitle = if (isSeries && episodeNumber != null) {
++            val season = seasonNumber ?: 1
++            "${meta.name} S${season}E${episodeNumber}"
++        } else {
++            meta.name
++        }
++        val contentKey = buildLogicalKey(meta.id, seasonNumber, episodeNumber)
++
++        if (contentKey in _activeSearches.value) {
++            NuvioToastController.show("Ricerca stream per il download già in corso...")
++            return
++        }
++
++        DownloadsRepository.ensureLoaded()
++        if (isItemDownloaded(meta.id, seasonNumber, episodeNumber, targetVideoId)) {
++            NuvioToastController.show("Contenuto già scaricato")
++            return
++        }
++        if (isItemDownloading(meta.id, seasonNumber, episodeNumber)) {
++            NuvioToastController.show("Download già in corso")
++            return
++        }
++
++        _activeSearches.update { it + contentKey }
++        NuvioToastController.show("Ricerca del miglior stream per: $displayTitle...")
++
++        scope.launch {
++            try {
++                PlayerStreamsRepository.loadEpisodeStreams(
++                    type = contentType,
++                    videoId = targetVideoId,
++                    season = seasonNumber,
++                    episode = episodeNumber,
++                    forceRefresh = true,
++                )
++
++                val startEpochMs = DownloadsClock.nowEpochMs()
++                var streamFound: StreamItem? = null
++
++                while (DownloadsClock.nowEpochMs() - startEpochMs < 15_000L) {
++                    val state = PlayerStreamsRepository.episodeStreamsState.value
++                    val allStreams = state.groups.flatMap { it.streams }
++                    val candidate = allStreams.firstOrNull { it.playableDirectUrl?.isNotBlank() == true || !it.url.isNullOrBlank() }
++                    if (candidate != null) {
++                        streamFound = candidate
++                        break
++                    }
++                    if (!state.isAnyLoading && state.groups.isNotEmpty()) {
++                        streamFound = allStreams.firstOrNull()
++                        break
++                    }
++                    delay(400L)
++                }
++
++                if (streamFound == null) {
++                    NuvioToastController.show("Nessuno stream disponibile per il download")
++                    return@launch
++                }
++
++                val effectiveStream = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(streamFound)) {
++                    val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
++                        stream = streamFound,
++                        season = seasonNumber,
++                        episode = episodeNumber,
++                    )
++                    when (resolved) {
++                        is DirectDebridPlayableResult.Success -> resolved.stream
++                        else -> streamFound
++                    }
++                } else {
++                    streamFound
++                }
++
++                val resolvedUrl = effectiveStream.playableDirectUrl.orEmpty().ifBlank { effectiveStream.url.orEmpty() }
++                val isHlsStream = resolvedUrl.isNotBlank() && (
++                    HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
++                    HlsPlaylistParser.isHlsStream(effectiveStream.streamType) ||
++                    DownloadsRepository.probeIsHls(effectiveStream)
++                )
++
++                if (isHlsStream) {
++                    val metadata = DownloadsRepository.fetchHlsMasterPlaylist(effectiveStream)
++                    val master = metadata?.masterPlaylist
++                    if (master != null && master.variants.isNotEmpty()) {
++                        val bestVariant = master.variants.sortedWith(
++                            compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
++                                .thenByDescending { it.bandwidth }
++                        ).first()
++
++                        val audioTracks = master.audioTracks.filter { it.uri != null }
++                        val italianAudio = audioTracks.firstOrNull { isItalianTrack(it) } ?: audioTracks.firstOrNull()
++                        val selectedAudioUrls = listOfNotNull(italianAudio?.uri)
++
++                        val displayQuality = bestVariant.resolution ?: "${(bestVariant.bandwidth / 1000)}kbps"
++                        val displayAudio = italianAudio?.name.orEmpty()
++
++                        val selection = HlsDownloadSelection(
++                            variantUrl = bestVariant.url,
++                            audioUrls = selectedAudioUrls,
++                            subtitleUrls = emptyList(),
++                            displayQuality = displayQuality,
++                            displayAudio = displayAudio,
++                            displaySubtitle = "",
++                        )
++
++                        DownloadsRepository.enqueueFromHlsSelection(
++                            contentType = contentType,
++                            videoId = targetVideoId,
++                            parentMetaId = meta.id,
++                            parentMetaType = meta.type,
++                            title = meta.name,
++                            logo = meta.logo,
++                            poster = meta.poster,
++                            background = meta.background,
++                            seasonNumber = seasonNumber,
++                            episodeNumber = episodeNumber,
++                            episodeTitle = episodeTitle,
++                            episodeThumbnail = episodeThumbnail,
++                            stream = effectiveStream,
++                            selection = selection,
++                        )
++                        NuvioToastController.show("Download avviato: $displayTitle ($displayQuality)")
++                    } else {
++                        val result = DownloadsRepository.enqueueFromStream(
++                            contentType = contentType,
++                            videoId = targetVideoId,
++                            parentMetaId = meta.id,
++                            parentMetaType = meta.type,
++                            title = meta.name,
++                            logo = meta.logo,
++                            poster = meta.poster,
++                            background = meta.background,
++                            seasonNumber = seasonNumber,
++                            episodeNumber = episodeNumber,
++                            episodeTitle = episodeTitle,
++                            episodeThumbnail = episodeThumbnail,
++                            stream = effectiveStream,
++                        )
++                        NuvioToastController.show(result.toastMessage())
++                    }
++                } else {
++                    val result = DownloadsRepository.enqueueFromStream(
++                        contentType = contentType,
++                        videoId = targetVideoId,
++                        parentMetaId = meta.id,
++                        parentMetaType = meta.type,
++                        title = meta.name,
++                        logo = meta.logo,
++                        poster = meta.poster,
++                        background = meta.background,
++                        seasonNumber = seasonNumber,
++                        episodeNumber = episodeNumber,
++                        episodeTitle = episodeTitle,
++                        episodeThumbnail = episodeThumbnail,
++                        stream = effectiveStream,
++                    )
++                    NuvioToastController.show(result.toastMessage())
++                }
++            } catch (e: Throwable) {
++                InAppLogger.error("AutoDownloader", "Errore durante l'auto download per $displayTitle: ${e.message}")
++                NuvioToastController.show("Errore durante l'avvio del download")
++            } finally {
++                _activeSearches.update { it - contentKey }
++            }
++        }
++    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
 new file mode 100644
