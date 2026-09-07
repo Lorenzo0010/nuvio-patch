@@ -1,19 +1,25 @@
-## Novità in Nuvio Plus Mobile 0.4.14.8
+## Novità in Nuvio Plus Mobile 0.4.14.9
 
-### Attesa e Priorità Addon per il Download Automatico
-- **Attesa dei Risultati degli Addon**: Il download automatico attende il completamento del caricamento di tutti gli addon di stream (inclusa la verifica cache Debrid) prima di determinare la sorgente.
-- **Priorità al Primo Stream degli Addon**: Viene preferito e tentato per primo lo stream fornito dagli addon (secondo l'ordine di priorità degli addon dell'utente).
-- **Transizione ai Plugin condizionata**: Si procede con i risultati dei plugin solo ed esclusivamente se gli addon non forniscono risultati o se tutti i loro stream falliscono in partenza.
+### Selettore Sorgente Download Automatico e Filtri Avanzati
+- **Selettore Sorgente nelle Impostazioni Nuvio Plus**: Nuova opzione dedicata in *Impostazioni Nuvio Plus* per configurare la sorgente di download automatico:
+  - **Entrambi (Chi arriva prima)** (*Predefinito*): Scarica immediatamente dal primo flusso valido disponibile (addon o plugin repository che sia).
+  - **Solo Addon (Torrent Cached / HTTP)**: Attende i risultati degli addon con priorità ai torrent in cache RealDebrid (~8s) e successiva ricerca su flussi HTTP (~15s), con fallback sui plugin se gli addon non rispondono.
+  - **Solo Repository Plugin**: Scarica direttamente e tempestivamente dai plugin abilitati.
+- **Filtro Addon e Filtro Repository**: Possibilità di filtrare la ricerca automatica selezionando un addon specifico o una repository plugin specifica, mantenendo l'opzione di default per ricercare su tutti gli addon o repository.
 
-### Fallback Automatico su Fallimento in Partenza
-- **Monitoraggio Avvio Stream**: Se un download fallisce nella fase iniziale ("in partenza", es. errore di connessione, 403/404 o stream non raggiungibile), l'errore viene intercettato nei primi secondi.
-- **Fallback Sequenziale**: L'elemento fallito viene rimosso e il sistema tenta immediatamente lo stream successivo della lista dei candidati.
-- **Arresto al Successo**: Non appena uno stream inizia a scaricare dati con successo, il ciclo di fallback si ferma.
+### Notifica di Stato in Tempo Reale
+- **Report Live fin dal Click**: Non appena viene cliccato il pulsante di download, viene emessa una notifica di sistema Android persistente e aggiornata in tempo reale che documenta ogni fase operativa:
+  - Ricerca dello stream per il film o episodio selezionato.
+  - Verifica della disponibilità cache RealDebrid / Debrid.
+  - Tentativo di avvio con il nome dello stream specifico e la categoria di priorità (Torrent Cached, Addon HTTP, Plugin).
+  - Transizione automatica alla barra di avanzamento del download non appena lo stream si aggancia con successo.
 
-### Notifiche di Fallimento
-- **Canale Notifiche ad Alta Priorità**: Introdotto su Android il canale `downloads_alerts` ("Avvisi Download") con `IMPORTANCE_HIGH`, suono e vibrazione.
-- **Notifiche In-App e di Sistema**: Se un download fallisce o tutti gli stream risultano non disponibili, viene mostrato un Toast e inviata una notifica di sistema Android ad alta priorità.
+### Riorganizzazione UI Download in Nuvio Plus
+- **Voci Dedicate nelle Impostazioni**: Spostati i due pulsanti in precedenza presenti in alto a destra nella schermata Download (icona cartella e impostazioni) direttamente all'interno della pagina *Impostazioni Nuvio Plus*:
+  - **Apri cartella download**: Apre il gestore file di sistema sul percorso dei file scaricati.
+  - **Posizione di download**: Consente di scegliere la directory di destinazione personalizzata tramite il selettore di sistema (Storage Access Framework su Android).
+  - **Ripristina percorso predefinito**: Disponibile se è impostato un percorso personalizzato.
 
 ### Standard di Rilascio e Firme
-- Versione conforme alla regola di versionamento: `0.4.14.8` (senza tag o suffissi hash).
+- Versione conforme alla regola di versionamento: `0.4.14.9` (senza tag o suffissi hash).
 - APK firmati con il keystore persistente `nuvio-release.keystore`.

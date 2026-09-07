@@ -17,7 +17,7 @@ New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 try {
     Write-Host "Clonazione upstream ($UpstreamUrl, branch: $UpstreamBranch)..." -ForegroundColor Yellow
     $env:GIT_LFS_SKIP_SMUDGE = "1"
-    git clone --branch $UpstreamBranch $UpstreamUrl $testDir --depth 50 --quiet
+    git clone --branch $UpstreamBranch $UpstreamUrl $testDir --depth 500 --quiet
     
     Push-Location $testDir
 

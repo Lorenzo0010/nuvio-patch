@@ -157,9 +157,10 @@ diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/Andro
          android:label="@string/app_name"
          android:usesCleartextTraffic="true"
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
+index e104f21c..61d0dbb1 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
-@@ -5,9 +5,12 @@ import android.app.NotificationManager
+@@ -5,10 +5,12 @@ import android.app.NotificationManager
  import android.app.Service
  import android.content.Context
  import android.content.Intent
@@ -167,14 +168,26 @@ diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/Pla
  import android.os.Build
  import android.os.IBinder
  import android.util.Log
+-import androidx.core.content.IntentCompat
 +import androidx.core.app.ServiceCompat
 +import com.nuvio.app.R
  import com.nuvio.app.core.build.AppFeaturePolicy
  import com.nuvio.app.core.concurrent.ConflatedTaskDispatcher
  import java.util.concurrent.Executors
-@@ -29,13 +32,19 @@ class PlayerNowPlayingService : Service() {
+@@ -18,7 +20,6 @@ internal const val NOW_PLAYING_TAG = "NuvioNowPlaying"
+ internal const val NOW_PLAYING_CHANNEL_ID = "nuvio_playback"
+ internal const val NOW_PLAYING_NOTIFICATION_ID = 0x4E55
+ private const val ACTION_START_FOREGROUND = "com.nuvio.app.nowplaying.START_FOREGROUND"
+-private const val EXTRA_START_NOTIFICATION = "com.nuvio.app.nowplaying.START_NOTIFICATION"
  
-         val startNotification = PlayerNowPlayingServiceState.consumeStartNotification()
+ class PlayerNowPlayingService : Service() {
+     override fun onBind(intent: Intent?): IBinder? = null
+@@ -29,15 +30,21 @@ class PlayerNowPlayingService : Service() {
+             return START_NOT_STICKY
+         }
+ 
+-        val startNotification = IntentCompat.getParcelableExtra(intent, EXTRA_START_NOTIFICATION, Notification::class.java)
++        val startNotification = PlayerNowPlayingServiceState.consumeStartNotification()
              ?: PlayerNowPlayingServiceState.notification
 -        if (startNotification == null) {
 -            stopSelf(startId)
@@ -197,7 +210,7 @@ diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/Pla
          }.onFailure { error ->
              Log.w(NOW_PLAYING_TAG, "Unable to promote playback service", error)
          }.isSuccess
-@@ -54,6 +63,20 @@ class PlayerNowPlayingService : Service() {
+@@ -56,6 +63,20 @@ class PlayerNowPlayingService : Service() {
          return START_NOT_STICKY
      }
  
@@ -218,6 +231,43 @@ diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/Pla
      override fun onDestroy() {
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
              stopForeground(STOP_FOREGROUND_REMOVE)
+@@ -125,9 +146,9 @@ private object PlayerNowPlayingServiceController {
+     private fun publishNow(command: PlayerNowPlayingServiceCommand.Publish) {
+         if (PlayerNowPlayingServiceState.notification !== command.notification) return
+         if (startRequested.compareAndSet(false, true)) {
++            PlayerNowPlayingServiceState.pendingStartNotification = command.notification
+             val intent = Intent(command.context, PlayerNowPlayingService::class.java)
+                 .setAction(ACTION_START_FOREGROUND)
+-                .putExtra(EXTRA_START_NOTIFICATION, command.notification)
+             val started = runCatching {
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                     command.context.startForegroundService(intent)
+@@ -138,6 +159,7 @@ private object PlayerNowPlayingServiceController {
+                 Log.w(NOW_PLAYING_TAG, "Unable to start playback service", error)
+             }.isSuccess
+             if (!started) {
++                PlayerNowPlayingServiceState.clearPendingStartNotification(command.notification)
+                 startRequested.set(false)
+                 return
+             }
+@@ -171,4 +193,17 @@ private object PlayerNowPlayingServiceController {
+ private object PlayerNowPlayingServiceState {
+     @Volatile
+     var notification: Notification? = null
++
++    @Volatile
++    var pendingStartNotification: Notification? = null
++
++    fun consumeStartNotification(): Notification? = synchronized(this) {
++        pendingStartNotification.also { pendingStartNotification = null }
++    }
++
++    fun clearPendingStartNotification(notification: Notification) = synchronized(this) {
++        if (pendingStartNotification === notification) {
++            pendingStartNotification = null
++        }
++    }
+ }
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
