@@ -6085,7 +6085,7 @@ index 041a38ee..d5833b02 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..1a5401e2 100644
+index 7019a10c..e50df3cd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -6253,62 +6253,16 @@ index 7019a10c..1a5401e2 100644
  ) {
      val activeItems = uiState.activeItems
      val completedMovies = uiState.completedItems.filterNot(DownloadItem::isEpisode)
-@@ -159,21 +190,65 @@ private fun LazyListScope.downloadsRootContent(
+@@ -159,6 +190,8 @@ private fun LazyListScope.downloadsRootContent(
          }
          .sortedBy { (item, _) -> item.title.lowercase() }
  
--    if (activeItems.isNotEmpty()) {
-+    // Merged: queued items appear in "Attivi" with progress indicator
-+    val allActiveItems = buildList {
-+        // Pending (queued) items first
-+        pendingQueue.forEach { request ->
-+            add(
-+                DownloadItem(
-+                    id = "pending_${request.contentKey}",
-+                    contentType = request.contentType,
-+                    parentMetaId = request.meta.id,
-+                    parentMetaType = request.meta.type,
-+                    videoId = request.targetVideoId,
-+                    title = request.meta.name,
-+                    logo = request.meta.logo,
-+                    poster = request.meta.poster,
-+                    background = request.meta.background,
-+                    seasonNumber = request.seasonNumber,
-+                    episodeNumber = request.episodeNumber,
-+                    episodeTitle = request.episodeTitle,
-+                    episodeThumbnail = request.episodeThumbnail,
-+                    streamTitle = request.displayTitle,
-+                    streamSubtitle = "In coda",
-+                    providerName = "",
-+                    providerAddonId = null,
-+                    sourceUrl = "",
-+                    sourceHeaders = emptyMap(),
-+                    sourceResponseHeaders = emptyMap(),
-+                    localFileUri = null,
-+                    fileName = "",
-+                    status = DownloadStatus.Downloading,
-+                    downloadedBytes = 0L,
-+                    totalBytes = null,
-+                    errorMessage = null,
-+                    createdAtEpochMs = DownloadsClock.nowEpochMs(),
-+                    updatedAtEpochMs = DownloadsClock.nowEpochMs(),
-+                    isPlaceholder = true,
-+                    phaseMessage = "In coda: ${request.displayTitle}",
-+                )
-+            )
-+        }
-+        addAll(activeItems)
-+    }
-+
-+    if (allActiveItems.isNotEmpty()) {
++    // activeItems already contains placeholders for queued items (added by registerPlaceholder)
++    // in correct FIFO order (newest queued at top). Just show them directly.
+     if (activeItems.isNotEmpty()) {
          item {
              SectionTitle(stringResource(Res.string.downloads_section_active))
-         }
-         items(
--            items = activeItems,
-+            items = allActiveItems,
-             key = { it.id },
-         ) { item ->
+@@ -170,10 +203,19 @@ private fun LazyListScope.downloadsRootContent(
              DownloadRow(
                  item = item,
                  onOpen = { onOpenDownload(item) },
@@ -6320,12 +6274,19 @@ index 7019a10c..1a5401e2 100644
 +                onResume = { if (!item.isPlaceholder) DownloadsRepository.resumeDownload(item.id) },
 +                onSave = { onSave(item) },
 +                onRetry = { if (!item.isPlaceholder) DownloadsRepository.retryDownload(item.id) },
-+                onDelete = { if (!item.isPlaceholder) DownloadsRepository.cancelDownload(item.id) else AutoStreamDownloader.cancelAutoDownload(item.contentKey) },
++                onDelete = {
++                    if (item.isPlaceholder) {
++                        val ck = item.id.removePrefix("pending_")
++                        AutoStreamDownloader.cancelAutoDownload(ck)
++                    } else {
++                        DownloadsRepository.cancelDownload(item.id)
++                    }
++                },
 +                onShare = shareItem(item),
              )
          }
      }
-@@ -191,8 +266,10 @@ private fun LazyListScope.downloadsRootContent(
+@@ -191,8 +233,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6337,7 +6298,7 @@ index 7019a10c..1a5401e2 100644
              )
          }
      }
-@@ -247,7 +324,7 @@ private fun LazyListScope.downloadsRootContent(
+@@ -247,7 +291,7 @@ private fun LazyListScope.downloadsRootContent(
          }
      }
  
@@ -6346,7 +6307,7 @@ index 7019a10c..1a5401e2 100644
          item {
              Box(
                  modifier = Modifier
-@@ -269,7 +346,7 @@ private fun LazyListScope.downloadsShowContent(
+@@ -269,7 +313,7 @@ private fun LazyListScope.downloadsShowContent(
      showId: String,
      episodes: List<DownloadItem>,
      onOpenDownload: (DownloadItem) -> Unit,
@@ -6355,7 +6316,7 @@ index 7019a10c..1a5401e2 100644
  ) {
      val showEpisodes = episodes
          .filter { it.parentMetaId == showId }
-@@ -324,8 +401,10 @@ private fun LazyListScope.downloadsShowContent(
+@@ -324,8 +368,10 @@ private fun LazyListScope.downloadsShowContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6367,7 +6328,7 @@ index 7019a10c..1a5401e2 100644
              )
          }
      }
-@@ -339,6 +418,8 @@ private fun DownloadRow(
+@@ -339,6 +385,8 @@ private fun DownloadRow(
      onResume: () -> Unit,
      onRetry: () -> Unit,
      onDelete: () -> Unit,
@@ -6376,7 +6337,7 @@ index 7019a10c..1a5401e2 100644
  ) {
      val displayTitle = item.displayTitle()
      val displaySubtitle = downloadDisplaySubtitle(
-@@ -392,13 +473,25 @@ private fun DownloadRow(
+@@ -392,13 +440,25 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -6407,7 +6368,7 @@ index 7019a10c..1a5401e2 100644
                              }
                          }
                          DownloadStatus.Paused -> {
-@@ -409,6 +502,7 @@ private fun DownloadRow(
+@@ -409,6 +469,7 @@ private fun DownloadRow(
                                  )
                              }
                          }
@@ -6415,7 +6376,7 @@ index 7019a10c..1a5401e2 100644
                          DownloadStatus.Failed -> {
                              IconButton(onClick = onRetry) {
                                  Icon(
-@@ -424,6 +518,18 @@ private fun DownloadRow(
+@@ -424,6 +485,18 @@ private fun DownloadRow(
                                      contentDescription = stringResource(Res.string.action_play),
                                  )
                              }
@@ -6434,7 +6395,7 @@ index 7019a10c..1a5401e2 100644
                          }
                      }
                      IconButton(onClick = onDelete) {
-@@ -435,8 +541,52 @@ private fun DownloadRow(
+@@ -435,8 +508,52 @@ private fun DownloadRow(
                  }
              }
  
@@ -6489,7 +6450,7 @@ index 7019a10c..1a5401e2 100644
                      LinearProgressIndicator(
                          progress = item.progressFraction,
                          modifier = Modifier.fillMaxWidth(),
-@@ -469,10 +619,10 @@ private fun downloadDisplaySubtitle(
+@@ -469,10 +586,10 @@ private fun downloadDisplaySubtitle(
          return item.displaySubtitle
      }
  
@@ -6502,7 +6463,7 @@ index 7019a10c..1a5401e2 100644
      )
      return listOf(
          episodeCode,
-@@ -481,6 +631,22 @@ private fun downloadDisplaySubtitle(
+@@ -481,6 +598,22 @@ private fun downloadDisplaySubtitle(
      ).filterNotNull().joinToString(" • ")
  }
  
@@ -6525,7 +6486,7 @@ index 7019a10c..1a5401e2 100644
  @Composable
  private fun SectionTitle(title: String) {
      Text(
-@@ -492,22 +658,106 @@ private fun SectionTitle(title: String) {
+@@ -492,22 +625,106 @@ private fun SectionTitle(title: String) {
      )
  }
  
@@ -6638,7 +6599,7 @@ index 7019a10c..1a5401e2 100644
      }
  }
  
-@@ -524,3 +774,46 @@ private fun formatBytes(bytes: Long): String {
+@@ -524,3 +741,46 @@ private fun formatBytes(bytes: Long): String {
          else -> "$bytes ${localizedByteUnit("B")}"
      }
  }
