@@ -3388,7 +3388,7 @@ new file mode 100644
 index 00000000..00000000
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,854 @@
+@@ -0,0 +1,879 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -3454,19 +3454,19 @@ index 00000000..00000000
 +            sourceName == target
 +    }
 +
-+    private fun matchesAddon(stream: StreamItem, preferredAddon: String?): Boolean {
++    private fun matchesAddon(addonName: String?, addonId: String?, preferredAddon: String?): Boolean {
 +        if (preferredAddon.isNullOrBlank()) return true
 +        val target = preferredAddon.trim().lowercase()
-+        val addonId = stream.addonId.lowercase()
-+        val addonName = stream.addonName?.lowercase().orEmpty()
++        val aName = addonName?.lowercase()?.trim().orEmpty()
++        val aId = addonId?.lowercase()?.trim().orEmpty()
 +
 +        // 1. Corrispondenza diretta o per contenimento su addonName o addonId
-+        if (addonName == target || addonName.contains(target) || target.contains(addonName)) return true
-+        if (addonId == target || addonId.contains(target) || target.contains(addonId)) return true
++        if (aName == target || aName.contains(target) || target.contains(aName)) return true
++        if (aId == target || aId.contains(target) || target.contains(aId)) return true
 +
 +        // 2. Controllo per Stremio instance id "addon:<manifestId>:<manifestUrl>"
-+        if (addonId.startsWith("addon:")) {
-+            val parts = addonId.removePrefix("addon:").split(":", limit = 2)
++        if (aId.startsWith("addon:")) {
++            val parts = aId.removePrefix("addon:").split(":", limit = 2)
 +            val manifestId = parts.getOrNull(0)?.lowercase().orEmpty()
 +            val manifestUrl = parts.getOrNull(1)?.lowercase().orEmpty()
 +            if (manifestId.isNotBlank() && (manifestId == target || target.contains(manifestId) || manifestId.contains(target))) return true
@@ -3494,11 +3494,22 @@ index 00000000..00000000
 +            val dTitle = matchingAddon.displayTitle.lowercase()
 +            val mName = matchingAddon.manifest?.name?.lowercase().orEmpty()
 +
-+            if (addonName == dTitle || addonName == mName || addonName.contains(dTitle) || dTitle.contains(addonName)) return true
-+            if (mUrl.isNotBlank() && addonId.contains(mUrl)) return true
-+            if (mId.isNotBlank() && (addonId.contains(":$mId:") || addonId.contains("addon:$mId"))) return true
++            if (aName == dTitle || aName == mName || aName.contains(dTitle) || dTitle.contains(aName)) return true
++            if (mUrl.isNotBlank() && aId.contains(mUrl)) return true
++            if (mId.isNotBlank() && (aId.contains(":$mId:") || aId.contains("addon:$mId") || aId == mId)) return true
 +        }
 +
++        return false
++    }
++
++    private fun matchesAddon(stream: StreamItem, preferredAddon: String?): Boolean {
++        return matchesAddon(stream.addonName, stream.addonId, preferredAddon)
++    }
++
++    private fun matchesAddonGroup(group: AddonStreamGroup, preferredAddon: String?): Boolean {
++        if (preferredAddon.isNullOrBlank()) return true
++        if (matchesAddon(group.addonName, group.addonId, preferredAddon)) return true
++        if (group.streams.any { matchesAddon(it, preferredAddon) }) return true
 +        return false
 +    }
 +
@@ -3873,8 +3884,8 @@ index 00000000..00000000
 +                )
 +
 +                val startEpochMs = DownloadsClock.nowEpochMs()
-+                val addonWaitTimeoutMs = 18_000L
-+                val totalTimeoutMs = 30_000L
++                val addonWaitTimeoutMs = 30_000L
++                val totalTimeoutMs = 45_000L
 +
 +                val sourceMode = DownloadsSettingsRepository.autoDownloadSource.value
 +                val preferredAddon = DownloadsSettingsRepository.preferredAddonId.value
@@ -3992,9 +4003,7 @@ index 00000000..00000000
 +
 +                            if (hasSpecificAddonTarget) {
 +                                // L'utente vuole uno specifico addon: attendiamo che termini il caricamento o i controlli cache
-+                                val matchingAddonGroups = addonGroups.filter { group ->
-+                                    group.streams.any { matchesAddon(it, preferredAddon) } || group.isLoading
-+                                }
++                                val matchingAddonGroups = addonGroups.filter { matchesAddonGroup(it, preferredAddon) }
 +                                val specificAddonFinished = matchingAddonGroups.isNotEmpty() && !matchingAddonGroups.any { it.isLoading } && !isCheckingCache
 +                                if (hasCachedTorrent || (availableAddonStreams.isNotEmpty() && specificAddonFinished)) {
 +                                    break
@@ -4107,6 +4116,8 @@ index 00000000..00000000
 +
 +                        if (hasStreamAddons) {
 +                            var cachedTorrentDetectedAtMs: Long? = null
++                            val hasSpecificAddonTarget = !preferredAddon.isNullOrBlank()
++
 +                            while (DownloadsClock.nowEpochMs() - startEpochMs < addonWaitTimeoutMs) {
 +                                val state = PlayerStreamsRepository.episodeStreamsState.value
 +                                val addonGroups = state.groups.filter { isAddonGroup(it) }
@@ -4116,7 +4127,13 @@ index 00000000..00000000
 +                                    continue
 +                                }
 +
-+                                val currentAddonStreams = addonGroups.flatMap { it.streams }
++                                val targetGroups = if (hasSpecificAddonTarget) {
++                                    addonGroups.filter { matchesAddonGroup(it, preferredAddon) }
++                                } else {
++                                    addonGroups
++                                }
++
++                                val currentAddonStreams = targetGroups.flatMap { it.streams }
 +                                    .filter { isAddonStream(it) && matchesAddon(it, preferredAddon) }
 +                                val isCheckingCache = currentAddonStreams.any { isCheckingTorrentStream(it) }
 +                                val hasCachedTorrent = currentAddonStreams.any { isCachedTorrentStream(it) }
@@ -4145,15 +4162,23 @@ index 00000000..00000000
 +                                        break
 +                                    }
 +                                } else {
-+                                    val addonsStillLoading = addonGroups.any { it.isLoading }
-+                                    if (addonsStillLoading) {
++                                    val targetStillLoading = if (hasSpecificAddonTarget) {
++                                        targetGroups.isEmpty() || targetGroups.any { it.isLoading } || state.isAnyLoading
++                                    } else {
++                                        addonGroups.any { it.isLoading } || state.isAnyLoading
++                                    }
++
++                                    if (targetStillLoading) {
 +                                        DownloadsLiveStatusPlatform.notifyProgress(
 +                                            id = notifId,
 +                                            title = displayTitle,
-+                                            message = "Ricerca flussi HTTP dagli addon in corso...",
++                                            message = "Ricerca flussi dagli addon in corso...",
 +                                        )
-+                                    } else if (!isCheckingCache && addonGroups.isNotEmpty()) {
-+                                        log.d { "Tutti gli addon hanno terminato la risposta e i controlli cache (${addonGroups.size} gruppi)" }
++                                    } else if (!isCheckingCache && targetGroups.isNotEmpty() && currentAddonStreams.isNotEmpty()) {
++                                        log.d { "Addon hanno terminato la risposta e i controlli cache (${targetGroups.size} gruppi, ${currentAddonStreams.size} stream)." }
++                                        break
++                                    } else if (!isCheckingCache && !state.isAnyLoading && targetGroups.isNotEmpty()) {
++                                        log.d { "Tutti gli addon hanno terminato senza ulteriori stream." }
 +                                        break
 +                                    }
 +                                }
