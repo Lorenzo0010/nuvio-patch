@@ -53,18 +53,22 @@ index 398c29bb..745d0c7f 100644
 +  <string name="settings_meta_preload_streams_description">Anticipa la ricerca dei flussi da addon e plugin non appena si apre la scheda del contenuto per azzerare l\'attesa al tocco di Riproduci.</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 5c4b5edb..1731eb70 100644
+index 5c4b5edb..074b37c3 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -624,6 +624,7 @@
+@@ -622,8 +622,11 @@
+     <string name="downloads_section_active">Active</string>
+     <string name="downloads_section_movies">Movies</string>
      <string name="downloads_section_shows">Shows</string>
++    <string name="downloads_section_queue">Queue</string>
++    <string name="downloads_queue_waiting">Waiting…</string>
      <string name="downloads_show_downloads">Show Downloads</string>
      <string name="downloads_status_completed">Completed • %1$s</string>
 +    <string name="downloads_completed_status">Downloaded</string>
      <string name="downloads_status_downloading">Downloading • %1$s</string>
      <string name="downloads_status_failed">Failed</string>
      <string name="downloads_status_paused">Paused • %1$s</string>
-@@ -961,6 +962,12 @@
+@@ -961,6 +964,12 @@
      <string name="settings_meta_tab_layout_description">Group sections into tabs like the TV app. Assign up to 3 sections per tab group.</string>
      <string name="settings_meta_trailers">Trailers</string>
      <string name="settings_meta_trailers_description">Trailer rail and playback shortcuts.</string>
@@ -77,7 +81,7 @@ index 5c4b5edb..1731eb70 100644
      <string name="settings_notifications_disabled_in_app">Notifications are currently disabled in Nuvio.</string>
      <string name="settings_notifications_episode_release_alerts">Episode release alerts</string>
      <string name="settings_notifications_episode_release_alerts_description">Schedule local notifications when a new episode for a saved show becomes available.</string>
-@@ -1349,23 +1356,6 @@
+@@ -1349,23 +1358,6 @@
      <string name="theme_rose">Rose</string>
      <string name="theme_violet">Violet</string>
      <string name="theme_white">White</string>
@@ -101,7 +105,7 @@ index 5c4b5edb..1731eb70 100644
      <string name="player_next_episode">Next Episode</string>
      <string name="player_next_episode_finding_source">Finding source…</string>
      <string name="player_next_episode_playing_via_countdown">Playing via %1$s in %2$d…</string>
-@@ -1671,6 +1661,8 @@
+@@ -1671,6 +1663,8 @@
      <string name="details_networks">Networks</string>
      <string name="details_no_addon_meta">No addon provides meta for this content.</string>
      <string name="download_failed">Download failed</string>
@@ -451,7 +455,7 @@ index 00876358..754d5f48 100644
              ),
          )
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
-index 274295f8..d15206d7 100644
+index 274295f8..ca87e082 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
 @@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
@@ -462,7 +466,19 @@ index 274295f8..d15206d7 100644
  import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Surface
-@@ -49,6 +50,7 @@ data class DetailSecondaryAction(
+@@ -35,9 +36,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
+ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+ import androidx.compose.ui.platform.LocalHapticFeedback
+ import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
+ import com.nuvio.app.core.ui.AppIconResource
+ import com.nuvio.app.core.ui.appIconPainter
+ import nuvio.composeapp.generated.resources.Res
+@@ -49,6 +52,7 @@ data class DetailSecondaryAction(
      val label: String,
      val icon: ImageVector,
      val isActive: Boolean = false,
@@ -470,7 +486,7 @@ index 274295f8..d15206d7 100644
      val onClick: () -> Unit = {},
      val onLongClick: (() -> Unit)? = null,
  )
-@@ -149,6 +151,7 @@ fun DetailActionButtons(
+@@ -149,6 +153,7 @@ fun DetailActionButtons(
                                  icon = action.icon,
                                  active = action.isActive,
                                  progress = menuProgress,
@@ -478,7 +494,7 @@ index 274295f8..d15206d7 100644
                                  size = iconButtonSize,
                                  onClick = {
                                      hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-@@ -202,6 +205,8 @@ fun DetailActionButtons(
+@@ -202,6 +207,8 @@ fun DetailActionButtons(
                                  .size(24.dp)
                                  .graphicsLayer {
                                      rotationZ = 90f * menuProgress
@@ -487,7 +503,7 @@ index 274295f8..d15206d7 100644
                                  },
                          )
                      }
-@@ -218,6 +223,7 @@ private fun DetailIconAction(
+@@ -218,6 +225,7 @@ private fun DetailIconAction(
      icon: ImageVector,
      active: Boolean,
      progress: Float,
@@ -495,7 +511,7 @@ index 274295f8..d15206d7 100644
      onClick: () -> Unit,
      modifier: Modifier = Modifier,
      size: Dp,
-@@ -252,11 +258,39 @@ private fun DetailIconAction(
+@@ -252,11 +260,48 @@ private fun DetailIconAction(
                  ),
              contentAlignment = Alignment.Center,
          ) {
@@ -511,6 +527,7 @@ index 274295f8..d15206d7 100644
 +                    label = "detail_action_download_progress",
 +                )
 +                if (animatedProgress > 0f) {
++                    val pct = (animatedProgress * 100).toInt().coerceIn(1, 100)
 +                    CircularProgressIndicator(
 +                        progress = { animatedProgress },
 +                        modifier = Modifier.size(size - 10.dp),
@@ -518,18 +535,26 @@ index 274295f8..d15206d7 100644
 +                        color = MaterialTheme.colorScheme.primary,
 +                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
 +                    )
++                    Text(
++                        text = "$pct%",
++                        style = MaterialTheme.typography.labelSmall.copy(
++                            fontSize = 10.sp,
++                            fontWeight = FontWeight.Bold,
++                        ),
++                        color = MaterialTheme.colorScheme.primary,
++                    )
 +                } else {
 +                    CircularProgressIndicator(
 +                        modifier = Modifier.size(size - 10.dp),
 +                        strokeWidth = 2.5.dp,
 +                        color = MaterialTheme.colorScheme.primary,
 +                    )
++                    Icon(
++                        imageVector = icon,
++                        contentDescription = label,
++                        modifier = Modifier.size(16.dp),
++                    )
 +                }
-+                Icon(
-+                    imageVector = icon,
-+                    contentDescription = label,
-+                    modifier = Modifier.size(16.dp),
-+                )
 +            } else {
 +                Icon(
 +                    imageVector = icon,
@@ -541,7 +566,7 @@ index 274295f8..d15206d7 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index a7026e75..634a20dd 100644
+index a7026e75..683000a5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -3,6 +3,8 @@ package com.nuvio.app.features.details.components
@@ -561,7 +586,7 @@ index a7026e75..634a20dd 100644
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
-@@ -35,10 +38,22 @@ import androidx.compose.foundation.lazy.LazyRow
+@@ -35,10 +38,23 @@ import androidx.compose.foundation.lazy.LazyRow
  import androidx.compose.foundation.lazy.items
  import androidx.compose.foundation.lazy.itemsIndexed
  import androidx.compose.foundation.lazy.rememberLazyListState
@@ -571,6 +596,7 @@ index a7026e75..634a20dd 100644
 +import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.filled.Check
 +import androidx.compose.material.icons.rounded.Download
++import androidx.compose.material.icons.rounded.Refresh
 +import androidx.compose.material3.CircularProgressIndicator
 +import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
@@ -585,7 +611,7 @@ index a7026e75..634a20dd 100644
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.getValue
-@@ -108,6 +123,7 @@ fun DetailSeriesContent(
+@@ -108,6 +124,7 @@ fun DetailSeriesContent(
      onEpisodeClick: ((MetaVideo) -> Unit)? = null,
      onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
      onSeasonLongPress: ((Int) -> Unit)? = null,
@@ -593,7 +619,7 @@ index a7026e75..634a20dd 100644
  ) {
      val hasVideos = meta.videos.isNotEmpty()
      if (meta.type != "series" && !hasVideos) return
-@@ -230,6 +246,7 @@ fun DetailSeriesContent(
+@@ -230,6 +247,7 @@ fun DetailSeriesContent(
                              ),
                              onEpisodeClick = onEpisodeClick,
                              onEpisodeLongPress = onEpisodeLongPress,
@@ -601,7 +627,7 @@ index a7026e75..634a20dd 100644
                          )
                      } else {
                          Column(
-@@ -244,6 +261,7 @@ fun DetailSeriesContent(
+@@ -244,6 +262,7 @@ fun DetailSeriesContent(
                                  )
                                  EpisodeListCard(
                                      video = episode,
@@ -609,7 +635,7 @@ index a7026e75..634a20dd 100644
                                      fallbackImage = meta.background ?: meta.poster,
                                      progressEntry = progressByVideoId[episodeVideoId],
                                      imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -258,6 +276,7 @@ fun DetailSeriesContent(
+@@ -258,6 +277,7 @@ fun DetailSeriesContent(
                                      sizing = sizing,
                                      onClick = { onEpisodeClick?.invoke(episode) },
                                      onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -617,7 +643,7 @@ index a7026e75..634a20dd 100644
                                  )
                              }
                          }
-@@ -313,6 +332,7 @@ internal fun DetailSeriesListEpisode(
+@@ -313,6 +333,7 @@ internal fun DetailSeriesListEpisode(
      blurUnwatchedEpisodes: Boolean,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -625,7 +651,7 @@ index a7026e75..634a20dd 100644
      modifier: Modifier = Modifier,
  ) {
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-@@ -325,6 +345,7 @@ internal fun DetailSeriesListEpisode(
+@@ -325,6 +346,7 @@ internal fun DetailSeriesListEpisode(
          )
          EpisodeListCard(
              video = episode,
@@ -633,7 +659,7 @@ index a7026e75..634a20dd 100644
              fallbackImage = meta.background ?: meta.poster,
              progressEntry = progressByVideoId[episodeVideoId],
              imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -339,6 +360,7 @@ internal fun DetailSeriesListEpisode(
+@@ -339,6 +361,7 @@ internal fun DetailSeriesListEpisode(
              sizing = sizing,
              onClick = { onEpisodeClick?.invoke(episode) },
              onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -641,7 +667,7 @@ index a7026e75..634a20dd 100644
          )
      }
  }
-@@ -711,6 +733,7 @@ private fun EpisodeHorizontalRow(
+@@ -711,6 +734,7 @@ private fun EpisodeHorizontalRow(
      preferredEpisodeNumber: Int? = null,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -649,7 +675,7 @@ index a7026e75..634a20dd 100644
  ) {
      val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
      val listState = rememberLazyListState()
-@@ -755,6 +778,7 @@ private fun EpisodeHorizontalRow(
+@@ -755,6 +779,7 @@ private fun EpisodeHorizontalRow(
              )
              EpisodeHorizontalCard(
                  video = episode,
@@ -657,7 +683,7 @@ index a7026e75..634a20dd 100644
                  fallbackImage = fallbackImage,
                  progressEntry = progressByVideoId[episodeVideoId],
                  imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -769,6 +793,7 @@ private fun EpisodeHorizontalRow(
+@@ -769,6 +794,7 @@ private fun EpisodeHorizontalRow(
                  metrics = rowMetrics,
                  onClick = { onEpisodeClick?.invoke(episode) },
                  onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -665,7 +691,7 @@ index a7026e75..634a20dd 100644
              )
          }
      }
-@@ -778,6 +803,7 @@ private fun EpisodeHorizontalRow(
+@@ -778,6 +804,7 @@ private fun EpisodeHorizontalRow(
  @Composable
  private fun EpisodeHorizontalCard(
      video: MetaVideo,
@@ -673,7 +699,7 @@ index a7026e75..634a20dd 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -786,7 +812,30 @@ private fun EpisodeHorizontalCard(
+@@ -786,7 +813,34 @@ private fun EpisodeHorizontalCard(
      metrics: EpisodeHorizontalCardMetrics,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -687,6 +713,7 @@ index a7026e75..634a20dd 100644
 +        DownloadsRepository.uiState
 +    }.collectAsStateWithLifecycle()
 +    val autoSearches by AutoStreamDownloader.activeSearches.collectAsStateWithLifecycle()
++    val pendingQueue by AutoStreamDownloader.pendingQueue.collectAsStateWithLifecycle()
 +    val isDownloaded = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.any { it.logicalContentKey == episodeContentKey && it.status == DownloadStatus.Completed }
 +    }
@@ -694,6 +721,9 @@ index a7026e75..634a20dd 100644
 +        episodeContentKey in autoSearches || downloadsUiState.items.any {
 +            it.logicalContentKey == episodeContentKey && (it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Processing)
 +        }
++    }
++    val isQueued = remember(pendingQueue, episodeContentKey) {
++        pendingQueue.any { it.contentKey == episodeContentKey }
 +    }
 +    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
@@ -704,7 +734,7 @@ index a7026e75..634a20dd 100644
      val cardShape = RoundedCornerShape(metrics.cornerRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -846,12 +895,92 @@ private fun EpisodeHorizontalCard(
+@@ -846,12 +900,115 @@ private fun EpisodeHorizontalCard(
                  ),
          )
  
@@ -724,7 +754,7 @@ index a7026e75..634a20dd 100644
 +                    shape = CircleShape,
 +                    color = if (isDownloaded) {
 +                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-+                    } else if (isDownloading) {
++                    } else if (isDownloading || isQueued) {
 +                        Color.Black.copy(alpha = 0.65f)
 +                    } else {
 +                        Color.Black.copy(alpha = 0.5f)
@@ -743,6 +773,8 @@ index a7026e75..634a20dd 100644
 +                                    NuvioToastController.show("Episodio già scaricato")
 +                                } else if (isDownloading) {
 +                                    NuvioToastController.show("Download già in corso...")
++                                } else if (isQueued) {
++                                    NuvioToastController.show("Download già in coda...")
 +                                } else {
 +                                    onDownloadClick()
 +                                }
@@ -756,12 +788,21 @@ index a7026e75..634a20dd 100644
 +                                label = "episode_download_progress",
 +                            )
 +                            if (animatedProgress > 0f) {
++                                val pct = (animatedProgress * 100).toInt().coerceIn(1, 100)
 +                                CircularProgressIndicator(
 +                                    progress = { animatedProgress },
-+                                    modifier = Modifier.size(20.dp),
++                                    modifier = Modifier.size(24.dp),
 +                                    strokeWidth = 2.dp,
 +                                    color = MaterialTheme.colorScheme.primary,
 +                                    trackColor = Color.White.copy(alpha = 0.2f),
++                                )
++                                Text(
++                                    text = "$pct%",
++                                    style = MaterialTheme.typography.labelSmall.copy(
++                                        fontSize = 8.sp,
++                                        fontWeight = FontWeight.Bold,
++                                    ),
++                                    color = MaterialTheme.colorScheme.primary,
 +                                )
 +                            } else {
 +                                CircularProgressIndicator(
@@ -769,10 +810,22 @@ index a7026e75..634a20dd 100644
 +                                    strokeWidth = 2.dp,
 +                                    color = MaterialTheme.colorScheme.primary,
 +                                )
++                                Icon(
++                                    imageVector = Icons.Rounded.Download,
++                                    contentDescription = null,
++                                    modifier = Modifier.size(10.dp),
++                                    tint = MaterialTheme.colorScheme.primary,
++                                )
 +                            }
++                        } else if (isQueued) {
++                            CircularProgressIndicator(
++                                modifier = Modifier.size(16.dp),
++                                strokeWidth = 1.8.dp,
++                                color = MaterialTheme.colorScheme.primary,
++                            )
 +                            Icon(
-+                                imageVector = Icons.Rounded.Download,
-+                                contentDescription = null,
++                                imageVector = Icons.Rounded.Refresh,
++                                contentDescription = "In coda",
 +                                modifier = Modifier.size(10.dp),
 +                                tint = MaterialTheme.colorScheme.primary,
 +                            )
@@ -800,7 +853,7 @@ index a7026e75..634a20dd 100644
  
          Column(
              modifier = Modifier
-@@ -1160,6 +1289,7 @@ private fun ImdbEpisodeRatingBadge(
+@@ -1160,6 +1317,7 @@ private fun ImdbEpisodeRatingBadge(
  @Composable
  private fun EpisodeListCard(
      video: MetaVideo,
@@ -808,7 +861,7 @@ index a7026e75..634a20dd 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -1169,7 +1299,30 @@ private fun EpisodeListCard(
+@@ -1169,7 +1327,34 @@ private fun EpisodeListCard(
      modifier: Modifier = Modifier,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -822,6 +875,7 @@ index a7026e75..634a20dd 100644
 +        DownloadsRepository.uiState
 +    }.collectAsStateWithLifecycle()
 +    val autoSearches by AutoStreamDownloader.activeSearches.collectAsStateWithLifecycle()
++    val pendingQueue by AutoStreamDownloader.pendingQueue.collectAsStateWithLifecycle()
 +    val isDownloaded = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.any { it.logicalContentKey == episodeContentKey && it.status == DownloadStatus.Completed }
 +    }
@@ -829,6 +883,9 @@ index a7026e75..634a20dd 100644
 +        episodeContentKey in autoSearches || downloadsUiState.items.any {
 +            it.logicalContentKey == episodeContentKey && (it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Processing)
 +        }
++    }
++    val isQueued = remember(pendingQueue, episodeContentKey) {
++        pendingQueue.any { it.contentKey == episodeContentKey }
 +    }
 +    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
@@ -839,7 +896,7 @@ index a7026e75..634a20dd 100644
      val cardShape = RoundedCornerShape(sizing.cardRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -1192,6 +1345,7 @@ private fun EpisodeListCard(
+@@ -1192,6 +1377,7 @@ private fun EpisodeListCard(
      ) {
          Row(
              modifier = Modifier.fillMaxSize(),
@@ -847,7 +904,7 @@ index a7026e75..634a20dd 100644
          ) {
              // Image area - fixed width matching card height per spec
              Box(
-@@ -1305,6 +1459,88 @@ private fun EpisodeListCard(
+@@ -1305,6 +1491,111 @@ private fun EpisodeListCard(
                      )
                  }
              }
@@ -864,7 +921,7 @@ index a7026e75..634a20dd 100644
 +                        shape = CircleShape,
 +                        color = if (isDownloaded) {
 +                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-+                        } else if (isDownloading) {
++                        } else if (isDownloading || isQueued) {
 +                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
 +                        } else {
 +                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -883,6 +940,8 @@ index a7026e75..634a20dd 100644
 +                                        NuvioToastController.show("Episodio già scaricato")
 +                                    } else if (isDownloading) {
 +                                        NuvioToastController.show("Download già in corso...")
++                                    } else if (isQueued) {
++                                        NuvioToastController.show("Download già in coda...")
 +                                    } else {
 +                                        onDownloadClick()
 +                                    }
@@ -896,12 +955,21 @@ index a7026e75..634a20dd 100644
 +                                    label = "episode_list_download_progress",
 +                                )
 +                                if (animatedProgress > 0f) {
++                                    val pct = (animatedProgress * 100).toInt().coerceIn(1, 100)
 +                                    CircularProgressIndicator(
 +                                        progress = { animatedProgress },
-+                                        modifier = Modifier.size(26.dp),
++                                        modifier = Modifier.size(28.dp),
 +                                        strokeWidth = 2.5.dp,
 +                                        color = MaterialTheme.colorScheme.primary,
 +                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
++                                    )
++                                    Text(
++                                        text = "$pct%",
++                                        style = MaterialTheme.typography.labelSmall.copy(
++                                            fontSize = 9.sp,
++                                            fontWeight = FontWeight.Bold,
++                                        ),
++                                        color = MaterialTheme.colorScheme.primary,
 +                                    )
 +                                } else {
 +                                    CircularProgressIndicator(
@@ -909,10 +977,22 @@ index a7026e75..634a20dd 100644
 +                                        strokeWidth = 2.dp,
 +                                        color = MaterialTheme.colorScheme.primary,
 +                                    )
++                                    Icon(
++                                        imageVector = Icons.Rounded.Download,
++                                        contentDescription = null,
++                                        modifier = Modifier.size(12.dp),
++                                        tint = MaterialTheme.colorScheme.primary,
++                                    )
 +                                }
++                            } else if (isQueued) {
++                                CircularProgressIndicator(
++                                    modifier = Modifier.size(20.dp),
++                                    strokeWidth = 2.dp,
++                                    color = MaterialTheme.colorScheme.primary,
++                                )
 +                                Icon(
-+                                    imageVector = Icons.Rounded.Download,
-+                                    contentDescription = null,
++                                    imageVector = Icons.Rounded.Refresh,
++                                    contentDescription = "In coda",
 +                                    modifier = Modifier.size(12.dp),
 +                                    tint = MaterialTheme.colorScheme.primary,
 +                                )
@@ -937,25 +1017,238 @@ index a7026e75..634a20dd 100644
  
          progressEntry
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-index 024060d5..904980d9 100644
+index 024060d5..fd0c382a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -476,6 +476,7 @@ object AutoStreamDownloader {
-         NuvioToastController.show("Ricerca del miglior stream per: $displayTitle...")
+@@ -15,6 +15,7 @@ import com.nuvio.app.features.streams.StreamItem
+ import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -23,6 +24,23 @@ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.flow.update
+ import kotlinx.coroutines.launch
+ 
++/**
++ * Represents a download request waiting in the sequential download queue.
++ * Stream URLs are NOT fetched at this point; they are fetched just before the download starts (JIT).
++ */
++data class PendingAutoDownloadRequest(
++    val contentKey: String,
++    val displayTitle: String,
++    val meta: MetaDetails,
++    val episode: MetaVideo?,
++    val contentType: String,
++    val targetVideoId: String,
++    val seasonNumber: Int?,
++    val episodeNumber: Int?,
++    val episodeTitle: String?,
++    val episodeThumbnail: String?,
++)
++
+ private sealed interface StartAttemptResult {
+     data class Success(val item: DownloadItem) : StartAttemptResult
+     data class Failed(val reason: String) : StartAttemptResult
+@@ -34,8 +52,24 @@ object AutoStreamDownloader {
+     private val _activeSearches = MutableStateFlow<Set<String>>(emptySet())
+     val activeSearches: StateFlow<Set<String>> = _activeSearches.asStateFlow()
+ 
++    /** Ordered queue of pending auto-download requests waiting to be processed. */
++    private val _pendingQueue = MutableStateFlow<List<PendingAutoDownloadRequest>>(emptyList())
++    val pendingQueue: StateFlow<List<PendingAutoDownloadRequest>> = _pendingQueue.asStateFlow()
++
++    /** Whether the queue-worker coroutine is currently running. */
++    private var queueWorkerJob: Job? = null
++
+     fun isSearching(key: String): Boolean = key in _activeSearches.value
+ 
++    /** Returns true if this content key is in the pending queue (not yet being processed). */
++    fun isQueuedForDownload(contentKey: String): Boolean =
++        _pendingQueue.value.any { it.contentKey == contentKey }
++
++    /** Removes an item from the pending queue (user-initiated cancel before it starts). */
++    fun cancelAutoDownload(contentKey: String) {
++        _pendingQueue.update { queue -> queue.filterNot { it.contentKey == contentKey } }
++    }
++
+     private fun isPluginGroup(group: AddonStreamGroup): Boolean =
+         group.addonId.startsWith("plugin:") || group.addonId.startsWith("plugin-repo:")
+ 
+@@ -418,6 +452,7 @@ object AutoStreamDownloader {
+     ): Boolean {
+         val logicalKey = buildLogicalKey(parentMetaId, seasonNumber, episodeNumber)
+         if (logicalKey in _activeSearches.value) return true
++        if (isQueuedForDownload(logicalKey)) return true
+         DownloadsRepository.ensureLoaded()
+         val items = DownloadsRepository.uiState.value.items
+         return items.any {
+@@ -456,8 +491,9 @@ object AutoStreamDownloader {
+         }
+         val contentKey = buildLogicalKey(meta.id, seasonNumber, episodeNumber)
+ 
+-        if (contentKey in _activeSearches.value) {
+-            NuvioToastController.show("Ricerca stream per il download già in corso...")
++        // Guard: already actively searching or already in queue
++        if (contentKey in _activeSearches.value || isQueuedForDownload(contentKey)) {
++            NuvioToastController.show("Download già in coda...")
+             return
+         }
+ 
+@@ -472,19 +508,82 @@ object AutoStreamDownloader {
+             return
+         }
+ 
++        // Enqueue the request; stream fetching happens JIT when this item reaches the front.
++        val request = PendingAutoDownloadRequest(
++            contentKey = contentKey,
++            displayTitle = displayTitle,
++            meta = meta,
++            episode = episode,
++            contentType = contentType,
++            targetVideoId = targetVideoId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++            episodeTitle = episodeTitle,
++            episodeThumbnail = episodeThumbnail,
++        )
++        _pendingQueue.update { it + request }
++
++        val queueSize = _pendingQueue.value.size
++        if (queueSize > 1) {
++            NuvioToastController.show("Aggiunto alla coda (#$queueSize): $displayTitle")
++        } else {
++            NuvioToastController.show("Avvio ricerca stream per: $displayTitle...")
++        }
++
++        // Start the worker if it isn't already running
++        ensureQueueWorkerRunning()
++    }
++
++    /**
++     * Ensures that a single queue-worker coroutine is running.
++     * The worker picks items one at a time from the front of the queue and executes them sequentially.
++     */
++    private fun ensureQueueWorkerRunning() {
++        if (queueWorkerJob?.isActive == true) return
++        queueWorkerJob = scope.launch {
++            while (true) {
++                val next = _pendingQueue.value.firstOrNull() ?: break
++                _pendingQueue.update { it.drop(1) }
++                executeAutoDownload(next)
++            }
++            queueWorkerJob = null
++        }
++    }
++
++    /**
++     * Executes the stream-search + download for a single pending request.
++     * This is called JIT when the item reaches the front of the queue.
++     */
++    private suspend fun executeAutoDownload(request: PendingAutoDownloadRequest) {
++        val meta = request.meta
++        val contentType = request.contentType
++        val targetVideoId = request.targetVideoId
++        val seasonNumber = request.seasonNumber
++        val episodeNumber = request.episodeNumber
++        val episodeTitle = request.episodeTitle
++        val episodeThumbnail = request.episodeThumbnail
++        val displayTitle = request.displayTitle
++        val contentKey = request.contentKey
++
++        // Re-check: user may have cancelled or it may already exist
++        if (isItemDownloaded(meta.id, seasonNumber, episodeNumber, targetVideoId)) {
++            log.d { "Item già scaricato quando estratto dalla coda: $displayTitle" }
++            return
++        }
++
+         _activeSearches.update { it + contentKey }
+-        NuvioToastController.show("Ricerca del miglior stream per: $displayTitle...")
++        NuvioToastController.show("Avvio ricerca stream per: $displayTitle...")
  
          val notifId = "auto_$contentKey"
 +        DownloadsLiveStatusPlatform.acquireKeepAlive(notifId, displayTitle)
          DownloadsLiveStatusPlatform.notifyProgress(
              id = notifId,
              title = displayTitle,
-@@ -873,6 +874,7 @@ object AutoStreamDownloader {
+             message = "Ricerca dello stream in corso...",
+         )
+ 
+-        scope.launch {
+-            try {
+-                PlayerStreamsRepository.loadEpisodeStreams(
++        try {
++            PlayerStreamsRepository.loadEpisodeStreams(
+                     type = contentType,
+                     videoId = targetVideoId,
+                     season = seasonNumber,
+@@ -510,6 +609,7 @@ object AutoStreamDownloader {
+ 
+                 var downloadStarted = false
+                 var attemptedCount = 0
++                var startedDownloadId: String? = null
+ 
+                 when (sourceMode) {
+                     AutoDownloadSource.REPOSITORIES -> {
+@@ -569,6 +669,7 @@ object AutoStreamDownloader {
+                                         log.d { "Download plugin avviato con successo: $streamName" }
+                                         NuvioToastController.show("Download avviato: $displayTitle (Plugin)")
+                                         DownloadsLiveStatusPlatform.cancelNotification(notifId)
++                                        startedDownloadId = attemptResult.item.id
+                                         downloadStarted = true
+                                         break
+                                     }
+@@ -703,6 +804,7 @@ object AutoStreamDownloader {
+                                         log.d { "Download avviato con successo ($priorityLabel): $streamName" }
+                                         NuvioToastController.show("Download avviato: $displayTitle ($priorityLabel)")
+                                         DownloadsLiveStatusPlatform.cancelNotification(notifId)
++                                        startedDownloadId = attemptResult.item.id
+                                         downloadStarted = true
+                                         break
+                                     }
+@@ -838,6 +940,7 @@ object AutoStreamDownloader {
+                                         log.d { "Download avviato con successo ($priorityLabel): $streamName" }
+                                         NuvioToastController.show("Download avviato: $displayTitle ($priorityLabel)")
+                                         DownloadsLiveStatusPlatform.cancelNotification(notifId)
++                                        startedDownloadId = attemptResult.item.id
+                                         downloadStarted = true
+                                         break
+                                     }
+@@ -851,6 +954,23 @@ object AutoStreamDownloader {
+                     }
+                 }
+ 
++                // Wait for the started download to reach a terminal state before processing next queue item
++                val dlId = startedDownloadId
++                if (dlId != null) {
++                    log.d { "In attesa del completamento del download: $dlId" }
++                    while (true) {
++                        val item = DownloadsRepository.uiState.value.items.find { it.id == dlId }
++                        if (item == null) break // removed externally
++                        val status = item.status
++                        if (status == DownloadStatus.Completed ||
++                            status == DownloadStatus.Failed ||
++                            status == DownloadStatus.Paused
++                        ) break
++                        delay(1_000L)
++                    }
++                    log.d { "Download terminato (o rimosso), passo al prossimo in coda." }
++                }
++
+                 // 3. Notifica esplicita se nessun download è riuscito a partire
+                 if (!downloadStarted) {
+                     val failureMessage = if (attemptedCount > 0) {
+@@ -873,7 +993,7 @@ object AutoStreamDownloader {
                  DownloadsLiveStatusPlatform.notifyFailure(notifId, displayTitle, errorMsg)
              } finally {
                  _activeSearches.update { it - contentKey }
 +                DownloadsLiveStatusPlatform.releaseKeepAlive(notifId)
              }
-         }
+-        }
      }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
 index e3214228..d19bd595 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
@@ -970,6 +1263,178 @@ index e3214228..d19bd595 100644
 +    fun acquireKeepAlive(id: String, title: String)
 +    fun releaseKeepAlive(id: String)
  }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+index 2862e33f..457b7aa0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+@@ -76,7 +76,11 @@ fun DownloadsScreen(
+         DownloadsRepository.uiState
+     }.collectAsStateWithLifecycle()
+ 
++    val pendingQueue by AutoStreamDownloader.pendingQueue.collectAsStateWithLifecycle()
++
+     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
++    var showSettings by rememberSaveable { mutableStateOf(false) }
++    val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
+ 
+     val completedEpisodes = remember(uiState.items) {
+         uiState.completedItems
+@@ -90,6 +94,13 @@ fun DownloadsScreen(
+         }
+     }
+ 
++    if (showSettings) {
++        DownloadsSettingsScreen(
++            onBack = { showSettings = false },
++        )
++        return
++    }
++
+     PlatformBackHandler(
+         enabled = selectedShowId != null,
+         onBack = {
+@@ -112,13 +123,37 @@ fun DownloadsScreen(
+                         onBack()
+                     }
+                 },
+-                actions = {},
++                actions = {
++                    if (selectedShowId == null) {
++                        IconButton(onClick = { showSettings = true }) {
++                            Icon(
++                                imageVector = Icons.Rounded.Settings,
++                                contentDescription = stringResource(Res.string.compose_settings_page_root),
++                                tint = Color.White,
++                            )
++                        }
++                    }
++                    IconButton(
++                        onClick = {
++                            if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
++                                NuvioToastController.show(openDownloadsDirectoryFailedText)
++                            }
++                        },
++                    ) {
++                        Icon(
++                            imageVector = Icons.Rounded.Folder,
++                            contentDescription = stringResource(Res.string.downloads_open_directory),
++                            tint = Color.White,
++                        )
++                    }
++                },
+             )
+         }
+ 
+         if (selectedShowId == null) {
+             downloadsRootContent(
+                 uiState = uiState,
++                pendingQueue = pendingQueue,
+                 onOpenDownload = onOpenDownload,
+                 onOpenShow = { showId, title ->
+                     onNavigateToShow?.invoke(showId, title) ?: run { selectedShowId = showId }
+@@ -138,6 +173,7 @@ fun DownloadsScreen(
+ 
+ private fun LazyListScope.downloadsRootContent(
+     uiState: DownloadsUiState,
++    pendingQueue: List<PendingAutoDownloadRequest>,
+     onOpenDownload: (DownloadItem) -> Unit,
+     onOpenShow: (showId: String, title: String) -> Unit,
+     onSave: (DownloadItem) -> Unit = {},
+@@ -154,6 +190,22 @@ private fun LazyListScope.downloadsRootContent(
+         }
+         .sortedBy { (item, _) -> item.title.lowercase() }
+ 
++    // --- Queue section: items waiting to be downloaded (JIT stream fetch) ---
++    if (pendingQueue.isNotEmpty()) {
++        item {
++            SectionTitle(stringResource(Res.string.downloads_section_queue))
++        }
++        items(
++            items = pendingQueue,
++            key = { it.contentKey },
++        ) { request ->
++            QueuedDownloadRow(
++                request = request,
++                onCancel = { AutoStreamDownloader.cancelAutoDownload(request.contentKey) },
++            )
++        }
++    }
++
+     if (activeItems.isNotEmpty()) {
+         item {
+             SectionTitle(stringResource(Res.string.downloads_section_active))
+@@ -246,7 +298,7 @@ private fun LazyListScope.downloadsRootContent(
+         }
+     }
+ 
+-    if (uiState.items.isEmpty()) {
++    if (uiState.items.isEmpty() && pendingQueue.isEmpty()) {
+         item {
+             Box(
+                 modifier = Modifier
+@@ -578,6 +630,62 @@ private fun SectionTitle(title: String) {
+     )
+ }
+ 
++@Composable
++private fun QueuedDownloadRow(
++    request: PendingAutoDownloadRequest,
++    onCancel: () -> Unit,
++) {
++    Surface(
++        modifier = Modifier
++            .fillMaxWidth()
++            .padding(horizontal = 12.dp, vertical = 6.dp),
++        shape = MaterialTheme.shapes.medium,
++        color = MaterialTheme.colorScheme.surfaceContainerLow,
++    ) {
++        Row(
++            modifier = Modifier
++                .fillMaxWidth()
++                .padding(horizontal = 14.dp, vertical = 12.dp),
++            horizontalArrangement = Arrangement.SpaceBetween,
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Icon(
++                imageVector = Icons.Rounded.Refresh,
++                contentDescription = null,
++                modifier = Modifier
++                    .size(20.dp)
++                    .padding(end = 0.dp),
++                tint = MaterialTheme.colorScheme.onSurfaceVariant,
++            )
++            Spacer(Modifier.width(10.dp))
++            Column(
++                modifier = Modifier.weight(1f),
++                verticalArrangement = Arrangement.spacedBy(2.dp),
++            ) {
++                Text(
++                    text = request.displayTitle,
++                    style = MaterialTheme.typography.titleSmall,
++                    color = MaterialTheme.colorScheme.onSurface,
++                    fontWeight = FontWeight.SemiBold,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++                Text(
++                    text = stringResource(Res.string.downloads_queue_waiting),
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
++            IconButton(onClick = onCancel) {
++                Icon(
++                    imageVector = Icons.Rounded.Delete,
++                    contentDescription = stringResource(Res.string.action_delete),
++                )
++            }
++        }
++    }
++}
++
+ @Composable
+ private fun statusText(item: DownloadItem): String {
+     val processingIds by DownloadsRepository.processingItemIds.collectAsState(emptySet())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt
 new file mode 100644
 index 00000000..efb1e841
@@ -1656,11 +2121,11 @@ index d096ad27..bbb3de37 100644
  
  @Serializable
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..bf02177b 100644
+index 90792195..6f633dd2 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=133
-+MARKETING_VERSION=0.4.14.12
++CURRENT_PROJECT_VERSION=134
++MARKETING_VERSION=0.4.14.13
