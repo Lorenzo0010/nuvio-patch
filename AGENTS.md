@@ -150,9 +150,9 @@ Copy-Item androidApp\build\outputs\apk\full\release\androidApp-full-x86-release.
    - `fix(<area>): <descrizione> (v<versione>)`
    - `chore: aggiorna patch 07 ... v<versione>`
    - `docs: aggiorna note di rilascio per v<versione>`
-3. **Crea la GitHub Release** (tag = versione pulita, creato dal comando se assente):
+3. **Crea la GitHub Release** sul repository fork `Lorenzo0010/nuvio-patch` (tag = versione pulita, creato dal comando se assente). Esegui il comando **nella root `F:\GitHub\nuvio`** (il cui `origin` è il fork) oppure aggiungi `--repo Lorenzo0010/nuvio-patch`:
    ```powershell
-   gh release create <versione> releases\nuvio_plus_<versione>_universal.apk releases\nuvio_plus_<versione>_arm64-v8a.apk releases\nuvio_plus_<versione>_armeabi-v7a.apk releases\nuvio_plus_<versione>_x86_64.apk releases\nuvio_plus_<versione>_x86.apk --title "Nuvio Plus <versione>" --notes-file releases\release_notes.md
+   gh release create <versione> releases\nuvio_plus_<versione>_universal.apk releases\nuvio_plus_<versione>_arm64-v8a.apk releases\nuvio_plus_<versione>_armeabi-v7a.apk releases\nuvio_plus_<versione>_x86_64.apk releases\nuvio_plus_<versione>_x86.apk --title "Nuvio Plus <versione>" --notes-file releases\release_notes.md --repo Lorenzo0010/nuvio-patch
    ```
 4. **Verifica** con `gh release view <versione>`: 5 asset con nomi puliti, tag = `<versione>`, note pubblicate.
 5. **Pulizia**: rimuovi le directory temporanee `$env:TEMP\nuvio_*` (gli script di test/generazione già lo fanno; per build manuali fallo a mano).

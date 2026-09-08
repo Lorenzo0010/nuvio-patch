@@ -1,35 +1,4 @@
-﻿diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/AndroidManifest.xml
-index e536c4d..ca134d7 100644
---- a/androidApp/src/main/AndroidManifest.xml
-+++ b/androidApp/src/main/AndroidManifest.xml
-@@ -189,6 +189,26 @@
-                 android:name="android.support.FILE_PROVIDER_PATHS"
-                 android:resource="@xml/file_paths" />
-         </provider>
-+        <receiver
-+            android:name="com.nuvio.app.widget.NuvioAppWidgetProvider"
-+            android:exported="true">
-+            <intent-filter>
-+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-+            </intent-filter>
-+            <meta-data
-+                android:name="android.appwidget.provider"
-+                android:resource="@xml/nuvio_app_widget_info" />
-+        </receiver>
-+        <receiver
-+            android:name="com.nuvio.app.widget.NuvioNavbarWidgetProvider"
-+            android:exported="true">
-+            <intent-filter>
-+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-+            </intent-filter>
-+            <meta-data
-+                android:name="android.appwidget.provider"
-+                android:resource="@xml/nuvio_navbar_widget_info" />
-+        </receiver>
-     </application>
- 
- </manifest>
-diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
+﻿diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 index ac0f668..8f074e1 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
