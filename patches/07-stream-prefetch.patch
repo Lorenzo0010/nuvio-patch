@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 8f6b8ce8..52ef7f6f 100644
+index 8f6b8ce8..14910fc2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -44,6 +44,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -10,11 +10,13 @@ index 8f6b8ce8..52ef7f6f 100644
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.State
  import androidx.compose.runtime.derivedStateOf
-@@ -108,6 +109,11 @@ import com.nuvio.app.features.details.components.DetailTrailersSection
+@@ -108,6 +109,13 @@ import com.nuvio.app.features.details.components.DetailTrailersSection
  import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
  import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
  import com.nuvio.app.features.details.components.TrailerPlayerPopup
 +import androidx.compose.material.icons.rounded.Download
++import androidx.compose.material.icons.rounded.Pause
++import androidx.compose.material.icons.rounded.Schedule
 +import com.nuvio.app.features.downloads.AutoStreamDownloader
 +import com.nuvio.app.features.downloads.DownloadStatus
 +import com.nuvio.app.features.downloads.DownloadsRepository
@@ -22,7 +24,7 @@ index 8f6b8ce8..52ef7f6f 100644
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.PendingTrackingMembershipRemoval
-@@ -117,6 +123,7 @@ import com.nuvio.app.features.library.showTrackingMembershipRewriteFeedback
+@@ -117,6 +125,7 @@ import com.nuvio.app.features.library.showTrackingMembershipRewriteFeedback
  import com.nuvio.app.features.library.toLibraryItem
  import com.nuvio.app.features.player.PlayerSettingsRepository
  import com.nuvio.app.features.streams.StreamAutoPlayPolicy
@@ -30,7 +32,7 @@ index 8f6b8ce8..52ef7f6f 100644
  import com.nuvio.app.features.tmdb.TmdbSettingsRepository
  import com.nuvio.app.features.tmdb.TmdbService
  import com.nuvio.app.features.trakt.TraktAuthRepository
-@@ -657,6 +664,7 @@ fun MetaDetailsScreen(
+@@ -657,6 +666,7 @@ fun MetaDetailsScreen(
                  var trailerErrorMessage by remember(meta.id) { mutableStateOf<String?>(null) }
                  var trailerRequestToken by remember(meta.id) { mutableIntStateOf(0) }
                  var isLeavingDetails by remember(meta.id) { mutableStateOf(false) }
@@ -38,7 +40,7 @@ index 8f6b8ce8..52ef7f6f 100644
                  val heroTrailerCandidate = remember(meta.trailers) {
                      selectHeroTrailer(meta.trailers)
                  }
-@@ -736,6 +744,7 @@ fun MetaDetailsScreen(
+@@ -736,6 +746,7 @@ fun MetaDetailsScreen(
                      }
                  }
                  val onPrimaryPlayClick: () -> Unit = {
@@ -46,7 +48,7 @@ index 8f6b8ce8..52ef7f6f 100644
                      when {
                          (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                              onPlay?.invoke(
-@@ -782,6 +791,7 @@ fun MetaDetailsScreen(
+@@ -782,6 +793,7 @@ fun MetaDetailsScreen(
                      ?.takeIf { showManualPlayOption }
                      ?.let { manualPlay ->
                          {
@@ -54,7 +56,7 @@ index 8f6b8ce8..52ef7f6f 100644
                              when {
                                  (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                                      manualPlay(
-@@ -824,6 +834,7 @@ fun MetaDetailsScreen(
+@@ -824,6 +836,7 @@ fun MetaDetailsScreen(
                          }
                      }
                  val onEpisodePlayClick: (MetaVideo) -> Unit = { video ->
@@ -62,7 +64,7 @@ index 8f6b8ce8..52ef7f6f 100644
                      val season = video.season
                      val episode = video.episode
                      val playbackVideoId = buildPlaybackVideoId(
-@@ -858,6 +869,7 @@ fun MetaDetailsScreen(
+@@ -858,6 +871,7 @@ fun MetaDetailsScreen(
                      )
                  }
                  val onEpisodeManualPlayClick: (MetaVideo) -> Unit = { video ->
@@ -70,7 +72,7 @@ index 8f6b8ce8..52ef7f6f 100644
                      val season = video.season
                      val episode = video.episode
                      val playbackVideoId = buildPlaybackVideoId(
-@@ -891,6 +903,50 @@ fun MetaDetailsScreen(
+@@ -891,6 +905,50 @@ fun MetaDetailsScreen(
                          savedProgress?.lastPositionMs,
                      )
                  }
@@ -121,7 +123,7 @@ index 8f6b8ce8..52ef7f6f 100644
                  val listState = rememberLazyListState()
                  val heroStretchState = rememberHeroStretchState(listState)
                  val density = LocalDensity.current
-@@ -1137,6 +1193,9 @@ fun MetaDetailsScreen(
+@@ -1137,6 +1195,9 @@ fun MetaDetailsScreen(
                                      selectedEpisodeForActions = video
                                  },
                                  onSeasonLongPress = { season -> selectedSeasonForActions = season },
@@ -131,7 +133,7 @@ index 8f6b8ce8..52ef7f6f 100644
                                  onOpenMeta = onOpenMeta,
                                  onCastClick = onCastClick,
                                  onCompanyClick = onCompanyClick,
-@@ -1783,6 +1842,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1783,6 +1844,7 @@ private fun LazyListScope.configuredMetaSectionItems(
      onEpisodeClick: (MetaVideo) -> Unit,
      onEpisodeLongPress: (MetaVideo) -> Unit,
      onSeasonLongPress: (Int) -> Unit,
@@ -139,7 +141,7 @@ index 8f6b8ce8..52ef7f6f 100644
      onOpenMeta: ((MetaPreview) -> Unit)?,
      onCastClick: ((MetaPerson, String?) -> Unit)?,
      onCompanyClick: ((MetaCompany, String) -> Unit)?,
-@@ -1859,6 +1919,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1859,6 +1921,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      onEpisodeClick = onEpisodeClick,
                      onEpisodeLongPress = onEpisodeLongPress,
                      onSeasonLongPress = onSeasonLongPress,
@@ -147,7 +149,7 @@ index 8f6b8ce8..52ef7f6f 100644
                      onOpenMeta = onOpenMeta,
                      onCastClick = onCastClick,
                      onCompanyClick = onCompanyClick,
-@@ -1915,6 +1976,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1915,6 +1978,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                      onEpisodeClick = onEpisodeClick,
                      onEpisodeLongPress = onEpisodeLongPress,
@@ -155,7 +157,7 @@ index 8f6b8ce8..52ef7f6f 100644
                  )
              }
          }
-@@ -2082,6 +2144,7 @@ private fun ConfiguredMetaSections(
+@@ -2082,6 +2146,7 @@ private fun ConfiguredMetaSections(
      onEpisodeClick: (MetaVideo) -> Unit,
      onEpisodeLongPress: (MetaVideo) -> Unit,
      onSeasonLongPress: (Int) -> Unit,
@@ -163,7 +165,7 @@ index 8f6b8ce8..52ef7f6f 100644
      onOpenMeta: ((MetaPreview) -> Unit)?,
      onCastClick: ((MetaPerson, String?) -> Unit)?,
      onCompanyClick: ((MetaCompany, String) -> Unit)?,
-@@ -2110,6 +2173,37 @@ private fun ConfiguredMetaSections(
+@@ -2110,6 +2175,37 @@ private fun ConfiguredMetaSections(
      fun RenderSection(key: MetaScreenSectionKey, showHeader: Boolean = true) {
          when (key) {
              MetaScreenSectionKey.ACTIONS -> {
@@ -201,7 +203,7 @@ index 8f6b8ce8..52ef7f6f 100644
                  DetailActionButtons(
                      playLabel = playButtonLabel,
                      secondaryActions = buildList {
-@@ -2142,6 +2236,23 @@ private fun ConfiguredMetaSections(
+@@ -2142,6 +2238,23 @@ private fun ConfiguredMetaSections(
                              onClick = onSaveClick,
                              onLongClick = onSaveLongClick,
                          ))
@@ -225,7 +227,7 @@ index 8f6b8ce8..52ef7f6f 100644
                      },
                      isTablet = isTablet,
                      onPlayClick = onPrimaryPlayClick,
-@@ -2211,6 +2322,7 @@ private fun ConfiguredMetaSections(
+@@ -2211,6 +2324,7 @@ private fun ConfiguredMetaSections(
                          onEpisodeClick = onEpisodeClick,
                          onEpisodeLongPress = onEpisodeLongPress,
                          onSeasonLongPress = onSeasonLongPress,
@@ -452,7 +454,7 @@ index 274295f8..ca87e082 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index a7026e75..f3cd830b 100644
+index a7026e75..d781e23f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -3,6 +3,8 @@ package com.nuvio.app.features.details.components
@@ -472,7 +474,7 @@ index a7026e75..f3cd830b 100644
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
-@@ -35,10 +38,23 @@ import androidx.compose.foundation.lazy.LazyRow
+@@ -35,10 +38,25 @@ import androidx.compose.foundation.lazy.LazyRow
  import androidx.compose.foundation.lazy.items
  import androidx.compose.foundation.lazy.itemsIndexed
  import androidx.compose.foundation.lazy.rememberLazyListState
@@ -482,7 +484,9 @@ index a7026e75..f3cd830b 100644
 +import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.filled.Check
 +import androidx.compose.material.icons.rounded.Download
++import androidx.compose.material.icons.rounded.Pause
 +import androidx.compose.material.icons.rounded.Refresh
++import androidx.compose.material.icons.rounded.Schedule
 +import androidx.compose.material3.CircularProgressIndicator
 +import androidx.compose.material3.Icon
  import androidx.compose.material3.MaterialTheme
@@ -497,7 +501,7 @@ index a7026e75..f3cd830b 100644
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.getValue
-@@ -108,6 +124,7 @@ fun DetailSeriesContent(
+@@ -108,6 +126,7 @@ fun DetailSeriesContent(
      onEpisodeClick: ((MetaVideo) -> Unit)? = null,
      onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
      onSeasonLongPress: ((Int) -> Unit)? = null,
@@ -505,7 +509,7 @@ index a7026e75..f3cd830b 100644
  ) {
      val hasVideos = meta.videos.isNotEmpty()
      if (meta.type != "series" && !hasVideos) return
-@@ -230,6 +247,7 @@ fun DetailSeriesContent(
+@@ -230,6 +249,7 @@ fun DetailSeriesContent(
                              ),
                              onEpisodeClick = onEpisodeClick,
                              onEpisodeLongPress = onEpisodeLongPress,
@@ -513,7 +517,7 @@ index a7026e75..f3cd830b 100644
                          )
                      } else {
                          Column(
-@@ -244,6 +262,7 @@ fun DetailSeriesContent(
+@@ -244,6 +264,7 @@ fun DetailSeriesContent(
                                  )
                                  EpisodeListCard(
                                      video = episode,
@@ -521,7 +525,7 @@ index a7026e75..f3cd830b 100644
                                      fallbackImage = meta.background ?: meta.poster,
                                      progressEntry = progressByVideoId[episodeVideoId],
                                      imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -258,6 +277,7 @@ fun DetailSeriesContent(
+@@ -258,6 +279,7 @@ fun DetailSeriesContent(
                                      sizing = sizing,
                                      onClick = { onEpisodeClick?.invoke(episode) },
                                      onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -529,7 +533,7 @@ index a7026e75..f3cd830b 100644
                                  )
                              }
                          }
-@@ -313,6 +333,7 @@ internal fun DetailSeriesListEpisode(
+@@ -313,6 +335,7 @@ internal fun DetailSeriesListEpisode(
      blurUnwatchedEpisodes: Boolean,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -537,7 +541,7 @@ index a7026e75..f3cd830b 100644
      modifier: Modifier = Modifier,
  ) {
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-@@ -325,6 +346,7 @@ internal fun DetailSeriesListEpisode(
+@@ -325,6 +348,7 @@ internal fun DetailSeriesListEpisode(
          )
          EpisodeListCard(
              video = episode,
@@ -545,7 +549,7 @@ index a7026e75..f3cd830b 100644
              fallbackImage = meta.background ?: meta.poster,
              progressEntry = progressByVideoId[episodeVideoId],
              imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -339,6 +361,7 @@ internal fun DetailSeriesListEpisode(
+@@ -339,6 +363,7 @@ internal fun DetailSeriesListEpisode(
              sizing = sizing,
              onClick = { onEpisodeClick?.invoke(episode) },
              onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -553,7 +557,7 @@ index a7026e75..f3cd830b 100644
          )
      }
  }
-@@ -711,6 +734,7 @@ private fun EpisodeHorizontalRow(
+@@ -711,6 +736,7 @@ private fun EpisodeHorizontalRow(
      preferredEpisodeNumber: Int? = null,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -561,7 +565,7 @@ index a7026e75..f3cd830b 100644
  ) {
      val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
      val listState = rememberLazyListState()
-@@ -755,6 +779,7 @@ private fun EpisodeHorizontalRow(
+@@ -755,6 +781,7 @@ private fun EpisodeHorizontalRow(
              )
              EpisodeHorizontalCard(
                  video = episode,
@@ -569,7 +573,7 @@ index a7026e75..f3cd830b 100644
                  fallbackImage = fallbackImage,
                  progressEntry = progressByVideoId[episodeVideoId],
                  imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -769,6 +794,7 @@ private fun EpisodeHorizontalRow(
+@@ -769,6 +796,7 @@ private fun EpisodeHorizontalRow(
                  metrics = rowMetrics,
                  onClick = { onEpisodeClick?.invoke(episode) },
                  onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -577,7 +581,7 @@ index a7026e75..f3cd830b 100644
              )
          }
      }
-@@ -778,6 +804,7 @@ private fun EpisodeHorizontalRow(
+@@ -778,6 +806,7 @@ private fun EpisodeHorizontalRow(
  @Composable
  private fun EpisodeHorizontalCard(
      video: MetaVideo,
@@ -585,7 +589,7 @@ index a7026e75..f3cd830b 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -786,7 +813,34 @@ private fun EpisodeHorizontalCard(
+@@ -786,7 +815,34 @@ private fun EpisodeHorizontalCard(
      metrics: EpisodeHorizontalCardMetrics,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -620,7 +624,7 @@ index a7026e75..f3cd830b 100644
      val cardShape = RoundedCornerShape(metrics.cornerRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -846,12 +900,88 @@ private fun EpisodeHorizontalCard(
+@@ -846,12 +902,88 @@ private fun EpisodeHorizontalCard(
                  ),
          )
  
@@ -712,7 +716,7 @@ index a7026e75..f3cd830b 100644
  
          Column(
              modifier = Modifier
-@@ -1160,6 +1290,7 @@ private fun ImdbEpisodeRatingBadge(
+@@ -1160,6 +1292,7 @@ private fun ImdbEpisodeRatingBadge(
  @Composable
  private fun EpisodeListCard(
      video: MetaVideo,
@@ -720,7 +724,7 @@ index a7026e75..f3cd830b 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -1169,7 +1300,34 @@ private fun EpisodeListCard(
+@@ -1169,7 +1302,34 @@ private fun EpisodeListCard(
      modifier: Modifier = Modifier,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -755,7 +759,7 @@ index a7026e75..f3cd830b 100644
      val cardShape = RoundedCornerShape(sizing.cardRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -1192,6 +1350,7 @@ private fun EpisodeListCard(
+@@ -1192,6 +1352,7 @@ private fun EpisodeListCard(
      ) {
          Row(
              modifier = Modifier.fillMaxSize(),
@@ -763,7 +767,7 @@ index a7026e75..f3cd830b 100644
          ) {
              // Image area - fixed width matching card height per spec
              Box(
-@@ -1305,6 +1464,111 @@ private fun EpisodeListCard(
+@@ -1305,6 +1466,111 @@ private fun EpisodeListCard(
                      )
                  }
              }
@@ -1551,11 +1555,11 @@ index d08b58c8..8f454ea2 100644
          page = SettingsPage.Streams,
          key = "streams",
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..56a06c99 100644
+index 90792195..69f46298 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=139
-+MARKETING_VERSION=0.4.14.18
++CURRENT_PROJECT_VERSION=140
++MARKETING_VERSION=0.4.14.19
