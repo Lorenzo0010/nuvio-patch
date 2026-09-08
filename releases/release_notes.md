@@ -1,3 +1,19 @@
+## Novità in Nuvio Plus Mobile 0.4.14.21
+
+### 📡 Download HLS: retry automatico su 403/502 e gestione CDN instabili
+- **Retry con backoff su segmenti e playlist HLS**: un segmento che risponde `403` (rate limit / token momentaneo / edge CDN instabile) o `502/503` sul fetch della playlist ora viene **ritentato automaticamente** (fino a 3 tentativi con backoff crescente) invece di far fallire l'intero download. È il motivo principale degli errori "HLS segment 3/339 failed (HTTP 403)".
+- **Header `Referer` automatico su tutti i download HLS** (manifest, segmenti, audio, sottotitoli, probe): molti CDN anti-hotlinking restituiscono 403 quando manca. Usato anche nel fetch della playlist master e nel probe di sniffing.
+- **Cookie JAR di sessione**: i cookie restituiti dai manifest (sessioni CDN) vengono conservati e reinviati alle richieste dei segmenti. Diversi CDN HLS autorizzano i segmenti solo con il cookie di sessione.
+- **Retry anche sui download diretti**: un 403/429/5xx alla prima richiesta (cold cache dei CDN debrid) viene ritentato prima di segnare il download come fallito.
+- **Niente più download corrotti**: se la playlist HLS non è leggibile, il download NON scarica più il file `.m3u8` come se fosse il video completo: la riga torna in attesa e si prova la sorgente successiva.
+
+### 🗂️ Download Debrid Cached
+- I flussi debrid cached (RealDebrid/Torbox/Premiumize ecc.) ora beneficiano di tutti i punti sopra: retry alla risoluzione del link, Referer/cookie se il CDN finale serve HLS, fallback più pulito se il link non è ottenibile.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.14.21` (versionCode `142`) conforme alle regole di versionamento `AGENTS.md`.
+- APK firmati con keystore persistente `nuvio-release.keystore` (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.14.20
 
 ### 🛠️ Coda download: ciclo di vita completo riscritto e stabilizzato
