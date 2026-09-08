@@ -3385,10 +3385,10 @@ index 0000000..b271ad4
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..4dc2377c
+index 00000000..00000000
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,843 @@
+@@ -0,0 +1,854 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -3459,7 +3459,47 @@ index 00000000..4dc2377c
 +        val target = preferredAddon.trim().lowercase()
 +        val addonId = stream.addonId.lowercase()
 +        val addonName = stream.addonName?.lowercase().orEmpty()
-+        return addonId == target || addonName == target
++
++        // 1. Corrispondenza diretta o per contenimento su addonName o addonId
++        if (addonName == target || addonName.contains(target) || target.contains(addonName)) return true
++        if (addonId == target || addonId.contains(target) || target.contains(addonId)) return true
++
++        // 2. Controllo per Stremio instance id "addon:<manifestId>:<manifestUrl>"
++        if (addonId.startsWith("addon:")) {
++            val parts = addonId.removePrefix("addon:").split(":", limit = 2)
++            val manifestId = parts.getOrNull(0)?.lowercase().orEmpty()
++            val manifestUrl = parts.getOrNull(1)?.lowercase().orEmpty()
++            if (manifestId.isNotBlank() && (manifestId == target || target.contains(manifestId) || manifestId.contains(target))) return true
++            if (manifestUrl.isNotBlank() && (manifestUrl == target || manifestUrl.contains(target) || target.contains(manifestUrl))) return true
++        }
++
++        // 3. Risoluzione tramite AddonRepository per sicurezza totale
++        val matchingAddon = try {
++            AddonRepository.uiState.value.addons.firstOrNull { addon ->
++                val mId = addon.manifest?.id?.lowercase().orEmpty()
++                val mUrl = addon.manifestUrl.lowercase()
++                val dTitle = addon.displayTitle.lowercase()
++                val mName = addon.manifest?.name?.lowercase().orEmpty()
++                target == mId || target == mUrl || target == dTitle || target == mName ||
++                    (mId.isNotBlank() && target.contains(mId)) ||
++                    (mUrl.isNotBlank() && target.contains(mUrl))
++            }
++        } catch (_: Throwable) {
++            null
++        }
++
++        if (matchingAddon != null) {
++            val mId = matchingAddon.manifest?.id?.lowercase().orEmpty()
++            val mUrl = matchingAddon.manifestUrl.lowercase()
++            val dTitle = matchingAddon.displayTitle.lowercase()
++            val mName = matchingAddon.manifest?.name?.lowercase().orEmpty()
++
++            if (addonName == dTitle || addonName == mName || addonName.contains(dTitle) || dTitle.contains(addonName)) return true
++            if (mUrl.isNotBlank() && addonId.contains(mUrl)) return true
++            if (mId.isNotBlank() && (addonId.contains(":$mId:") || addonId.contains("addon:$mId"))) return true
++        }
++
++        return false
 +    }
 +
 +    /**
@@ -3923,11 +3963,17 @@ index 00000000..4dc2377c
 +
 +                    AutoDownloadSource.BOTH -> {
 +                        // Modalità: Entrambi (Chi arriva prima - DEFAULT)
-+                        // Scarica immediatamente da chi risponde per primo (plugin in 1-2s o addon)
++                        // Se è specificato un addon preferito, diamo precedenza all'attesa dell'addon preferito.
++                        val hasSpecificAddonTarget = !preferredAddon.isNullOrBlank()
++
 +                        DownloadsLiveStatusPlatform.notifyProgress(
 +                            id = notifId,
 +                            title = displayTitle,
-+                            message = "Ricerca stream in corso (Addon e Repository)...",
++                            message = if (hasSpecificAddonTarget) {
++                                "Ricerca stream prioritari dall'addon selezionato..."
++                            } else {
++                                "Ricerca stream in corso (Addon e Repository)..."
++                            },
 +                        )
 +
 +                        while (DownloadsClock.nowEpochMs() - startEpochMs < totalTimeoutMs) {
@@ -3941,10 +3987,30 @@ index 00000000..4dc2377c
 +                            val availableAddonStreams = addonGroups.flatMap { it.streams }
 +                                .filter { isAddonStream(it) && matchesAddon(it, preferredAddon) }
 +
++                            val isCheckingCache = availableAddonStreams.any { isCheckingTorrentStream(it) }
 +                            val hasCachedTorrent = availableAddonStreams.any { isCachedTorrentStream(it) }
-+                            // Se sono arrivati i torrent cached o se i plugin sono già pronti:
-+                            if (hasCachedTorrent || availablePluginStreams.isNotEmpty()) {
-+                                break
++
++                            if (hasSpecificAddonTarget) {
++                                // L'utente vuole uno specifico addon: attendiamo che termini il caricamento o i controlli cache
++                                val matchingAddonGroups = addonGroups.filter { group ->
++                                    group.streams.any { matchesAddon(it, preferredAddon) } || group.isLoading
++                                }
++                                val specificAddonFinished = matchingAddonGroups.isNotEmpty() && !matchingAddonGroups.any { it.isLoading } && !isCheckingCache
++                                if (hasCachedTorrent || (availableAddonStreams.isNotEmpty() && specificAddonFinished)) {
++                                    break
++                                }
++                                // Se l'addon preferito ha terminato senza risultati e i plugin sono pronti, procedi con fallback
++                                if (specificAddonFinished && availableAddonStreams.isEmpty() && availablePluginStreams.isNotEmpty()) {
++                                    break
++                                }
++                            } else {
++                                // Se sono arrivati i torrent cached o se i plugin sono già pronti (e non ci sono cache check in corso)
++                                if (hasCachedTorrent) {
++                                    break
++                                }
++                                if (availablePluginStreams.isNotEmpty() && !isCheckingCache) {
++                                    break
++                                }
 +                            }
 +
 +                            val anythingStillLoading = state.isAnyLoading
@@ -3960,20 +4026,29 @@ index 00000000..4dc2377c
 +
 +                        val finalState = PlayerStreamsRepository.episodeStreamsState.value
 +                        val candidateStreams = buildList {
-+                            // Se un torrent cached è pronto, ha sempre la priorità
 +                            val addonStreams = finalState.groups.filter { isAddonGroup(it) }.flatMap { it.streams }
 +                                .filter { isAddonStream(it) && matchesAddon(it, preferredAddon) }
 +                            val pluginStreams = finalState.groups.filter { isPluginGroup(it) }.flatMap { it.streams }
 +                                .filter { isPluginStream(it) && matchesRepository(it, preferredRepo) }
 +
-+                            // Chi arriva prima: torrent cached > plugin (se pronti) > addon http > altri
 +                            val sortedAddons = addonStreams.sortedBy { streamPriorityRank(it) }
 +                            val cachedTorrents = sortedAddons.filter { streamPriorityRank(it) == 0 }
 +                            val httpAddons = sortedAddons.filter { streamPriorityRank(it) == 1 }
++                            val otherAddons = sortedAddons.filter { streamPriorityRank(it) > 1 }
 +
-+                            addAll(cachedTorrents)
-+                            addAll(pluginStreams)
-+                            addAll(httpAddons)
++                            if (hasSpecificAddonTarget) {
++                                // Addon preferito: torrent cached > http > other > fallback plugin
++                                addAll(cachedTorrents)
++                                addAll(httpAddons)
++                                addAll(otherAddons)
++                                addAll(pluginStreams)
++                            } else {
++                                // Chi arriva prima standard: torrent cached > plugin (se pronti) > addon http > altri
++                                addAll(cachedTorrents)
++                                addAll(pluginStreams)
++                                addAll(httpAddons)
++                                addAll(otherAddons)
++                            }
 +                        }
 +
 +                        if (candidateStreams.isNotEmpty()) {
@@ -4023,7 +4098,7 @@ index 00000000..4dc2377c
 +                    }
 +
 +                    AutoDownloadSource.ADDONS -> {
-+                        // Modalità: Solo Addon (privilegia Torrent Cached > Addon HTTP)
++                        // Modalità: Solo Addon (privilegia Torrent Cached > Addon HTTP - MAI fallback su plugin)
 +                        DownloadsLiveStatusPlatform.notifyProgress(
 +                            id = notifId,
 +                            title = displayTitle,
@@ -4139,74 +4214,6 @@ index 00000000..4dc2377c
 +                                }
 +                            }
 +                        }
-+
-+                        // Fallback sui plugin se tutti gli addon sono falliti o non disponibili
-+                        if (!downloadStarted) {
-+                            DownloadsLiveStatusPlatform.notifyProgress(
-+                                id = notifId,
-+                                title = displayTitle,
-+                                message = "Addon non disponibili. Fallback sui plugin...",
-+                            )
-+                            log.d { "Nessun risultato valido dagli addon o tutti falliti in partenza. Procedo con i risultati dei plugin (Tier 2)..." }
-+
-+                            while (DownloadsClock.nowEpochMs() - startEpochMs < totalTimeoutMs) {
-+                                val state = PlayerStreamsRepository.episodeStreamsState.value
-+                                val pluginGroups = state.groups.filter { isPluginGroup(it) }
-+                                val pluginStreams = pluginGroups.flatMap { it.streams }
-+                                    .filter { isPluginStream(it) && matchesRepository(it, preferredRepo) }
-+
-+                                if (pluginStreams.isNotEmpty()) break
-+                                if (!pluginGroups.any { it.isLoading }) break
-+                                delay(250L)
-+                            }
-+
-+                            val stateAfterPlugins = PlayerStreamsRepository.episodeStreamsState.value
-+                            val pluginGroups = stateAfterPlugins.groups.filter { isPluginGroup(it) }
-+                            val rawPluginStreams = pluginGroups.flatMap { it.streams }
-+                                .filter { isPluginStream(it) && matchesRepository(it, preferredRepo) }
-+
-+                            if (rawPluginStreams.isNotEmpty()) {
-+                                for (rawStream in rawPluginStreams) {
-+                                    val effectiveStream = resolveEffectiveStream(rawStream, seasonNumber, episodeNumber)
-+                                    if (effectiveStream == null) continue
-+
-+                                    attemptedCount++
-+                                    val streamName = effectiveStream.addonName ?: "plugin"
-+                                    DownloadsLiveStatusPlatform.notifyProgress(
-+                                        id = notifId,
-+                                        title = displayTitle,
-+                                        message = "Tentativo avvio con: $streamName (Plugin)...",
-+                                    )
-+                                    log.d { "Tentativo download con plugin stream #$attemptedCount (Plugin): $streamName - ${effectiveStream.streamLabel}" }
-+
-+                                    val attemptResult = attemptStartDownloadCandidate(
-+                                        stream = effectiveStream,
-+                                        meta = meta,
-+                                        contentType = contentType,
-+                                        targetVideoId = targetVideoId,
-+                                        seasonNumber = seasonNumber,
-+                                        episodeNumber = episodeNumber,
-+                                        episodeTitle = episodeTitle,
-+                                        episodeThumbnail = episodeThumbnail,
-+                                        displayTitle = displayTitle,
-+                                    )
-+
-+                                    when (attemptResult) {
-+                                        is StartAttemptResult.Success -> {
-+                                            log.d { "Download plugin avviato con successo: $streamName" }
-+                                            NuvioToastController.show("Download avviato: $displayTitle (Plugin)")
-+                                            DownloadsLiveStatusPlatform.cancelNotification(notifId)
-+                                            downloadStarted = true
-+                                            break
-+                                        }
-+                                        is StartAttemptResult.Failed -> {
-+                                            log.w { "Plugin stream $streamName fallito in partenza: ${attemptResult.reason}. Fallback al successivo..." }
-+                                            NuvioToastController.show("Stream non disponibile, provo il successivo...")
-+                                        }
-+                                    }
-+                                }
-+                            }
-+                        }
 +                    }
 +                }
 +
@@ -4215,7 +4222,11 @@ index 00000000..4dc2377c
 +                    val failureMessage = if (attemptedCount > 0) {
 +                        "Download fallito per $displayTitle: tutti gli stream disponibili sono falliti in partenza"
 +                    } else {
-+                        "Download fallito per $displayTitle: nessuno stream disponibile"
++                        when (sourceMode) {
++                            AutoDownloadSource.ADDONS -> "Download fallito per $displayTitle: nessuno stream disponibile dagli addon"
++                            AutoDownloadSource.REPOSITORIES -> "Download fallito per $displayTitle: nessuno stream disponibile dalle repository"
++                            AutoDownloadSource.BOTH -> "Download fallito per $displayTitle: nessuno stream disponibile"
++                        }
 +                    }
 +                    log.e { failureMessage }
 +                    NuvioToastController.show(failureMessage)
