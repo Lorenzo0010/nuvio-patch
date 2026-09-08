@@ -1171,10 +1171,10 @@ index d35da359..803b5065 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..42f4ddc3 100644
+index 1f6484c5..d80d48a6 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,101 +2,390 @@ package com.nuvio.app.features.downloads
+@@ -2,101 +2,482 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -1204,9 +1204,13 @@ index 1f6484c5..42f4ddc3 100644
 +import kotlinx.coroutines.runBlocking
 +import okhttp3.Call
 +import okhttp3.ConnectionPool
++import okhttp3.Cookie
++import okhttp3.CookieJar
 +import okhttp3.Dispatcher
++import okhttp3.HttpUrl
 +import okhttp3.OkHttpClient
 +import okhttp3.Request
++import okhttp3.Response
 +import nuvio.composeapp.generated.resources.*
 +import org.jetbrains.compose.resources.getString
 +import java.io.BufferedOutputStream
@@ -1240,6 +1244,64 @@ index 1f6484c5..42f4ddc3 100644
 +    return headers + ("User-Agent" to PlayerPlaybackNetworking.DEFAULT_USER_AGENT)
 +}
 +
++/**
++ * Header per i download HLS: User-Agent + eventuali header dell'addon + Referer.
++ * Molti CDN HLS (anti-hotlinking) rispondono 403 quando manca il Referer;
++ * viene usata la URL del manifest, come farebbe un browser.
++ */
++private fun withHlsRequestHeaders(headers: Map<String, String>, sourceUrl: String): Map<String, String> {
++    val effective = withDefaultUserAgent(headers)
++    if (effective.keys.any { it.equals("Referer", ignoreCase = true) }) return effective
++    if (!sourceUrl.startsWith("http://", ignoreCase = true) &&
++        !sourceUrl.startsWith("https://", ignoreCase = true)
++    ) {
++        return effective
++    }
++    return effective + ("Referer" to sourceUrl)
++}
++
++/**
++ * CookieJar in memoria: conserva i Set-Cookie restituiti dai manifest HLS e li
++ * reinvia nelle richieste ai segmenti. Diversi CDN autorizzano i segmenti solo
++ * con il cookie di sessione impostato dal playlist.
++ */
++private class NuvioCookieJar : CookieJar {
++    private val cookiesByHost =
++        java.util.concurrent.ConcurrentHashMap<String, List<Cookie>>()
++
++    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
++        if (cookies.isEmpty()) return
++        val host = url.host
++        val now = System.currentTimeMillis()
++        val merged = (cookiesByHost[host].orEmpty() + cookies)
++            .filter { now < it.expiresAt }
++            .distinctBy { "${it.name}=${it.value}|${it.domain}|${it.path}" }
++        cookiesByHost[host] = merged
++    }
++
++    override fun loadForRequest(url: HttpUrl): List<Cookie> {
++        val host = url.host
++        val jar = cookiesByHost[host] ?: return emptyList()
++        val now = System.currentTimeMillis()
++        val valid = jar.filter { now < it.expiresAt }
++        cookiesByHost[host] = valid
++        return valid
++    }
++}
++
++private val downloadCookieJar = NuvioCookieJar()
++
++private const val MAX_HTTP_START_RETRY_ATTEMPTS = 2
++
++private fun isTransientStartupStatus(status: Int): Boolean =
++    status == 403 || status == 408 || status == 429 || status >= 500
++
++private fun startupRetryBackoffMs(attempt: Int): Long =
++    when (attempt) {
++        1 -> 800L
++        else -> 2_000L
++    }
++
 +private val trustAllManager = object : X509TrustManager {
 +    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
 +    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
@@ -1258,6 +1320,7 @@ index 1f6484c5..42f4ddc3 100644
 +    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
 +    .sslSocketFactory(sslContext.socketFactory, trustAllManager)
 +    .hostnameVerifier(downloadHostnameVerifier)
++    .cookieJar(downloadCookieJar)
 +    .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
 +    .dispatcher(Dispatcher().apply {
 +        maxRequests = 32
@@ -1418,21 +1481,35 @@ index 1f6484c5..42f4ddc3 100644
 +
 +                var attemptedRangeRequest = resumeFromBytes > 0L
 +                var httpRequest = buildRequest(if (attemptedRangeRequest) resumeFromBytes else null)
-+                call = downloadHttpClient.newCall(httpRequest)
-+                var response = call?.execute() ?: error(
-+                    runBlocking { getString(Res.string.downloads_error_request_failed) },
-+                )
++
++                // Esegue la richiesta ritentando gli errori transienti del server
++                // (403/429/502/503...). I CDN debrid sono notoriamente instabili
++                // al primo colpo (cold cache, edge spostato): un retry con backoff
++                // evita di fallire l'intero download per un errore momentaneo.
++                fun executeWithStartupRetry(req: Request): Response {
++                    var attempt = 0
++                    while (true) {
++                        call = downloadHttpClient.newCall(req)
++                        val resp = call?.execute() ?: error(
++                            runBlocking { getString(Res.string.downloads_error_request_failed) },
++                        )
++                        if (attempt >= MAX_HTTP_START_RETRY_ATTEMPTS || !isTransientStartupStatus(resp.code)) {
++                            return resp
++                        }
++                        resp.close()
++                        attempt++
++                        Thread.sleep(startupRetryBackoffMs(attempt))
++                    }
++                }
++
++                var response = executeWithStartupRetry(httpRequest)
 +
 +                if (attemptedRangeRequest && response.code == 416) {
 +                    response.close()
 +                    tempFile.delete()
 +                    resumeFromBytes = 0L
 +                    attemptedRangeRequest = false
-+                    httpRequest = buildRequest(null)
-+                    call = downloadHttpClient.newCall(httpRequest)
-+                    response = call?.execute() ?: error(
-+                        runBlocking { getString(Res.string.downloads_error_request_failed) },
-+                    )
++                    response = executeWithStartupRetry(buildRequest(null))
 +                }
 +
 +                response.use { response ->
@@ -1575,28 +1652,43 @@ index 1f6484c5..42f4ddc3 100644
 +        return localFileTarget.takeIf { it.exists() }?.toUriString()
 +    }
 +
-+    actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
-+        return try {
++actual fun fetchUrlAsString(url: String, headers: Map<String, String>): String? {
++    val effectiveHeaders = withHlsRequestHeaders(headers, url)
++    var attempt = 0
++    while (true) {
++        try {
 +            val requestBuilder = Request.Builder().url(url)
-+            withDefaultUserAgent(headers).forEach { (key, value) ->
++            withDefaultUserAgent(effectiveHeaders).forEach { (key, value) ->
 +                requestBuilder.header(key, value)
 +            }
 +            val response = downloadHttpClient.newCall(requestBuilder.get().build()).execute()
 +            response.use { resp ->
 +                if (resp.isSuccessful) {
-+                    resp.body?.string()
-+                } else null
++                    return resp.body?.string()
++                }
++                if (attempt < MAX_HTTP_START_RETRY_ATTEMPTS && isTransientStartupStatus(resp.code)) {
++                    attempt++
++                    Thread.sleep(startupRetryBackoffMs(attempt))
++                    return@use
++                }
++                return null
 +            }
 +        } catch (_: Exception) {
-+            null
++            if (attempt < MAX_HTTP_START_RETRY_ATTEMPTS) {
++                attempt++
++                Thread.sleep(startupRetryBackoffMs(attempt))
++                continue
++            }
++            return null
 +        }
 +    }
++}
 +
 +    actual fun probeIsHls(url: String, headers: Map<String, String>): Boolean {
 +        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
 +            return false
 +        }
-+        val effectiveHeaders = withDefaultUserAgent(headers)
++        val effectiveHeaders = withHlsRequestHeaders(headers, url)
 +        return try {
 +            val headBuilder = Request.Builder().url(url).head()
 +            effectiveHeaders.forEach { (key, value) -> headBuilder.header(key, value) }
@@ -1622,7 +1714,7 @@ index 1f6484c5..42f4ddc3 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +425,875 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +517,878 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1663,17 +1755,15 @@ index 1f6484c5..42f4ddc3 100644
 +    override fun copyTo(other: DownloadTarget) {
 +        if (other is FileDownloadTarget) {
 +            file.copyTo(other.file, overwrite = true)
-         } else {
--            File(this)
++        } else {
 +            file.inputStream().use { input ->
 +                other.openOutputStream(false).use { output ->
 +                    input.copyTo(output)
 +                }
 +            }
-         }
--    }.getOrNull()
++        }
 +    }
- }
++}
 +
 +private class DocumentDownloadTarget(
 +    private val context: Context,
@@ -1769,6 +1859,9 @@ index 1f6484c5..42f4ddc3 100644
 +    val customLocationUriString = DownloadsSettingsRepository.downloadLocationUri.value
 +    val customLocationUri = customLocationUriString?.let { Uri.parse(it) }
 +
++    // Header condivisi da tutte le richieste HLS (manifest, key, segmenti, audio, subs).
++    val hlsHeaders = withHlsRequestHeaders(request.sourceHeaders, request.sourceUrl)
++
 +    val (videoTarget, videoTemp) = createHlsTargets(context, customLocationUri, request.destinationFileName)
 +    if (videoTemp.exists()) videoTemp.delete()
 +
@@ -1789,7 +1882,7 @@ index 1f6484c5..42f4ddc3 100644
 +                try {
 +                    val outcome = downloadHlsToFile(
 +                        sourceUrl = request.sourceUrl,
-+                        httpGet = { url, range -> androidHttpGet(url, request.sourceHeaders, range) },
++                        httpGet = { url, range -> androidHttpGet(url, hlsHeaders, range) },
 +                        appendBytes = { bytes ->
 +                            videoTempOut.write(bytes)
 +                        },
@@ -1843,7 +1936,7 @@ index 1f6484c5..42f4ddc3 100644
 +                            context = context,
 +                            customLocationUri = customLocationUri,
 +                            url = audioUrl,
-+                            headers = request.sourceHeaders,
++                            headers = hlsHeaders,
 +                            finalName = audioFinalName,
 +                            tempName = audioTempName,
 +                            onProgress = { _, _ -> },
@@ -1880,7 +1973,7 @@ index 1f6484c5..42f4ddc3 100644
 +                            context = context,
 +                            customLocationUri = customLocationUri,
 +                            url = subUrl,
-+                            headers = request.sourceHeaders,
++                            headers = hlsHeaders,
 +                            finalName = subFinalName,
 +                            tempName = subTempName,
 +                            onProgress = { _, _ -> },
@@ -2260,7 +2353,8 @@ index 1f6484c5..42f4ddc3 100644
 +            videoSamples = counts.first
 +            audioSamples = counts.second
 +            InAppLogger.debug("Remux", "all tracks done: videoSamples=$videoSamples audioSamples=$audioSamples")
-+        } else {
+         } else {
+-            File(this)
 +            InAppLogger.debug("Remux", "copying video samples (no audio)...")
 +            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
 +            audioSamples = 0
@@ -2426,11 +2520,12 @@ index 1f6484c5..42f4ddc3 100644
 +            } else {
 +                true
 +            }
-+        }
+         }
+-    }.getOrNull()
 +    } catch (_: Exception) {
 +        false
 +    }
-+}
+ }
 +
 +private fun OutputStream.closeSafe() {
 +    try { close() } catch (_: Exception) { }
@@ -3655,10 +3750,10 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..8337dff0
+index 00000000..3002bf24
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,1154 @@
+@@ -0,0 +1,1160 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -4095,60 +4190,66 @@ index 00000000..8337dff0
 +            DownloadsRepository.probeIsHls(stream)
 +        )
 +
-+        val adopted: DownloadItem? = if (isHlsStream) {
++        if (isHlsStream) {
 +            val metadata = DownloadsRepository.fetchHlsMasterPlaylist(stream)
 +            val master = metadata?.masterPlaylist
-+            if (master != null && master.variants.isNotEmpty()) {
-+                val bestVariant = master.variants.sortedWith(
-+                    compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
-+                        .thenByDescending { it.bandwidth }
-+                ).first()
-+
-+                val audioTracks = master.audioTracks.filter { it.uri != null }
-+                val italianAudio = audioTracks.firstOrNull { isItalianTrack(it) } ?: audioTracks.firstOrNull()
-+                val selectedAudioUrls = listOfNotNull(italianAudio?.uri)
-+
-+                val displayQuality = bestVariant.resolution ?: "${(bestVariant.bandwidth / 1000)}kbps"
-+                val displayAudio = italianAudio?.name.orEmpty()
-+
-+                val selection = HlsDownloadSelection(
-+                    variantUrl = bestVariant.url,
-+                    audioUrls = selectedAudioUrls,
-+                    subtitleUrls = emptyList(),
-+                    displayQuality = displayQuality,
-+                    displayAudio = displayAudio,
-+                    displaySubtitle = "",
-+                )
-+
-+                DownloadsRepository.adoptHlsSelection(
-+                    placeholderId = placeholderId,
-+                    stream = stream,
-+                    selection = selection,
-+                )
-+            } else {
-+                DownloadsRepository.adoptDirectStream(
-+                    placeholderId = placeholderId,
-+                    stream = stream,
-+                    sourceUrl = resolvedUrl,
-+                )
++            val missingMaster = master == null || master.variants.isEmpty()
++            if (missingMaster) {
++                // Playlist HLS non leggibile (es. CDN temporaneamente irraggiungibile).
++                // NON scaricare l'm3u8 come file: sarebbe un download "completato" corrotto.
++                // Reset della riga e fallback al candidato successivo.
++                log.w { "Playlist HLS non disponibile per $displayTitle, passo alla sorgente successiva." }
++                return StartAttemptResult.Failed("Playlist HLS non disponibile")
 +            }
-+        } else {
-+            DownloadsRepository.adoptDirectStream(
++
++            val bestVariant = master.variants.sortedWith(
++                compareByDescending<HlsVariant> { parseResolutionPixels(it.resolution) }
++                    .thenByDescending { it.bandwidth }
++            ).first()
++
++            val audioTracks = master.audioTracks.filter { it.uri != null }
++            val italianAudio = audioTracks.firstOrNull { isItalianTrack(it) } ?: audioTracks.firstOrNull()
++            val selectedAudioUrls = listOfNotNull(italianAudio?.uri)
++
++            val displayQuality = bestVariant.resolution ?: "${(bestVariant.bandwidth / 1000)}kbps"
++            val displayAudio = italianAudio?.name.orEmpty()
++
++            val selection = HlsDownloadSelection(
++                variantUrl = bestVariant.url,
++                audioUrls = selectedAudioUrls,
++                subtitleUrls = emptyList(),
++                displayQuality = displayQuality,
++                displayAudio = displayAudio,
++                displaySubtitle = "",
++            )
++
++            val adopted = DownloadsRepository.adoptHlsSelection(
 +                placeholderId = placeholderId,
 +                stream = stream,
-+                sourceUrl = resolvedUrl,
++                selection = selection,
 +            )
++            if (adopted == null) {
++                return StartAttemptResult.Failed("Download annullato o rimosso")
++            }
++            return monitorDownloadStart(adopted.id, displayTitle)
 +        }
++
++        val adopted = DownloadsRepository.adoptDirectStream(
++            placeholderId = placeholderId,
++            stream = stream,
++            sourceUrl = resolvedUrl,
++        )
 +
 +        if (adopted == null) {
 +            return StartAttemptResult.Failed("Download annullato o rimosso")
 +        }
++        return monitorDownloadStart(adopted.id, displayTitle)
++    }
 +
-+        val downloadId = adopted.id
++    /** Finestra di monitoraggio iniziale ("fallisce in partenza"): fino a 6 secondi. */
++    private suspend fun monitorDownloadStart(downloadId: String, displayTitle: String): StartAttemptResult {
 +        log.d { "Monitoraggio avvio download ($downloadId) per: $displayTitle..." }
 +
-+        // Finestra di monitoraggio iniziale ("fallisce in partenza"): fino a 6 secondi.
-+        // A fallimento la riga resta (stesso id) e si passa al candidato successivo.
 +        val monitorStartMs = DownloadsClock.nowEpochMs()
 +        val monitorTimeoutMs = 6_000L
 +        while (DownloadsClock.nowEpochMs() - monitorStartMs < monitorTimeoutMs) {
@@ -7255,14 +7356,15 @@ index 4721842a..aafd0f46 100644
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
 new file mode 100644
-index 00000000..95cea8d8
+index 00000000..2d15142d
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
-@@ -0,0 +1,230 @@
+@@ -0,0 +1,281 @@
 +package com.nuvio.app.features.downloads
 +
 +import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.delay
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.sync.Mutex
@@ -7285,7 +7387,8 @@ index 00000000..95cea8d8
 +private const val MAX_PLAYLIST_REDIRECTS = 4
 +private const val AES_128 = "AES-128"
 +private const val BITRATE_WARMUP_FRACTION = 0.08
-+private const val DEFAULT_SEGMENT_CONCURRENCY = 5
++private const val DEFAULT_SEGMENT_CONCURRENCY = 4
++private const val MAX_HTTP_RETRY_ATTEMPTS = 3
 +
 +private class ResolvedHlsMedia(
 +    val playlist: HlsMediaPlaylist,
@@ -7298,6 +7401,50 @@ index 00000000..95cea8d8
 +    val payload: ByteArray,
 +)
 +
++/**
++ * Esegue una richiesta HTTP HLS con retry su errori transienti.
++ * Un singolo segmento che risponde 403/429/5xx (rate limit, edge CDN instabile,
++ * token momentaneamente scaduto) NON deve far fallire l'intero download.
++ * Un 502/503 sul fetch della playlist (i CDN debrid sono notoriamente instabili)
++ * viene ritentato con backoff più ampio prima di arrendersi.
++ */
++private suspend fun httpGetWithRetry(
++    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
++    url: String,
++    range: HlsByteRange?,
++    ensureActive: () -> Unit,
++): HlsHttpResult {
++    var attempt = 0
++    while (true) {
++        ensureActive()
++        val result = try {
++            httpGet(url, range)
++        } catch (e: Throwable) {
++            if (e is kotlinx.coroutines.CancellationException) throw e
++            if (attempt >= MAX_HTTP_RETRY_ATTEMPTS) throw e
++            attempt++
++            delay(retryBackoffMs(attempt))
++            continue
++        }
++        if (isTransientHttpStatus(result.status) && attempt < MAX_HTTP_RETRY_ATTEMPTS) {
++            attempt++
++            delay(retryBackoffMs(attempt))
++            continue
++        }
++        return result
++    }
++}
++
++private fun isTransientHttpStatus(status: Int): Boolean =
++    status == 403 || status == 408 || status == 429 || status >= 500
++
++private fun retryBackoffMs(attempt: Int): Long =
++    when (attempt) {
++        1 -> 800L
++        2 -> 2_000L
++        else -> 4_000L
++    }
++
 +internal suspend fun downloadHlsToFile(
 +    sourceUrl: String,
 +    httpGet: suspend (url: String, range: HlsByteRange?) -> HlsHttpResult,
@@ -7306,7 +7453,12 @@ index 00000000..95cea8d8
 +    onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
 +    ensureActive: () -> Unit,
 +): HlsDownloadOutcome {
-+    val resolved = resolveMediaPlaylist(sourceUrl, httpGet, ensureActive)
++    // Tutte le richieste HTTP del motore passano dal retry (playlist, init, key, segmenti).
++    val resilientHttpGet: suspend (String, HlsByteRange?) -> HlsHttpResult = { url, range ->
++        httpGetWithRetry(httpGet, url, range, ensureActive)
++    }
++
++    val resolved = resolveMediaPlaylist(sourceUrl, resilientHttpGet, ensureActive)
 +    val media = resolved.playlist
 +    val segments = media.segments
 +    if (segments.isEmpty()) {
@@ -7320,7 +7472,7 @@ index 00000000..95cea8d8
 +
 +    media.initSection?.let { init ->
 +        ensureActive()
-+        val response = httpGet(init.url, init.byteRange)
++        val response = resilientHttpGet(init.url, init.byteRange)
 +        if (response.status !in 200..299) {
 +            throw HlsDownloadException("HLS init section failed (HTTP ${response.status})")
 +        }
@@ -7347,7 +7499,7 @@ index 00000000..95cea8d8
 +                    launch {
 +                        try {
 +                            ensureActive()
-+                            val response = httpGet(segment.url, segment.byteRange)
++                            val response = resilientHttpGet(segment.url, segment.byteRange)
 +                            if (response.status !in 200..299) {
 +                                throw HlsDownloadException(
 +                                    "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
@@ -7360,7 +7512,7 @@ index 00000000..95cea8d8
 +                                sequenceNumber = segment.sequenceNumber,
 +                                keyCache = keyCache,
 +                                keyMutex = keyMutex,
-+                                httpGet = httpGet,
++                                httpGet = resilientHttpGet,
 +                                decryptAes128Cbc = decryptAes128Cbc,
 +                                ensureActive = ensureActive,
 +                            )
@@ -8558,10 +8710,10 @@ index 00000000..6d63f5bc
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 new file mode 100644
-index 00000000..d4b3563c
+index 00000000..948510ee
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,124 @@
 +package com.nuvio.app.features.downloads
 +
 +import java.io.File
@@ -8655,6 +8807,11 @@ index 00000000..d4b3563c
 +            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
 +            if (!hasUserAgent) {
 +                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
++            }
++            if (!headers.keys.any { it.equals("Referer", ignoreCase = true) } &&
++                (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true))
++            ) {
++                conn.setRequestProperty("Referer", url)
 +            }
 +            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
 +            conn.connect()
@@ -8853,7 +9010,7 @@ index 2cd1d315..bbb3de37 100644
  
  @Serializable
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
-index f8e6e673..da3920a1 100644
+index f8e6e673..72185882 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 @@ -2,13 +2,21 @@ package com.nuvio.app.features.downloads
@@ -8976,7 +9133,7 @@ index f8e6e673..da3920a1 100644
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
          val path = localFileUri.toLocalPath() ?: return false
-@@ -186,6 +230,76 @@ internal actual object DownloadsPlatformDownloader {
+@@ -186,6 +230,81 @@ internal actual object DownloadsPlatformDownloader {
          }
      }
  
@@ -8992,6 +9149,11 @@ index f8e6e673..da3920a1 100644
 +            val hasUserAgent = headers.keys.any { it.equals("User-Agent", ignoreCase = true) }
 +            if (!hasUserAgent) {
 +                request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField = "User-Agent")
++            }
++            if (!headers.keys.any { it.equals("Referer", ignoreCase = true) } &&
++                (url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true))
++            ) {
++                request.setValue(url, forHTTPHeaderField = "Referer")
 +            }
 +            headers.forEach { (key, value) ->
 +                request.setValue(value, forHTTPHeaderField = key)
@@ -9053,7 +9215,7 @@ index f8e6e673..da3920a1 100644
      actual fun openDownloadsDirectory(): Boolean {
          val url = NSURL.fileURLWithPath(downloadsDirectoryPath())
          UIApplication.sharedApplication.openURL(
-@@ -513,3 +627,373 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -513,3 +632,373 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
