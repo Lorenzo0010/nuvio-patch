@@ -1555,11 +1555,11 @@ index d08b58c8..8f454ea2 100644
          page = SettingsPage.Streams,
          key = "streams",
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..69f46298 100644
+index 90792195..c6d89b7d 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=140
-+MARKETING_VERSION=0.4.14.19
++CURRENT_PROJECT_VERSION=141
++MARKETING_VERSION=0.4.14.20
