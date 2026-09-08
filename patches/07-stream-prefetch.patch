@@ -1,3 +1,24 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
+index 7b6a7209..f3cc93b7 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
+@@ -74,6 +74,16 @@ internal actual object DownloadsLiveStatusPlatform {
+         manager.cancel(notificationId(id))
+     }
+ 
++    actual fun acquireKeepAlive(id: String, title: String) {
++        val context = appContext ?: return
++        DownloadsForegroundService.retain(context, id, title)
++    }
++
++    actual fun releaseKeepAlive(id: String) {
++        val context = appContext ?: return
++        DownloadsForegroundService.release(context, id)
++    }
++
+     actual fun notifyFailure(id: String, title: String, message: String) {
+         val context = appContext ?: return
+         if (!canPostNotifications(context)) return
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
 index 398c29bb..745d0c7f 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
@@ -90,7 +111,7 @@ index 5c4b5edb..1731eb70 100644
      <string name="downloads_channel_name">Downloads</string>
      <string name="downloads_live_completed">Download completed</string>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 8f6b8ce8..54828fb5 100644
+index 8f6b8ce8..dbed0f49 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -44,6 +44,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -254,7 +275,7 @@ index 8f6b8ce8..54828fb5 100644
      onOpenMeta: ((MetaPreview) -> Unit)?,
      onCastClick: ((MetaPerson, String?) -> Unit)?,
      onCompanyClick: ((MetaCompany, String) -> Unit)?,
-@@ -2110,6 +2173,27 @@ private fun ConfiguredMetaSections(
+@@ -2110,6 +2173,35 @@ private fun ConfiguredMetaSections(
      fun RenderSection(key: MetaScreenSectionKey, showHeader: Boolean = true) {
          when (key) {
              MetaScreenSectionKey.ACTIONS -> {
@@ -272,6 +293,14 @@ index 8f6b8ce8..54828fb5 100644
 +                        it.logicalContentKey == movieContentKey && (it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Processing)
 +                    }
 +                }
++                val movieDownloadItem = remember(downloadsUiState.items, movieContentKey) {
++                    downloadsUiState.items.firstOrNull { it.logicalContentKey == movieContentKey }
++                }
++                val movieProgressFraction = if (isMovieDownloading) {
++                    movieDownloadItem?.progressFraction ?: 0f
++                } else {
++                    null
++                }
 +                val movieDownloadLabel = when {
 +                    isMovieDownloaded -> stringResource(Res.string.downloads_completed_status)
 +                    isMovieDownloading -> stringResource(Res.string.downloads_status_downloading, "")
@@ -282,7 +311,7 @@ index 8f6b8ce8..54828fb5 100644
                  DetailActionButtons(
                      playLabel = playButtonLabel,
                      secondaryActions = buildList {
-@@ -2142,6 +2226,22 @@ private fun ConfiguredMetaSections(
+@@ -2142,6 +2234,23 @@ private fun ConfiguredMetaSections(
                              onClick = onSaveClick,
                              onLongClick = onSaveLongClick,
                          ))
@@ -291,6 +320,7 @@ index 8f6b8ce8..54828fb5 100644
 +                                label = movieDownloadLabel,
 +                                icon = movieDownloadIcon,
 +                                isActive = isMovieDownloaded || isMovieDownloading,
++                                progressFraction = movieProgressFraction,
 +                                onClick = {
 +                                    if (isMovieDownloaded) {
 +                                        NuvioToastController.show("Contenuto già scaricato")
@@ -305,7 +335,7 @@ index 8f6b8ce8..54828fb5 100644
                      },
                      isTablet = isTablet,
                      onPlayClick = onPrimaryPlayClick,
-@@ -2211,6 +2311,7 @@ private fun ConfiguredMetaSections(
+@@ -2211,6 +2320,7 @@ private fun ConfiguredMetaSections(
                          onEpisodeClick = onEpisodeClick,
                          onEpisodeLongPress = onEpisodeLongPress,
                          onSeasonLongPress = onSeasonLongPress,
@@ -420,11 +450,110 @@ index 00876358..754d5f48 100644
                  ),
              ),
          )
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
+index 274295f8..d15206d7 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
+@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.MoreHoriz
++import androidx.compose.material3.CircularProgressIndicator
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Surface
+@@ -49,6 +50,7 @@ data class DetailSecondaryAction(
+     val label: String,
+     val icon: ImageVector,
+     val isActive: Boolean = false,
++    val progressFraction: Float? = null,
+     val onClick: () -> Unit = {},
+     val onLongClick: (() -> Unit)? = null,
+ )
+@@ -149,6 +151,7 @@ fun DetailActionButtons(
+                                 icon = action.icon,
+                                 active = action.isActive,
+                                 progress = menuProgress,
++                                progressFraction = action.progressFraction,
+                                 size = iconButtonSize,
+                                 onClick = {
+                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+@@ -202,6 +205,8 @@ fun DetailActionButtons(
+                                 .size(24.dp)
+                                 .graphicsLayer {
+                                     rotationZ = 90f * menuProgress
++                                    scaleX = 1f
++                                    scaleY = 1f
+                                 },
+                         )
+                     }
+@@ -218,6 +223,7 @@ private fun DetailIconAction(
+     icon: ImageVector,
+     active: Boolean,
+     progress: Float,
++    progressFraction: Float? = null,
+     onClick: () -> Unit,
+     modifier: Modifier = Modifier,
+     size: Dp,
+@@ -252,11 +258,39 @@ private fun DetailIconAction(
+                 ),
+             contentAlignment = Alignment.Center,
+         ) {
+-            Icon(
+-                imageVector = icon,
+-                contentDescription = label,
+-                modifier = Modifier.size(21.dp),
+-            )
++            if (progressFraction != null) {
++                val animatedProgress by animateFloatAsState(
++                    targetValue = progressFraction.coerceIn(0f, 1f),
++                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
++                    label = "detail_action_download_progress",
++                )
++                if (animatedProgress > 0f) {
++                    CircularProgressIndicator(
++                        progress = { animatedProgress },
++                        modifier = Modifier.size(size - 10.dp),
++                        strokeWidth = 2.5.dp,
++                        color = MaterialTheme.colorScheme.primary,
++                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
++                    )
++                } else {
++                    CircularProgressIndicator(
++                        modifier = Modifier.size(size - 10.dp),
++                        strokeWidth = 2.5.dp,
++                        color = MaterialTheme.colorScheme.primary,
++                    )
++                }
++                Icon(
++                    imageVector = icon,
++                    contentDescription = label,
++                    modifier = Modifier.size(16.dp),
++                )
++            } else {
++                Icon(
++                    imageVector = icon,
++                    contentDescription = label,
++                    modifier = Modifier.size(21.dp),
++                )
++            }
+         }
+     }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index a7026e75..8fd34472 100644
+index a7026e75..634a20dd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-@@ -18,6 +18,7 @@ import androidx.compose.foundation.horizontalScroll
+@@ -3,6 +3,8 @@ package com.nuvio.app.features.details.components
+ import androidx.compose.animation.AnimatedContent
+ import androidx.compose.animation.Crossfade
+ import androidx.compose.animation.animateContentSize
++import androidx.compose.animation.core.FastOutSlowInEasing
++import androidx.compose.animation.core.animateFloatAsState
+ import androidx.compose.animation.core.tween
+ import androidx.compose.animation.fadeIn
+ import androidx.compose.animation.fadeOut
+@@ -18,6 +20,7 @@ import androidx.compose.foundation.horizontalScroll
  import androidx.compose.foundation.Image
  import androidx.compose.foundation.layout.Arrangement
  import androidx.compose.foundation.layout.Box
@@ -432,7 +561,7 @@ index a7026e75..8fd34472 100644
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
-@@ -35,10 +36,22 @@ import androidx.compose.foundation.lazy.LazyRow
+@@ -35,10 +38,22 @@ import androidx.compose.foundation.lazy.LazyRow
  import androidx.compose.foundation.lazy.items
  import androidx.compose.foundation.lazy.itemsIndexed
  import androidx.compose.foundation.lazy.rememberLazyListState
@@ -456,7 +585,7 @@ index a7026e75..8fd34472 100644
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.getValue
-@@ -108,6 +121,7 @@ fun DetailSeriesContent(
+@@ -108,6 +123,7 @@ fun DetailSeriesContent(
      onEpisodeClick: ((MetaVideo) -> Unit)? = null,
      onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
      onSeasonLongPress: ((Int) -> Unit)? = null,
@@ -464,7 +593,7 @@ index a7026e75..8fd34472 100644
  ) {
      val hasVideos = meta.videos.isNotEmpty()
      if (meta.type != "series" && !hasVideos) return
-@@ -230,6 +244,7 @@ fun DetailSeriesContent(
+@@ -230,6 +246,7 @@ fun DetailSeriesContent(
                              ),
                              onEpisodeClick = onEpisodeClick,
                              onEpisodeLongPress = onEpisodeLongPress,
@@ -472,7 +601,7 @@ index a7026e75..8fd34472 100644
                          )
                      } else {
                          Column(
-@@ -244,6 +259,7 @@ fun DetailSeriesContent(
+@@ -244,6 +261,7 @@ fun DetailSeriesContent(
                                  )
                                  EpisodeListCard(
                                      video = episode,
@@ -480,7 +609,7 @@ index a7026e75..8fd34472 100644
                                      fallbackImage = meta.background ?: meta.poster,
                                      progressEntry = progressByVideoId[episodeVideoId],
                                      imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -258,6 +274,7 @@ fun DetailSeriesContent(
+@@ -258,6 +276,7 @@ fun DetailSeriesContent(
                                      sizing = sizing,
                                      onClick = { onEpisodeClick?.invoke(episode) },
                                      onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -488,7 +617,7 @@ index a7026e75..8fd34472 100644
                                  )
                              }
                          }
-@@ -313,6 +330,7 @@ internal fun DetailSeriesListEpisode(
+@@ -313,6 +332,7 @@ internal fun DetailSeriesListEpisode(
      blurUnwatchedEpisodes: Boolean,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -496,7 +625,7 @@ index a7026e75..8fd34472 100644
      modifier: Modifier = Modifier,
  ) {
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-@@ -325,6 +343,7 @@ internal fun DetailSeriesListEpisode(
+@@ -325,6 +345,7 @@ internal fun DetailSeriesListEpisode(
          )
          EpisodeListCard(
              video = episode,
@@ -504,7 +633,7 @@ index a7026e75..8fd34472 100644
              fallbackImage = meta.background ?: meta.poster,
              progressEntry = progressByVideoId[episodeVideoId],
              imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -339,6 +358,7 @@ internal fun DetailSeriesListEpisode(
+@@ -339,6 +360,7 @@ internal fun DetailSeriesListEpisode(
              sizing = sizing,
              onClick = { onEpisodeClick?.invoke(episode) },
              onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -512,7 +641,7 @@ index a7026e75..8fd34472 100644
          )
      }
  }
-@@ -711,6 +731,7 @@ private fun EpisodeHorizontalRow(
+@@ -711,6 +733,7 @@ private fun EpisodeHorizontalRow(
      preferredEpisodeNumber: Int? = null,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -520,7 +649,7 @@ index a7026e75..8fd34472 100644
  ) {
      val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
      val listState = rememberLazyListState()
-@@ -755,6 +776,7 @@ private fun EpisodeHorizontalRow(
+@@ -755,6 +778,7 @@ private fun EpisodeHorizontalRow(
              )
              EpisodeHorizontalCard(
                  video = episode,
@@ -528,7 +657,7 @@ index a7026e75..8fd34472 100644
                  fallbackImage = fallbackImage,
                  progressEntry = progressByVideoId[episodeVideoId],
                  imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -769,6 +791,7 @@ private fun EpisodeHorizontalRow(
+@@ -769,6 +793,7 @@ private fun EpisodeHorizontalRow(
                  metrics = rowMetrics,
                  onClick = { onEpisodeClick?.invoke(episode) },
                  onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -536,7 +665,7 @@ index a7026e75..8fd34472 100644
              )
          }
      }
-@@ -778,6 +801,7 @@ private fun EpisodeHorizontalRow(
+@@ -778,6 +803,7 @@ private fun EpisodeHorizontalRow(
  @Composable
  private fun EpisodeHorizontalCard(
      video: MetaVideo,
@@ -544,7 +673,7 @@ index a7026e75..8fd34472 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -786,7 +810,24 @@ private fun EpisodeHorizontalCard(
+@@ -786,7 +812,30 @@ private fun EpisodeHorizontalCard(
      metrics: EpisodeHorizontalCardMetrics,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -566,10 +695,16 @@ index a7026e75..8fd34472 100644
 +            it.logicalContentKey == episodeContentKey && (it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Processing)
 +        }
 +    }
++    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
++        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
++    }
++    val downloadProgressFraction = if (isDownloading) {
++        episodeDownloadItem?.progressFraction ?: 0f
++    } else null
      val cardShape = RoundedCornerShape(metrics.cornerRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -846,12 +887,71 @@ private fun EpisodeHorizontalCard(
+@@ -846,12 +895,92 @@ private fun EpisodeHorizontalCard(
                  ),
          )
  
@@ -615,10 +750,31 @@ index a7026e75..8fd34472 100644
 +                        contentAlignment = Alignment.Center,
 +                    ) {
 +                        if (isDownloading) {
-+                            CircularProgressIndicator(
-+                                modifier = Modifier.size(14.dp),
-+                                strokeWidth = 2.dp,
-+                                color = MaterialTheme.colorScheme.primary,
++                            val animatedProgress by animateFloatAsState(
++                                targetValue = (downloadProgressFraction ?: 0f).coerceIn(0f, 1f),
++                                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
++                                label = "episode_download_progress",
++                            )
++                            if (animatedProgress > 0f) {
++                                CircularProgressIndicator(
++                                    progress = { animatedProgress },
++                                    modifier = Modifier.size(20.dp),
++                                    strokeWidth = 2.dp,
++                                    color = MaterialTheme.colorScheme.primary,
++                                    trackColor = Color.White.copy(alpha = 0.2f),
++                                )
++                            } else {
++                                CircularProgressIndicator(
++                                    modifier = Modifier.size(16.dp),
++                                    strokeWidth = 2.dp,
++                                    color = MaterialTheme.colorScheme.primary,
++                                )
++                            }
++                            Icon(
++                                imageVector = Icons.Rounded.Download,
++                                contentDescription = null,
++                                modifier = Modifier.size(10.dp),
++                                tint = MaterialTheme.colorScheme.primary,
 +                            )
 +                        } else if (isDownloaded) {
 +                            Icon(
@@ -644,7 +800,7 @@ index a7026e75..8fd34472 100644
  
          Column(
              modifier = Modifier
-@@ -1160,6 +1260,7 @@ private fun ImdbEpisodeRatingBadge(
+@@ -1160,6 +1289,7 @@ private fun ImdbEpisodeRatingBadge(
  @Composable
  private fun EpisodeListCard(
      video: MetaVideo,
@@ -652,7 +808,7 @@ index a7026e75..8fd34472 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -1169,7 +1270,24 @@ private fun EpisodeListCard(
+@@ -1169,7 +1299,30 @@ private fun EpisodeListCard(
      modifier: Modifier = Modifier,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -674,10 +830,16 @@ index a7026e75..8fd34472 100644
 +            it.logicalContentKey == episodeContentKey && (it.status == DownloadStatus.Downloading || it.status == DownloadStatus.Processing)
 +        }
 +    }
++    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
++        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
++    }
++    val downloadProgressFraction = if (isDownloading) {
++        episodeDownloadItem?.progressFraction ?: 0f
++    } else null
      val cardShape = RoundedCornerShape(sizing.cardRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -1192,6 +1310,7 @@ private fun EpisodeListCard(
+@@ -1192,6 +1345,7 @@ private fun EpisodeListCard(
      ) {
          Row(
              modifier = Modifier.fillMaxSize(),
@@ -685,7 +847,7 @@ index a7026e75..8fd34472 100644
          ) {
              // Image area - fixed width matching card height per spec
              Box(
-@@ -1305,6 +1424,67 @@ private fun EpisodeListCard(
+@@ -1305,6 +1459,88 @@ private fun EpisodeListCard(
                      )
                  }
              }
@@ -728,10 +890,31 @@ index a7026e75..8fd34472 100644
 +                            contentAlignment = Alignment.Center,
 +                        ) {
 +                            if (isDownloading) {
-+                                CircularProgressIndicator(
-+                                    modifier = Modifier.size(18.dp),
-+                                    strokeWidth = 2.dp,
-+                                    color = MaterialTheme.colorScheme.primary,
++                                val animatedProgress by animateFloatAsState(
++                                    targetValue = (downloadProgressFraction ?: 0f).coerceIn(0f, 1f),
++                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
++                                    label = "episode_list_download_progress",
++                                )
++                                if (animatedProgress > 0f) {
++                                    CircularProgressIndicator(
++                                        progress = { animatedProgress },
++                                        modifier = Modifier.size(26.dp),
++                                        strokeWidth = 2.5.dp,
++                                        color = MaterialTheme.colorScheme.primary,
++                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
++                                    )
++                                } else {
++                                    CircularProgressIndicator(
++                                        modifier = Modifier.size(20.dp),
++                                        strokeWidth = 2.dp,
++                                        color = MaterialTheme.colorScheme.primary,
++                                    )
++                                }
++                                Icon(
++                                    imageVector = Icons.Rounded.Download,
++                                    contentDescription = null,
++                                    modifier = Modifier.size(12.dp),
++                                    tint = MaterialTheme.colorScheme.primary,
 +                                )
 +                            } else if (isDownloaded) {
 +                                Icon(
@@ -753,6 +936,40 @@ index a7026e75..8fd34472 100644
          }
  
          progressEntry
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+index 024060d5..904980d9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+@@ -476,6 +476,7 @@ object AutoStreamDownloader {
+         NuvioToastController.show("Ricerca del miglior stream per: $displayTitle...")
+ 
+         val notifId = "auto_$contentKey"
++        DownloadsLiveStatusPlatform.acquireKeepAlive(notifId, displayTitle)
+         DownloadsLiveStatusPlatform.notifyProgress(
+             id = notifId,
+             title = displayTitle,
+@@ -873,6 +874,7 @@ object AutoStreamDownloader {
+                 DownloadsLiveStatusPlatform.notifyFailure(notifId, displayTitle, errorMsg)
+             } finally {
+                 _activeSearches.update { it - contentKey }
++                DownloadsLiveStatusPlatform.releaseKeepAlive(notifId)
+             }
+         }
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
+index e3214228..d19bd595 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
+@@ -2,4 +2,9 @@ package com.nuvio.app.features.downloads
+ 
+ internal expect object DownloadsLiveStatusPlatform {
+     fun onItemsChanged(items: List<DownloadItem>)
++    fun notifyProgress(id: String, title: String, message: String)
++    fun notifyFailure(id: String, title: String, message: String)
++    fun cancelNotification(id: String)
++    fun acquireKeepAlive(id: String, title: String)
++    fun releaseKeepAlive(id: String)
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt
 new file mode 100644
 index 00000000..efb1e841
@@ -1414,12 +1631,36 @@ index d08b58c8..8f454ea2 100644
      addPage(
          page = SettingsPage.Streams,
          key = "streams",
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
+index 68bebcf3..6d63f5bc 100644
+--- a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
+@@ -5,4 +5,6 @@ internal actual object DownloadsLiveStatusPlatform {
+     actual fun notifyProgress(id: String, title: String, message: String) {}
+     actual fun notifyFailure(id: String, title: String, message: String) {}
+     actual fun cancelNotification(id: String) {}
++    actual fun acquireKeepAlive(id: String, title: String) {}
++    actual fun releaseKeepAlive(id: String) {}
+ }
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
+index d096ad27..bbb3de37 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
+@@ -74,6 +74,8 @@ internal actual object DownloadsLiveStatusPlatform {
+     actual fun notifyProgress(id: String, title: String, message: String) {}
+     actual fun notifyFailure(id: String, title: String, message: String) {}
+     actual fun cancelNotification(id: String) {}
++    actual fun acquireKeepAlive(id: String, title: String) {}
++    actual fun releaseKeepAlive(id: String) {}
+ }
+ 
+ @Serializable
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..21b6da88 100644
+index 90792195..bf02177b 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=132
-+MARKETING_VERSION=0.4.14.11
++CURRENT_PROJECT_VERSION=133
++MARKETING_VERSION=0.4.14.12

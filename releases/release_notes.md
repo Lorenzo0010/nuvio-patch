@@ -1,25 +1,19 @@
-## Novità in Nuvio Plus Mobile 0.4.14.9
+## Novità in Nuvio Plus Mobile 0.4.14.12
 
-### Selettore Sorgente Download Automatico e Filtri Avanzati
-- **Selettore Sorgente nelle Impostazioni Nuvio Plus**: Nuova opzione dedicata in *Impostazioni Nuvio Plus* per configurare la sorgente di download automatico:
-  - **Entrambi (Chi arriva prima)** (*Predefinito*): Scarica immediatamente dal primo flusso valido disponibile (addon o plugin repository che sia).
-  - **Solo Addon (Torrent Cached / HTTP)**: Attende i risultati degli addon con priorità ai torrent in cache RealDebrid (~8s) e successiva ricerca su flussi HTTP (~15s), con fallback sui plugin se gli addon non rispondono.
-  - **Solo Repository Plugin**: Scarica direttamente e tempestivamente dai plugin abilitati.
-- **Filtro Addon e Filtro Repository**: Possibilità di filtrare la ricerca automatica selezionando un addon specifico o una repository plugin specifica, mantenendo l'opzione di default per ricercare su tutti gli addon o repository.
+### ⏱️ Timeout Addon Esteso a 30 Secondi
+- **Risoluzione Flussi Lenti**: Il timer di fallback per la modalità *"Solo Addon"* è stato esteso a **30 secondi** (raddoppiato rispetto ai precedenti 15s) per garantire che tutti gli addon e le ricerche sui flussi lenti o complessi abbiano il tempo necessario per restituire i migliori link disponibili prima di tentare fallback alternativi.
 
-### Notifica di Stato in Tempo Reale
-- **Report Live fin dal Click**: Non appena viene cliccato il pulsante di download, viene emessa una notifica di sistema Android persistente e aggiornata in tempo reale che documenta ogni fase operativa:
-  - Ricerca dello stream per il film o episodio selezionato.
-  - Verifica della disponibilità cache RealDebrid / Debrid.
-  - Tentativo di avvio con il nome dello stream specifico e la categoria di priorità (Torrent Cached, Addon HTTP, Plugin).
-  - Transizione automatica alla barra di avanzamento del download non appena lo stream si aggancia con successo.
+### 🔄 Animazione di Progresso Determinato sui Pulsanti di Download
+- **Indicatore Live sui Pulsanti**: Tutti i pulsanti di download (nella scheda dettagli dei Film e nelle schede/liste degli Episodi delle Serie TV) integrano ora un anello di avanzamento circolare animato (`CircularProgressIndicator` con `animateFloatAsState`) che segue con precisione millimetrica la percentuale di completamento del download (0%..100%).
+- **Feedback Immediato**: L'utente vede direttamente sul pulsante lo stato corrente del download (rotella indeterminata durante la fase di ricerca/risoluzione stream, e barra circolare determinata con percentuale numerica non appena il download è attivo).
 
-### Riorganizzazione UI Download in Nuvio Plus
-- **Voci Dedicate nelle Impostazioni**: Spostati i due pulsanti in precedenza presenti in alto a destra nella schermata Download (icona cartella e impostazioni) direttamente all'interno della pagina *Impostazioni Nuvio Plus*:
-  - **Apri cartella download**: Apre il gestore file di sistema sul percorso dei file scaricati.
-  - **Posizione di download**: Consente di scegliere la directory di destinazione personalizzata tramite il selettore di sistema (Storage Access Framework su Android).
-  - **Ripristina percorso predefinito**: Disponibile se è impostato un percorso personalizzato.
+### 🛡️ Protezione e Download Continuo in Background
+- **Zero Interruzioni**: Implementato un meccanismo di sicurezza con keep-alive e wake-lock persistente (`acquireKeepAlive` / `releaseKeepAlive`) per assicurare che né l'uscita dalla schermata dei dettagli del titolo, né il passaggio ad altre schermate o la minimizzazione dell'app in background interrompano la ricerca o lo scaricamento del video.
+- **Coroutines Globali e Notifiche di Sistema**: Il download continua senza interruzione fino al termine o all'eventuale cancellazione esplicita da parte dell'utente.
 
-### Standard di Rilascio e Firme
-- Versione conforme alla regola di versionamento: `0.4.14.9` (senza tag o suffissi hash).
-- APK firmati con il keystore persistente `nuvio-release.keystore`.
+### 🖱️ Azione Rapida e Menu Avanzato
+- Supporto al click secondario / pressione prolungata per visualizzare istantaneamente lo sheet di selezione manuale avanzata di qualità HLS, audio e sottotitoli.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.14.12` senza suffissi o hash commit, conforme al protocollo `AGENTS.md`.
+- APK firmati con il keystore persistente ufficiale `nuvio-release.keystore` (SHA-256: `BF:46:A0:35:B7:...`).
