@@ -1,19 +1,18 @@
-## Novità in Nuvio Plus Mobile 0.4.14.12
+## Novità in Nuvio Plus Mobile 0.4.14.13
+
+### 📋 Monitoraggio Coda di Download Diretta
+- **Visualizzazione Coda Pending**: Integrata direttamente nella schermata dei Download la visualizzazione della coda in attesa (`pendingQueue`), con monitoraggio dello stato di avanzamento e dei download programmati in background.
+- **Accesso Rapido alle Impostazioni Download**: Aggiunto collegamento diretto alle impostazioni dei download dalla toolbar superiore della sezione Download.
 
 ### ⏱️ Timeout Addon Esteso a 30 Secondi
-- **Risoluzione Flussi Lenti**: Il timer di fallback per la modalità *"Solo Addon"* è stato esteso a **30 secondi** (raddoppiato rispetto ai precedenti 15s) per garantire che tutti gli addon e le ricerche sui flussi lenti o complessi abbiano il tempo necessario per restituire i migliori link disponibili prima di tentare fallback alternativi.
+- **Risoluzione Flussi Lenti**: Il timer di fallback per la modalità *"Solo Addon"* è confermato a **30 secondi** per garantire che tutti gli addon debrid/streaming abbiano il tempo necessario prima di tentare fallback.
 
-### 🔄 Animazione di Progresso Determinato sui Pulsanti di Download
-- **Indicatore Live sui Pulsanti**: Tutti i pulsanti di download (nella scheda dettagli dei Film e nelle schede/liste degli Episodi delle Serie TV) integrano ora un anello di avanzamento circolare animato (`CircularProgressIndicator` con `animateFloatAsState`) che segue con precisione millimetrica la percentuale di completamento del download (0%..100%).
-- **Feedback Immediato**: L'utente vede direttamente sul pulsante lo stato corrente del download (rotella indeterminata durante la fase di ricerca/risoluzione stream, e barra circolare determinata con percentuale numerica non appena il download è attivo).
+### 🔄 Animazione di Progresso Determinato sui Pulsanti
+- **Indicatore Live sui Pulsanti**: I pulsanti di download di film ed episodi mostrano l'anello circolare animato con percentuale di completamento precisa (0%..100%).
 
 ### 🛡️ Protezione e Download Continuo in Background
-- **Zero Interruzioni**: Implementato un meccanismo di sicurezza con keep-alive e wake-lock persistente (`acquireKeepAlive` / `releaseKeepAlive`) per assicurare che né l'uscita dalla schermata dei dettagli del titolo, né il passaggio ad altre schermate o la minimizzazione dell'app in background interrompano la ricerca o lo scaricamento del video.
-- **Coroutines Globali e Notifiche di Sistema**: Il download continua senza interruzione fino al termine o all'eventuale cancellazione esplicita da parte dell'utente.
-
-### 🖱️ Azione Rapida e Menu Avanzato
-- Supporto al click secondario / pressione prolungata per visualizzare istantaneamente lo sheet di selezione manuale avanzata di qualità HLS, audio e sottotitoli.
+- **Zero Interruzioni**: Keep-alive e wake-lock continuo (`acquireKeepAlive` / `releaseKeepAlive`) per garantire che lo scaricamento proceda senza blocchi anche a schermo spento o app minimizzata.
 
 ### 🏷️ Firme e Integrità
-- Versione pulita `0.4.14.12` senza suffissi o hash commit, conforme al protocollo `AGENTS.md`.
+- Versione pulita `0.4.14.13` conforme alle regole di versionamento `AGENTS.md`.
 - APK firmati con il keystore persistente ufficiale `nuvio-release.keystore` (SHA-256: `BF:46:A0:35:B7:...`).
