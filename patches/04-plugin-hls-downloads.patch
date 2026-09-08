@@ -3655,10 +3655,10 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..eeb099df
+index 00000000..8337dff0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,1136 @@
+@@ -0,0 +1,1154 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -3823,11 +3823,29 @@ index 00000000..eeb099df
 +                    )
 +                }
 +                log.d { "Coda ripristinata: ${list.size} elementi" }
++                // CRITICO: al riavvio la coda caricata da disco deve ripartire da sola,
++                // altrimenti gli episodi restano "in coda" nella UI ma non partono mai.
++                ensureQueueWorkerRunning()
 +            }
 +        } catch (e: Throwable) {
 +            InAppLogger.error("AutoDownloader", "Errore caricamento coda: ${e.message}")
 +            _pendingQueue.value = emptyList()
++            savePendingQueue()
 +        }
++    }
++
++    /**
++     * Rilegge la coda persistita quando cambia profilo (la coda è profile-scoped).
++     * Cancella il worker corrente: se era a metà di un auto-download, il suo
++     * finally pulisce activeSearches/keepalive e il DownloadRepository si è
++     * già occupato di annullare gli handle del profilo vecchio.
++     */
++    fun onProfileChanged() {
++        queueWorkerJob?.cancel()
++        queueWorkerJob = null
++        _activeSearches.value = emptySet()
++        _pendingQueue.value = emptyList()
++        loadPendingQueue()
 +    }
 +
 +    init {
@@ -5369,7 +5387,7 @@ index c423daa1..2ed05010 100644
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index 041a38ee..570198cf 100644
+index 041a38ee..d0123282 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 @@ -1,6 +1,15 @@
@@ -5388,7 +5406,15 @@ index 041a38ee..570198cf 100644
  import kotlinx.coroutines.runBlocking
  import kotlinx.coroutines.flow.MutableStateFlow
  import kotlinx.coroutines.flow.StateFlow
-@@ -17,22 +26,36 @@ object DownloadsRepository {
+@@ -10,6 +19,7 @@ import kotlinx.serialization.Serializable
+ import kotlinx.serialization.decodeFromString
+ import kotlinx.serialization.encodeToString
+ import kotlinx.serialization.json.Json
++import kotlin.concurrent.Volatile
+ import nuvio.composeapp.generated.resources.*
+ import org.jetbrains.compose.resources.getString
+ 
+@@ -17,27 +27,93 @@ object DownloadsRepository {
      private val _uiState = MutableStateFlow(DownloadsUiState())
      val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
  
@@ -5405,6 +5431,34 @@ index 041a38ee..570198cf 100644
      private var hasLoaded = false
      private var nextDownloadOrdinal = 0L
  
++    // ── Scheduler: bounded concurrency + FIFO queue.
++    // Ogni download parte solo se c'è un "slot" libero. Limita il numero di
++    // download simultanei (i remux HLS sono pesanti in memoria): evita crash
++    // quando vengono accodati più episodi in rapida successione.
++    private const val MAX_CONCURRENT_DOWNLOADS = 2
++    private const val MAX_CONCURRENT_HLS_DOWNLOADS = 1
++
++    // Cross-platform lock (kotlinx.coroutines Mutex, non-suspend via tryLock).
++    // Le sezioni critiche sono microscopiche; la contesa è transitoria.
++    private val schedulerLock = kotlinx.coroutines.sync.Mutex()
++    private val scheduledQueue = ArrayDeque<String>()
++    private val activeDownloadIds = mutableSetOf<String>()
++    private var schedulerPumping = false
++
++    // Persistenza di progress: non scrivere su SharedPreferences ad ogni chunk.
++    private var lastThrottledPersistEpochMs = 0L
++
++    private inline fun <T> schedulerLocked(block: () -> T): T {
++        while (!schedulerLock.tryLock()) {
++            // spin breve: sezioni critiche sub-microsecondo
++        }
++        return try {
++            block()
++        } finally {
++            schedulerLock.unlock()
++        }
++    }
++
      fun ensureLoaded() {
          if (hasLoaded) return
 +        DownloadsSettingsRepository.ensureLoaded()
@@ -5413,19 +5467,50 @@ index 041a38ee..570198cf 100644
  
      fun onProfileChanged() {
 +        DownloadsSettingsRepository.onProfileChanged()
++        cancelAllActiveDownloadsInternal()
          loadFromDisk()
++        AutoStreamDownloader.onProfileChanged()
      }
  
      fun clearLocalState() {
-         activeHandles.values.forEach(DownloadsTaskHandle::cancel)
-         activeHandles.clear()
-+        processingRemovalJobs.values.forEach { it.cancel() }
-+        processingRemovalJobs.clear()
+-        activeHandles.values.forEach(DownloadsTaskHandle::cancel)
+-        activeHandles.clear()
++        cancelAllActiveDownloadsInternal()
 +        _trackProgress.value = emptyMap()
          hasLoaded = false
          _uiState.value = DownloadsUiState()
          notifyLiveStatusPlatform()
-@@ -100,6 +123,13 @@ object DownloadsRepository {
+     }
+ 
++    /** Annulla tutti gli handle attivi e svuota la coda dello scheduler. */
++    private fun cancelAllActiveDownloadsInternal() {
++        val handles = schedulerLocked {
++            val result = activeHandles.values.toList()
++            activeHandles.clear()
++            activeDownloadIds.clear()
++            scheduledQueue.clear()
++            processingRemovalJobs.values.forEach { it.cancel() }
++            processingRemovalJobs.clear()
++            result
++        }
++        handles.forEach { runCatching { it.cancel() } }
++        _trackProgress.value = emptyMap()
++        _processingItemIds.value = emptySet()
++    }
++
++    /** Rilascia lo slot dello scheduler per un download (terminale/pausa/rimozione) e fa avanzare la coda. */
++    private fun releaseDownload(downloadId: String) {
++        schedulerLocked {
++            activeDownloadIds.remove(downloadId)
++            scheduledQueue.removeAll { it == downloadId }
++        }
++        pumpScheduler()
++    }
++
+     fun findPlayableDownloadByVideoId(videoId: String?): DownloadItem? {
+         ensureLoaded()
+         val normalizedVideoId = videoId?.trim().orEmpty()
+@@ -100,6 +176,13 @@ object DownloadsRepository {
          return resolvedUri
      }
  
@@ -5439,7 +5524,7 @@ index 041a38ee..570198cf 100644
      fun enqueueFromStream(
          contentType: String,
          videoId: String,
-@@ -126,6 +156,66 @@ object DownloadsRepository {
+@@ -126,6 +209,66 @@ object DownloadsRepository {
              return DownloadEnqueueResult.UnsupportedFormat
          }
  
@@ -5506,14 +5591,14 @@ index 041a38ee..570198cf 100644
          val now = DownloadsClock.nowEpochMs()
          val logicalKey = buildLogicalKey(
              parentMetaId = parentMetaId,
-@@ -139,6 +229,343 @@ object DownloadsRepository {
+@@ -138,9 +281,350 @@ object DownloadsRepository {
+         val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
          if (existing != null) {
              replacedExisting = true
-             activeHandles.remove(existing.id)?.cancel()
-+            processingRemovalJobs.remove(existing.id)?.cancel()
-+            _trackProgress.update { it - existing.id }
-+            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
-+            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
+-            activeHandles.remove(existing.id)?.cancel()
+-            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
+-            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
++            abandonDownload(existing)
 +            currentItems.removeAll { it.id == existing.id }
 +        }
 +
@@ -5790,8 +5875,13 @@ index 041a38ee..570198cf 100644
 +     * attesa del candidato successivo, senza sparire/riapparire.
 +     */
 +    fun resetPlaceholderForRetry(downloadId: String, phaseMessage: String) {
-+        activeHandles.remove(downloadId)?.cancel()
++        schedulerLocked {
++            activeHandles.remove(downloadId)?.cancel()
++            activeDownloadIds.remove(downloadId)
++            scheduledQueue.removeAll { it == downloadId }
++        }
 +        _trackProgress.update { it - downloadId }
++        _processingItemIds.update { it - downloadId }
 +        mutateItem(downloadId) { current ->
 +            current.copy(
 +                status = DownloadStatus.Downloading,
@@ -5801,6 +5891,7 @@ index 041a38ee..570198cf 100644
 +                phaseMessage = phaseMessage,
 +            )
 +        }
++        pumpScheduler()
 +    }
 +
 +    fun removePlaceholderByKey(logicalKey: String) {
@@ -5808,12 +5899,18 @@ index 041a38ee..570198cf 100644
 +            .filter { it.logicalContentKey == logicalKey && it.isPlaceholder }
 +            .map { it.id }
 +        ids.forEach { id ->
-+            activeHandles.remove(id)?.cancel()
++            schedulerLocked {
++                activeHandles.remove(id)?.cancel()
++                activeDownloadIds.remove(id)
++                scheduledQueue.removeAll { it == id }
++            }
 +            _trackProgress.update { it - id }
++            _processingItemIds.update { it - id }
 +        }
 +        if (ids.isNotEmpty()) {
 +            publish(_uiState.value.items.filterNot { it.id in ids })
 +        }
++        pumpScheduler()
 +    }
 +
 +    private fun enqueueDirectStream(
@@ -5844,13 +5941,11 @@ index 041a38ee..570198cf 100644
 +        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
 +        if (existing != null) {
 +            replacedExisting = true
-+            activeHandles.remove(existing.id)?.cancel()
-+            processingRemovalJobs.remove(existing.id)?.cancel()
-+            _trackProgress.update { it - existing.id }
-             DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
-             DownloadsPlatformDownloader.removePartialFile(existing.fileName)
++            abandonDownload(existing)
              currentItems.removeAll { it.id == existing.id }
-@@ -152,7 +579,8 @@ object DownloadsRepository {
+         }
+ 
+@@ -152,7 +636,8 @@ object DownloadsRepository {
              episodeTitle = episodeTitle,
              fallbackTitle = stream.streamLabel,
              sourceUrl = sourceUrl,
@@ -5860,15 +5955,35 @@ index 041a38ee..570198cf 100644
          )
  
          val item = DownloadItem(
-@@ -201,6 +629,7 @@ object DownloadsRepository {
+@@ -201,9 +686,17 @@ object DownloadsRepository {
      fun pauseDownload(downloadId: String) {
          ensureLoaded()
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
+-        if (item.status != DownloadStatus.Downloading) return
 +        if (item.isPlaceholder) return
-         if (item.status != DownloadStatus.Downloading) return
++        if (item.status != DownloadStatus.Downloading && item.status != DownloadStatus.Processing) return
  
-         activeHandles.remove(downloadId)?.cancel()
-@@ -224,6 +653,7 @@ object DownloadsRepository {
+-        activeHandles.remove(downloadId)?.cancel()
++        schedulerLocked {
++            activeHandles.remove(downloadId)?.cancel()
++            processingRemovalJobs.remove(downloadId)?.cancel()
++            activeDownloadIds.remove(downloadId)
++            scheduledQueue.removeAll { it == downloadId }
++        }
++        _trackProgress.update { it - downloadId }
++        _processingItemIds.update { it - downloadId }
+         mutateItem(downloadId) { current ->
+             current.copy(
+                 status = DownloadStatus.Paused,
+@@ -211,6 +704,7 @@ object DownloadsRepository {
+                 errorMessage = null,
+             )
+         }
++        pumpScheduler()
+     }
+ 
+     fun pauseActiveDownloads() {
+@@ -224,6 +718,7 @@ object DownloadsRepository {
      fun resumeDownload(downloadId: String) {
          ensureLoaded()
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
@@ -5876,7 +5991,7 @@ index 041a38ee..570198cf 100644
          if (item.status != DownloadStatus.Paused && item.status != DownloadStatus.Failed) return
  
          val reset = item.copy(
-@@ -242,21 +672,13 @@ object DownloadsRepository {
+@@ -242,26 +737,27 @@ object DownloadsRepository {
          resumeDownload(downloadId)
      }
  
@@ -5892,24 +6007,53 @@ index 041a38ee..570198cf 100644
 -
      fun cancelDownload(downloadId: String) {
          ensureLoaded()
-         val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
+-        val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
++        val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: run {
++            releaseDownload(downloadId)
++            return
++        }
  
-         activeHandles.remove(downloadId)?.cancel()
-+        processingRemovalJobs.remove(downloadId)?.cancel()
+-        activeHandles.remove(downloadId)?.cancel()
++        schedulerLocked {
++            activeHandles.remove(downloadId)?.cancel()
++            processingRemovalJobs.remove(downloadId)?.cancel()
++            activeDownloadIds.remove(downloadId)
++            scheduledQueue.removeAll { it == downloadId }
++        }
 +        _trackProgress.update { it - downloadId }
++        _processingItemIds.update { it - downloadId }
          DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
          DownloadsPlatformDownloader.removePartialFile(item.fileName)
  
-@@ -275,8 +697,16 @@ object DownloadsRepository {
+         publish(_uiState.value.items.filterNot { it.id == downloadId })
+         persist()
++        pumpScheduler()
+     }
+ 
+     private fun loadFromDisk() {
+@@ -274,9 +770,29 @@ object DownloadsRepository {
+         }
  
          var shouldPersistNormalized = false
++        val resumedDownloadIds = mutableListOf<String>()
          val normalized = DownloadsCodec.decodeItems(payload)
 +            .filterNot { it.isPlaceholder }
              .map { item ->
 -                val statusNormalized = DownloadsPlatformDownloader.restoreItem(item)
-+                val statusNormalized = if (item.status == DownloadStatus.Downloading) {
++                // Un download in stato "Downloading" quando l'app è stata chiusa
++                // (o è crashato) deve ripartire da solo: per i direct il driver
++                // riprende dal file .part, per gli HLS riparte da zero ma sempre
++                // automaticamente. Niente più righe "paused" che non partono mai.
++                // Anche "Processing" (es. crash a metà remux HLS) viene normalizzato,
++                // altrimenti la riga resterebbe bloccata per sempre senza azioni.
++                val isInterrupted = item.status == DownloadStatus.Downloading ||
++                    item.status == DownloadStatus.Processing
++                if (isInterrupted) resumedDownloadIds += item.id
++
++                val statusNormalized = if (isInterrupted) {
 +                    item.copy(
-+                        status = DownloadStatus.Paused,
++                        status = DownloadStatus.Downloading,
++                        downloadedBytes = 0L,
 +                        errorMessage = null,
 +                    )
 +                } else {
@@ -5918,16 +6062,37 @@ index 041a38ee..570198cf 100644
  
                  val localUriNormalized = normalizeCompletedLocalFileUri(statusNormalized)
                  if (localUriNormalized != item) {
-@@ -290,12 +720,37 @@ object DownloadsRepository {
+@@ -290,95 +806,349 @@ object DownloadsRepository {
          if (shouldPersistNormalized) {
              persist()
          }
 -        normalized.filter { it.status == DownloadStatus.Downloading && it.id !in activeHandles }
 -            .forEach(::startDownload)
++
++        // Riprende automaticamente i download interrotti (coretto anche per
++        // le code lasciate al riavvio) e fa avanzare la coda.
++        resumedDownloadIds.forEach { id ->
++            _uiState.value.items.firstOrNull { it.id == id }?.let { startDownload(it) }
++        }
      }
  
      private fun startDownload(item: DownloadItem) {
 -        val request = DownloadPlatformRequest(item)
++        // Mette il download in coda FIFO; il vero avvio avviene quando c'è uno
++        // slot libero (vedi pumpScheduler). Niente più avvii concorrenti illimitati.
++        val alreadyKnown = schedulerLocked {
++            if (item.id in activeDownloadIds || scheduledQueue.contains(item.id)) {
++                true
++            } else {
++                scheduledQueue.addLast(item.id)
++                false
++            }
++        }
++        if (!alreadyKnown) pumpScheduler()
++    }
++
++    /** Avvia realmente il download tramite la piattaforma, riempiendo uno slot. */
++    private fun launchPlatformDownload(item: DownloadItem) {
 +        val request = DownloadPlatformRequest(
 +            downloadId = item.id,
 +            displayTitle = item.title,
@@ -5959,151 +6124,335 @@ index 041a38ee..570198cf 100644
  
          val handle = DownloadsPlatformDownloader.start(
              request = request,
-@@ -312,44 +767,110 @@ object DownloadsRepository {
-                         )
-                     }
-                 }
-+                val currentItem = _uiState.value.items.firstOrNull { it.id == item.id }
-+                if (currentItem?.status == DownloadStatus.Downloading) {
-+                    _trackProgress.update { current ->
-+                        val itemProgress = current[item.id]?.toMutableMap() ?: return@update current
-+                        val existing = itemProgress["video"] ?: TrackProgressState()
-+                        itemProgress["video"] = existing.copy(
-+                            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
-+                            totalBytes = totalBytes?.takeIf { it > 0L },
-+                        )
-+                        current + (item.id to itemProgress)
-+                    }
-+                }
-+                notifyLiveStatusPlatform()
+             onProgress = { downloadedBytes, totalBytes ->
+-                mutateItem(item.id) { current ->
+-                    if (current.status != DownloadStatus.Downloading) {
+-                        current
+-                    } else {
+-                        current.copy(
+-                            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
+-                            totalBytes = totalBytes?.takeIf { it > 0L },
+-                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+-                            errorMessage = null,
+-                        )
+-                    }
+-                }
++                handleDownloadProgress(item.id, downloadedBytes, totalBytes)
 +            },
 +            onTrackProgress = { trackName, downloadedBytes, totalBytes ->
-+                val currentItem = _uiState.value.items.firstOrNull { it.id == item.id }
-+                if (currentItem?.status == DownloadStatus.Downloading) {
-+                    _trackProgress.update { current ->
-+                        val itemProgress = current[item.id]?.toMutableMap() ?: return@update current
-+                        val existing = itemProgress[trackName] ?: TrackProgressState()
-+                        itemProgress[trackName] = existing.copy(
-+                            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
-+                            totalBytes = totalBytes?.takeIf { it > 0L },
-+                        )
-+                        current + (item.id to itemProgress)
-+                    }
-+                }
-+                notifyLiveStatusPlatform()
++                handleTrackProgress(item.id, trackName, downloadedBytes, totalBytes)
              },
 -            onSuccess = { localFileUri, totalBytes ->
+-                activeHandles.remove(item.id)
 +            onWarning = { message ->
-+                mutateItem(item.id) { current ->
-+                    current.copy(
-+                        hlsWarningMessage = message,
-+                        updatedAtEpochMs = DownloadsClock.nowEpochMs(),
-+                    )
-+                }
-+            },
-+            onSuccess = { localFileUri, totalBytes, companion ->
-                 activeHandles.remove(item.id)
-+                _trackProgress.update { it - item.id }
                  mutateItem(item.id) { current ->
 -                    if (current.status != DownloadStatus.Downloading) return@mutateItem current
                      current.copy(
-                         status = DownloadStatus.Completed,
-                         localFileUri = localFileUri,
-+                        fileName = alignFileNameExtension(current.fileName, localFileUri),
-                         downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
-                             totalBytes
-                         } else {
-                             current.downloadedBytes
-                         },
-                         totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
-+                        hlsAudioLocalFileUri = companion?.audioLocalFileUri
-+                            ?: companion?.audioLocalFileUris?.firstOrNull()
-+                            ?: current.hlsAudioLocalFileUri,
-+                        hlsSubtitleLocalFileUri = companion?.subtitleLocalFileUri
-+                            ?: companion?.subtitleLocalFileUris?.firstOrNull()
-+                            ?: current.hlsSubtitleLocalFileUri,
-+                        hlsWarningMessage = companion?.warningMessage
-+                            ?: current.hlsWarningMessage,
-                         errorMessage = null,
+-                        status = DownloadStatus.Completed,
+-                        localFileUri = localFileUri,
+-                        downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
+-                            totalBytes
+-                        } else {
+-                            current.downloadedBytes
+-                        },
+-                        totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
+-                        errorMessage = null,
++                        hlsWarningMessage = message,
                          updatedAtEpochMs = DownloadsClock.nowEpochMs(),
                      )
                  }
-+                processingRemovalJobs[item.id] = scope.launch {
-+                    delay(1500L)
-+                    _processingItemIds.update { it - item.id }
-+                    processingRemovalJobs.remove(item.id)
-+                }
              },
++            onSuccess = { localFileUri, totalBytes, companion ->
++                scope.launch {
++                    handleDownloadSuccess(item.id, item.title, localFileUri, totalBytes, companion)
++                    releaseDownload(item.id)
++                }
++            },
              onFailure = { message ->
-                 activeHandles.remove(item.id)
-+                _trackProgress.update { it - item.id }
-+                processingRemovalJobs.remove(item.id)?.cancel()
-+                _processingItemIds.update { it - item.id }
-+                val failureMessage = message.ifBlank { runBlocking { getString(Res.string.download_failed) } }
-+                NuvioToastController.show(runBlocking { getString(Res.string.download_failed) } + ": " + item.title)
-                 mutateItem(item.id) { current ->
+-                activeHandles.remove(item.id)
+-                mutateItem(item.id) { current ->
 -                    if (current.status != DownloadStatus.Downloading) {
-+                    if (current.status != DownloadStatus.Downloading && current.status != DownloadStatus.Processing) {
-                         current
-                     } else {
-                         current.copy(
-                             status = DownloadStatus.Failed,
+-                        current
+-                    } else {
+-                        current.copy(
+-                            status = DownloadStatus.Failed,
 -                            errorMessage = message.ifBlank { runBlocking { getString(Res.string.download_failed) } },
-+                            errorMessage = failureMessage,
-                             updatedAtEpochMs = DownloadsClock.nowEpochMs(),
-                         )
-                     }
+-                            updatedAtEpochMs = DownloadsClock.nowEpochMs(),
+-                        )
+-                    }
++                scope.launch {
++                    handleDownloadFailure(item.id, item.title, message)
++                    releaseDownload(item.id)
                  }
              },
 -            onPaused = {
 -                activeHandles.remove(item.id)
-+            onPhase = { phase ->
-+                processingRemovalJobs.remove(item.id)?.cancel()
-+                val now = DownloadsClock.nowEpochMs()
-+                val prevStatus = _uiState.value.items.firstOrNull { it.id == item.id }?.status
-+                InAppLogger.info("DownloadsRepository", "onPhase('$phase') item=${item.id} prevStatus=$prevStatus")
-+                _processingItemIds.update { it + item.id }
-                 mutateItem(item.id) { current ->
+-                mutateItem(item.id) { current ->
 -                    if (current.status != DownloadStatus.Downloading) return@mutateItem current
 -                    current.copy(status = DownloadStatus.Paused, errorMessage = null)
-+                    if (current.status != DownloadStatus.Downloading) {
-+                        InAppLogger.warn("DownloadsRepository", "onPhase: status NOT Downloading, was ${current.status}")
-+                        current
-+                    } else {
-+                        current.copy(
-+                            status = DownloadStatus.Processing,
-+                            updatedAtEpochMs = now,
-+                        )
-+                    }
++            onPhase = { phase ->
++                scope.launch {
++                    handleDownloadPhase(item.id, phase)
                  }
              },
          )
-@@ -358,27 +879,25 @@ object DownloadsRepository {
+ 
+-        activeHandles[item.id] = handle
++        schedulerLocked {
++            activeHandles[item.id] = handle
++        }
      }
  
-     private fun mutateItem(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
+-    private fun mutateItem(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
 -        var changed = false
 -        val updated = _uiState.value.items.map { item ->
 -            if (item.id == downloadId) {
 -                changed = true
 -                transform(item)
--            } else {
++    private fun pumpScheduler() {
++        val shouldPump = schedulerLocked {
++            if (schedulerPumping) {
++                false
++            } else {
++                schedulerPumping = true
++                true
++            }
++        }
++        if (!shouldPump) return
++
++        scope.launch {
++            try {
++                pumpSchedulerLoop()
++            } finally {
++                val shouldRepump = schedulerLocked {
++                    schedulerPumping = false
++                    canAnyCandidateStartLocked()
++                }
++                if (shouldRepump) pumpScheduler()
++            }
++        }
++    }
++
++    private fun isHlsDownload(downloadId: String): Boolean =
++        _uiState.value.items.firstOrNull { it.id == downloadId }?.isHls == true
++
++    /** Da chiamare SOLO con schedulerLocked: c'è almeno un candidato che può partire ora? */
++    private fun canAnyCandidateStartLocked(): Boolean {
++        if (activeDownloadIds.size >= MAX_CONCURRENT_DOWNLOADS) return false
++        val activeHlsCount = activeDownloadIds.count(::isHlsDownload)
++        return scheduledQueue.any { id ->
++            val item = _uiState.value.items.firstOrNull { it.id == id } ?: return@any false
++            if (item.status != DownloadStatus.Downloading) return@any false
++            !(item.isHls && activeHlsCount >= MAX_CONCURRENT_HLS_DOWNLOADS)
++        }
++    }
++
++    private fun pumpSchedulerLoop() {
++        while (true) {
++            val next: DownloadItem? = schedulerLocked {
++                var result: DownloadItem? = null
++                // Scan della coda: i candidati morti vengono rimossi, quelli bloccati
++                // dal limite HLS vengono saltati (un HLS alla volta), il FIFO viene
++                // rispettato salvo i vincoli di risorsa.
++                val iterator = scheduledQueue.iterator()
++                while (iterator.hasNext() && result == null) {
++                    val candidateId = iterator.next()
++                    val candidate = _uiState.value.items.firstOrNull { it.id == candidateId }
++                    if (candidate == null || candidate.status != DownloadStatus.Downloading) {
++                        iterator.remove()
++                        activeDownloadIds.remove(candidateId)
++                        continue
++                    }
++                    // Limite globale: non si superano MAI MAX_CONCURRENT_DOWNLOADS in parallelo.
++                    if (activeDownloadIds.size >= MAX_CONCURRENT_DOWNLOADS) break
++                    // Limite HLS: un solo remux (pesante in memoria) alla volta.
++                    val activeHlsCount = activeDownloadIds.count(::isHlsDownload)
++                    if (candidate.isHls && activeHlsCount >= MAX_CONCURRENT_HLS_DOWNLOADS) continue
++                    iterator.remove()
++                    activeDownloadIds.add(candidateId)
++                    result = candidate
++                }
++                result
++            }
++            if (next == null) break
++            launchPlatformDownload(next)
++        }
++    }
++
++    private fun abandonDownload(item: DownloadItem) {
++        schedulerLocked {
++            activeHandles.remove(item.id)?.cancel()
++            processingRemovalJobs.remove(item.id)?.cancel()
++            activeDownloadIds.remove(item.id)
++            scheduledQueue.removeAll { it == item.id }
++        }
++        _trackProgress.update { it - item.id }
++        _processingItemIds.update { it - item.id }
++        DownloadsPlatformDownloader.removeFile(playableLocalFileUri(item) ?: item.localFileUri)
++        DownloadsPlatformDownloader.removePartialFile(item.fileName)
++        pumpScheduler()
++    }
++
++    private fun handleDownloadProgress(downloadId: String, downloadedBytes: Long, totalBytes: Long?) {
++        mutateItemThrottled(downloadId) { current ->
++            if (current.status != DownloadStatus.Downloading) {
++                current
+             } else {
 -                item
++                current.copy(
++                    downloadedBytes = downloadedBytes.coerceAtLeast(0L),
++                    totalBytes = totalBytes?.takeIf { it > 0L },
++                    updatedAtEpochMs = DownloadsClock.nowEpochMs(),
++                    errorMessage = null,
++                )
+             }
+         }
++        val currentItem = _uiState.value.items.firstOrNull { it.id == downloadId }
++        if (currentItem?.status == DownloadStatus.Downloading) {
++            _trackProgress.update { current ->
++                val itemProgress = current[downloadId]?.toMutableMap() ?: return@update current
++                val existing = itemProgress["video"] ?: TrackProgressState()
++                itemProgress["video"] = existing.copy(
++                    downloadedBytes = downloadedBytes.coerceAtLeast(0L),
++                    totalBytes = totalBytes?.takeIf { it > 0L },
++                )
++                current + (downloadId to itemProgress)
++            }
++        }
++        notifyLiveStatusPlatform()
++    }
++
++    private fun handleTrackProgress(downloadId: String, trackName: String, downloadedBytes: Long, totalBytes: Long?) {
++        val currentItem = _uiState.value.items.firstOrNull { it.id == downloadId }
++        if (currentItem?.status == DownloadStatus.Downloading) {
++            _trackProgress.update { current ->
++                val itemProgress = current[downloadId]?.toMutableMap() ?: return@update current
++                val existing = itemProgress[trackName] ?: TrackProgressState()
++                itemProgress[trackName] = existing.copy(
++                    downloadedBytes = downloadedBytes.coerceAtLeast(0L),
++                    totalBytes = totalBytes?.takeIf { it > 0L },
++                )
++                current + (downloadId to itemProgress)
++            }
++            notifyLiveStatusPlatform()
++        }
++    }
+ 
+-        if (changed) {
+-            publish(updated)
++    private fun handleDownloadPhase(downloadId: String, phase: String) {
++        schedulerLocked {
++            processingRemovalJobs.remove(downloadId)?.cancel()
++        }
++        val now = DownloadsClock.nowEpochMs()
++        val prevStatus = _uiState.value.items.firstOrNull { it.id == downloadId }?.status
++        InAppLogger.info("DownloadsRepository", "onPhase('$phase') item=$downloadId prevStatus=$prevStatus")
++        _processingItemIds.update { it + downloadId }
++        mutateItem(downloadId) { current ->
++            if (current.status != DownloadStatus.Downloading) {
++                InAppLogger.warn("DownloadsRepository", "onPhase: status NOT Downloading, was ${current.status}")
++                current
++            } else {
++                current.copy(
++                    status = DownloadStatus.Processing,
++                    updatedAtEpochMs = now,
++                )
++            }
++        }
++    }
++
++    private fun handleDownloadSuccess(
++        downloadId: String,
++        displayTitle: String,
++        localFileUri: String,
++        totalBytes: Long?,
++        companion: HlsCompanionOutcome?,
++    ) {
++        schedulerLocked {
++            activeHandles.remove(downloadId)
++        }
++        _trackProgress.update { it - downloadId }
++        mutateItem(downloadId) { current ->
++            current.copy(
++                status = DownloadStatus.Completed,
++                localFileUri = localFileUri,
++                fileName = alignFileNameExtension(current.fileName, localFileUri),
++                downloadedBytes = if (totalBytes != null && totalBytes > 0L) {
++                    totalBytes
++                } else {
++                    current.downloadedBytes
++                },
++                totalBytes = totalBytes?.takeIf { it > 0L } ?: current.totalBytes,
++                hlsAudioLocalFileUri = companion?.audioLocalFileUri
++                    ?: companion?.audioLocalFileUris?.firstOrNull()
++                    ?: current.hlsAudioLocalFileUri,
++                hlsSubtitleLocalFileUri = companion?.subtitleLocalFileUri
++                    ?: companion?.subtitleLocalFileUris?.firstOrNull()
++                    ?: current.hlsSubtitleLocalFileUri,
++                hlsWarningMessage = companion?.warningMessage
++                    ?: current.hlsWarningMessage,
++                errorMessage = null,
++                updatedAtEpochMs = DownloadsClock.nowEpochMs(),
++            )
++        }
++        schedulerLocked {
++            processingRemovalJobs[downloadId] = scope.launch {
++                delay(1500L)
++                _processingItemIds.update { it - downloadId }
++                processingRemovalJobs.remove(downloadId)
++            }
++        }
++    }
++
++    private fun handleDownloadFailure(downloadId: String, displayTitle: String, message: String) {
++        schedulerLocked {
++            activeHandles.remove(downloadId)
++            processingRemovalJobs.remove(downloadId)?.cancel()
++        }
++        _trackProgress.update { it - downloadId }
++        _processingItemIds.update { it - downloadId }
++        val failureMessage = message.ifBlank { runBlocking { getString(Res.string.download_failed) } }
++        NuvioToastController.show(runBlocking { getString(Res.string.download_failed) } + ": " + displayTitle)
++        mutateItem(downloadId) { current ->
++            if (current.status != DownloadStatus.Downloading && current.status != DownloadStatus.Processing) {
++                current
++            } else {
++                current.copy(
++                    status = DownloadStatus.Failed,
++                    errorMessage = failureMessage,
++                    updatedAtEpochMs = DownloadsClock.nowEpochMs(),
++                )
++            }
++        }
++    }
++
++    /** Variante di [mutateItem] con persist throttled per gli aggiornamenti di progress. */
++    private fun mutateItemThrottled(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
 +        _uiState.update { state ->
 +            val updated = state.items.map { item ->
 +                if (item.id == downloadId) transform(item) else item
-             }
++            }
 +            state.copy(items = updated)
-         }
--
--        if (changed) {
--            publish(updated)
--            persist()
--        }
++        }
 +        notifyLiveStatusPlatform()
-+        persist()
++        val now = DownloadsClock.nowEpochMs()
++        if (now - lastThrottledPersistEpochMs >= 2_000L) {
++            lastThrottledPersistEpochMs = now
+             persist()
+         }
      }
  
++    private fun mutateItem(downloadId: String, transform: (DownloadItem) -> DownloadItem) {
++        _uiState.update { state ->
++            val updated = state.items.map { item ->
++                if (item.id == downloadId) transform(item) else item
++            }
++            state.copy(items = updated)
++        }
++        notifyLiveStatusPlatform()
++        persist()
++    }
++
      private fun replaceItem(item: DownloadItem) {
 -        val updated = _uiState.value.items.map { existing ->
 -            if (existing.id == item.id) item else existing
@@ -6119,7 +6468,31 @@ index 041a38ee..570198cf 100644
      }
  
      private fun publish(items: List<DownloadItem>) {
-@@ -396,7 +915,7 @@ object DownloadsRepository {
+@@ -388,15 +1158,29 @@ object DownloadsRepository {
+         notifyLiveStatusPlatform()
+     }
+ 
++    @Volatile
++    private var notifyScheduled = false
++
++    /**
++     * Notifica lo stato alla piattaforma sempre dal thread Main e in modalità
++     * coalescente: durante i progress si evita di inondare il sistema
++     * di notifiche con centinaia di aggiornamenti al secondo (e di chiamarlo
++     * da thread concorrenti, fonte di crash).
++     */
+     private fun notifyLiveStatusPlatform() {
+-        runCatching {
+-            DownloadsLiveStatusPlatform.onItemsChanged(_uiState.value.items)
++        if (notifyScheduled) return
++        notifyScheduled = true
++        scope.launch {
++            notifyScheduled = false
++            runCatching {
++                DownloadsLiveStatusPlatform.onItemsChanged(_uiState.value.items)
++            }
+         }
+     }
  
      private fun persist() {
          DownloadsStorage.savePayload(
@@ -6128,7 +6501,7 @@ index 041a38ee..570198cf 100644
          )
      }
  
-@@ -487,7 +1006,7 @@ private fun sanitizeResponseHeaders(headers: Map<String, String>?): Map<String,
+@@ -487,7 +1271,7 @@ private fun sanitizeResponseHeaders(headers: Map<String, String>?): Map<String,
          }
          .toMap()
  
@@ -6137,7 +6510,7 @@ index 041a38ee..570198cf 100644
      parentMetaId: String,
      seasonNumber: Int?,
      episodeNumber: Int?,
-@@ -504,7 +1023,8 @@ private fun buildFileName(
+@@ -504,7 +1288,8 @@ private fun buildFileName(
      episodeTitle: String?,
      fallbackTitle: String,
      sourceUrl: String,
@@ -6147,7 +6520,7 @@ index 041a38ee..570198cf 100644
  ): String {
      val baseTitle = if (seasonNumber != null && episodeNumber != null) {
          buildString {
-@@ -522,16 +1042,54 @@ private fun buildFileName(
+@@ -522,16 +1307,54 @@ private fun buildFileName(
          title.ifBlank { fallbackTitle }
      }
  
@@ -6204,7 +6577,7 @@ index 041a38ee..570198cf 100644
  private fun String.sanitizeFileName(): String =
      trim().replace(Regex("[^A-Za-z0-9._ -]"), "_")
  
-@@ -551,8 +1109,22 @@ private fun String.fileExtensionFromUrl(): String {
+@@ -551,8 +1374,22 @@ private fun String.fileExtensionFromUrl(): String {
  private fun String.isSupportedDownloadUrl(): Boolean {
      val normalized = trim().lowercase()
      if (normalized.startsWith("magnet:")) return false
@@ -6229,7 +6602,7 @@ index 041a38ee..570198cf 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..e50df3cd 100644
+index 7019a10c..0de89202 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -6406,7 +6779,7 @@ index 7019a10c..e50df3cd 100644
      if (activeItems.isNotEmpty()) {
          item {
              SectionTitle(stringResource(Res.string.downloads_section_active))
-@@ -170,10 +203,19 @@ private fun LazyListScope.downloadsRootContent(
+@@ -170,10 +203,18 @@ private fun LazyListScope.downloadsRootContent(
              DownloadRow(
                  item = item,
                  onOpen = { onOpenDownload(item) },
@@ -6420,8 +6793,7 @@ index 7019a10c..e50df3cd 100644
 +                onRetry = { if (!item.isPlaceholder) DownloadsRepository.retryDownload(item.id) },
 +                onDelete = {
 +                    if (item.isPlaceholder) {
-+                        val ck = item.id.removePrefix("pending_")
-+                        AutoStreamDownloader.cancelAutoDownload(ck)
++                        AutoStreamDownloader.cancelAutoDownload(item.logicalContentKey)
 +                    } else {
 +                        DownloadsRepository.cancelDownload(item.id)
 +                    }
@@ -6430,7 +6802,7 @@ index 7019a10c..e50df3cd 100644
              )
          }
      }
-@@ -191,8 +233,10 @@ private fun LazyListScope.downloadsRootContent(
+@@ -191,8 +232,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6442,7 +6814,7 @@ index 7019a10c..e50df3cd 100644
              )
          }
      }
-@@ -247,7 +291,7 @@ private fun LazyListScope.downloadsRootContent(
+@@ -247,7 +290,7 @@ private fun LazyListScope.downloadsRootContent(
          }
      }
  
@@ -6451,7 +6823,7 @@ index 7019a10c..e50df3cd 100644
          item {
              Box(
                  modifier = Modifier
-@@ -269,7 +313,7 @@ private fun LazyListScope.downloadsShowContent(
+@@ -269,7 +312,7 @@ private fun LazyListScope.downloadsShowContent(
      showId: String,
      episodes: List<DownloadItem>,
      onOpenDownload: (DownloadItem) -> Unit,
@@ -6460,7 +6832,7 @@ index 7019a10c..e50df3cd 100644
  ) {
      val showEpisodes = episodes
          .filter { it.parentMetaId == showId }
-@@ -324,8 +368,10 @@ private fun LazyListScope.downloadsShowContent(
+@@ -324,8 +367,10 @@ private fun LazyListScope.downloadsShowContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6472,7 +6844,7 @@ index 7019a10c..e50df3cd 100644
              )
          }
      }
-@@ -339,6 +385,8 @@ private fun DownloadRow(
+@@ -339,6 +384,8 @@ private fun DownloadRow(
      onResume: () -> Unit,
      onRetry: () -> Unit,
      onDelete: () -> Unit,
@@ -6481,7 +6853,7 @@ index 7019a10c..e50df3cd 100644
  ) {
      val displayTitle = item.displayTitle()
      val displaySubtitle = downloadDisplaySubtitle(
-@@ -392,13 +440,25 @@ private fun DownloadRow(
+@@ -392,13 +439,25 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -6512,7 +6884,7 @@ index 7019a10c..e50df3cd 100644
                              }
                          }
                          DownloadStatus.Paused -> {
-@@ -409,6 +469,7 @@ private fun DownloadRow(
+@@ -409,6 +468,7 @@ private fun DownloadRow(
                                  )
                              }
                          }
@@ -6520,7 +6892,7 @@ index 7019a10c..e50df3cd 100644
                          DownloadStatus.Failed -> {
                              IconButton(onClick = onRetry) {
                                  Icon(
-@@ -424,6 +485,18 @@ private fun DownloadRow(
+@@ -424,6 +484,18 @@ private fun DownloadRow(
                                      contentDescription = stringResource(Res.string.action_play),
                                  )
                              }
@@ -6539,7 +6911,7 @@ index 7019a10c..e50df3cd 100644
                          }
                      }
                      IconButton(onClick = onDelete) {
-@@ -435,8 +508,52 @@ private fun DownloadRow(
+@@ -435,8 +507,52 @@ private fun DownloadRow(
                  }
              }
  
@@ -6594,7 +6966,7 @@ index 7019a10c..e50df3cd 100644
                      LinearProgressIndicator(
                          progress = item.progressFraction,
                          modifier = Modifier.fillMaxWidth(),
-@@ -469,10 +586,10 @@ private fun downloadDisplaySubtitle(
+@@ -469,10 +585,10 @@ private fun downloadDisplaySubtitle(
          return item.displaySubtitle
      }
  
@@ -6607,7 +6979,7 @@ index 7019a10c..e50df3cd 100644
      )
      return listOf(
          episodeCode,
-@@ -481,6 +598,22 @@ private fun downloadDisplaySubtitle(
+@@ -481,6 +597,22 @@ private fun downloadDisplaySubtitle(
      ).filterNotNull().joinToString(" • ")
  }
  
@@ -6630,7 +7002,7 @@ index 7019a10c..e50df3cd 100644
  @Composable
  private fun SectionTitle(title: String) {
      Text(
-@@ -492,22 +625,106 @@ private fun SectionTitle(title: String) {
+@@ -492,22 +624,106 @@ private fun SectionTitle(title: String) {
      )
  }
  
@@ -6743,7 +7115,7 @@ index 7019a10c..e50df3cd 100644
      }
  }
  
-@@ -524,3 +741,46 @@ private fun formatBytes(bytes: Long): String {
+@@ -524,3 +740,46 @@ private fun formatBytes(bytes: Long): String {
          else -> "$bytes ${localizedByteUnit("B")}"
      }
  }
