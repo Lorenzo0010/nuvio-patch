@@ -3645,10 +3645,10 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..6bfa84e2
+index 00000000..153d22af
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,1005 @@
+@@ -0,0 +1,1002 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -4565,14 +4565,11 @@ index 00000000..6bfa84e2
 +                                val priorityLabel = streamPriorityLabel(effectiveStream)
 +                                attemptedCount++
 +                                val streamName = effectiveStream.addonName ?: "addon"
-+                                DownloadsLiveStatusPlatform.notifyProgress(
-+                                    id = notifId,
-+                                    title = displayTitle,
-+                                    message = "Tentativo avvio con: $streamName ($priorityLabel)...",
-+                                )
++                                updatePhase("Tentativo avvio con: $streamName ($priorityLabel)...")
 +                                log.d { "Tentativo download con addon stream #$attemptedCount ($priorityLabel): $streamName - ${effectiveStream.streamLabel}" }
 +
 +                                val attemptResult = attemptStartDownloadCandidate(
++                                    placeholderId = placeholderId,
 +                                    stream = effectiveStream,
 +                                    meta = meta,
 +                                    contentType = contentType,
@@ -6088,7 +6085,7 @@ index 041a38ee..d5833b02 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..263b73f4 100644
+index 7019a10c..1a5401e2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -6256,30 +6253,79 @@ index 7019a10c..263b73f4 100644
  ) {
      val activeItems = uiState.activeItems
      val completedMovies = uiState.completedItems.filterNot(DownloadItem::isEpisode)
-@@ -159,6 +190,22 @@ private fun LazyListScope.downloadsRootContent(
+@@ -159,21 +190,65 @@ private fun LazyListScope.downloadsRootContent(
          }
          .sortedBy { (item, _) -> item.title.lowercase() }
  
-+    // --- Queue section: items waiting to be downloaded (JIT stream fetch) ---
-+    if (pendingQueue.isNotEmpty()) {
-+        item {
-+            SectionTitle(stringResource(Res.string.downloads_section_queue))
-+        }
-+        items(
-+            items = pendingQueue,
-+            key = { it.contentKey },
-+        ) { request ->
-+            QueuedDownloadRow(
-+                request = request,
-+                onCancel = { AutoStreamDownloader.cancelAutoDownload(request.contentKey) },
+-    if (activeItems.isNotEmpty()) {
++    // Merged: queued items appear in "Attivi" with progress indicator
++    val allActiveItems = buildList {
++        // Pending (queued) items first
++        pendingQueue.forEach { request ->
++            add(
++                DownloadItem(
++                    id = "pending_${request.contentKey}",
++                    contentType = request.contentType,
++                    parentMetaId = request.meta.id,
++                    parentMetaType = request.meta.type,
++                    videoId = request.targetVideoId,
++                    title = request.meta.name,
++                    logo = request.meta.logo,
++                    poster = request.meta.poster,
++                    background = request.meta.background,
++                    seasonNumber = request.seasonNumber,
++                    episodeNumber = request.episodeNumber,
++                    episodeTitle = request.episodeTitle,
++                    episodeThumbnail = request.episodeThumbnail,
++                    streamTitle = request.displayTitle,
++                    streamSubtitle = "In coda",
++                    providerName = "",
++                    providerAddonId = null,
++                    sourceUrl = "",
++                    sourceHeaders = emptyMap(),
++                    sourceResponseHeaders = emptyMap(),
++                    localFileUri = null,
++                    fileName = "",
++                    status = DownloadStatus.Downloading,
++                    downloadedBytes = 0L,
++                    totalBytes = null,
++                    errorMessage = null,
++                    createdAtEpochMs = DownloadsClock.nowEpochMs(),
++                    updatedAtEpochMs = DownloadsClock.nowEpochMs(),
++                    isPlaceholder = true,
++                    phaseMessage = "In coda: ${request.displayTitle}",
++                )
 +            )
 +        }
++        addAll(activeItems)
 +    }
 +
-     if (activeItems.isNotEmpty()) {
++    if (allActiveItems.isNotEmpty()) {
          item {
              SectionTitle(stringResource(Res.string.downloads_section_active))
-@@ -172,8 +219,10 @@ private fun LazyListScope.downloadsRootContent(
+         }
+         items(
+-            items = activeItems,
++            items = allActiveItems,
+             key = { it.id },
+         ) { item ->
+             DownloadRow(
+                 item = item,
+                 onOpen = { onOpenDownload(item) },
+-                onPause = { DownloadsRepository.pauseDownload(item.id) },
+-                onResume = { DownloadsRepository.resumeDownload(item.id) },
+-                onRetry = { DownloadsRepository.retryDownload(item.id) },
+-                onDelete = { onDeleteDownload(item.id) },
++                onPause = { if (!item.isPlaceholder) DownloadsRepository.pauseDownload(item.id) },
++                onResume = { if (!item.isPlaceholder) DownloadsRepository.resumeDownload(item.id) },
++                onSave = { onSave(item) },
++                onRetry = { if (!item.isPlaceholder) DownloadsRepository.retryDownload(item.id) },
++                onDelete = { if (!item.isPlaceholder) DownloadsRepository.cancelDownload(item.id) else AutoStreamDownloader.cancelAutoDownload(item.contentKey) },
++                onShare = shareItem(item),
+             )
+         }
+     }
+@@ -191,8 +266,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6291,19 +6337,7 @@ index 7019a10c..263b73f4 100644
              )
          }
      }
-@@ -191,8 +240,10 @@ private fun LazyListScope.downloadsRootContent(
-                 onOpen = { onOpenDownload(item) },
-                 onPause = { DownloadsRepository.pauseDownload(item.id) },
-                 onResume = { DownloadsRepository.resumeDownload(item.id) },
-+                onSave = { onSave(item) },
-                 onRetry = { DownloadsRepository.retryDownload(item.id) },
--                onDelete = { onDeleteDownload(item.id) },
-+                onDelete = { DownloadsRepository.cancelDownload(item.id) },
-+                onShare = shareItem(item),
-             )
-         }
-     }
-@@ -247,7 +298,7 @@ private fun LazyListScope.downloadsRootContent(
+@@ -247,7 +324,7 @@ private fun LazyListScope.downloadsRootContent(
          }
      }
  
@@ -6312,7 +6346,7 @@ index 7019a10c..263b73f4 100644
          item {
              Box(
                  modifier = Modifier
-@@ -269,7 +320,7 @@ private fun LazyListScope.downloadsShowContent(
+@@ -269,7 +346,7 @@ private fun LazyListScope.downloadsShowContent(
      showId: String,
      episodes: List<DownloadItem>,
      onOpenDownload: (DownloadItem) -> Unit,
@@ -6321,7 +6355,7 @@ index 7019a10c..263b73f4 100644
  ) {
      val showEpisodes = episodes
          .filter { it.parentMetaId == showId }
-@@ -324,8 +375,10 @@ private fun LazyListScope.downloadsShowContent(
+@@ -324,8 +401,10 @@ private fun LazyListScope.downloadsShowContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6333,7 +6367,7 @@ index 7019a10c..263b73f4 100644
              )
          }
      }
-@@ -339,6 +392,8 @@ private fun DownloadRow(
+@@ -339,6 +418,8 @@ private fun DownloadRow(
      onResume: () -> Unit,
      onRetry: () -> Unit,
      onDelete: () -> Unit,
@@ -6342,7 +6376,7 @@ index 7019a10c..263b73f4 100644
  ) {
      val displayTitle = item.displayTitle()
      val displaySubtitle = downloadDisplaySubtitle(
-@@ -392,13 +447,25 @@ private fun DownloadRow(
+@@ -392,13 +473,25 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -6373,7 +6407,7 @@ index 7019a10c..263b73f4 100644
                              }
                          }
                          DownloadStatus.Paused -> {
-@@ -409,6 +476,7 @@ private fun DownloadRow(
+@@ -409,6 +502,7 @@ private fun DownloadRow(
                                  )
                              }
                          }
@@ -6381,7 +6415,7 @@ index 7019a10c..263b73f4 100644
                          DownloadStatus.Failed -> {
                              IconButton(onClick = onRetry) {
                                  Icon(
-@@ -424,6 +492,18 @@ private fun DownloadRow(
+@@ -424,6 +518,18 @@ private fun DownloadRow(
                                      contentDescription = stringResource(Res.string.action_play),
                                  )
                              }
@@ -6400,7 +6434,7 @@ index 7019a10c..263b73f4 100644
                          }
                      }
                      IconButton(onClick = onDelete) {
-@@ -435,8 +515,52 @@ private fun DownloadRow(
+@@ -435,8 +541,52 @@ private fun DownloadRow(
                  }
              }
  
@@ -6455,7 +6489,7 @@ index 7019a10c..263b73f4 100644
                      LinearProgressIndicator(
                          progress = item.progressFraction,
                          modifier = Modifier.fillMaxWidth(),
-@@ -469,10 +593,10 @@ private fun downloadDisplaySubtitle(
+@@ -469,10 +619,10 @@ private fun downloadDisplaySubtitle(
          return item.displaySubtitle
      }
  
@@ -6468,7 +6502,7 @@ index 7019a10c..263b73f4 100644
      )
      return listOf(
          episodeCode,
-@@ -481,6 +605,22 @@ private fun downloadDisplaySubtitle(
+@@ -481,6 +631,22 @@ private fun downloadDisplaySubtitle(
      ).filterNotNull().joinToString(" • ")
  }
  
@@ -6491,7 +6525,7 @@ index 7019a10c..263b73f4 100644
  @Composable
  private fun SectionTitle(title: String) {
      Text(
-@@ -492,22 +632,106 @@ private fun SectionTitle(title: String) {
+@@ -492,22 +658,106 @@ private fun SectionTitle(title: String) {
      )
  }
  
@@ -6604,7 +6638,7 @@ index 7019a10c..263b73f4 100644
      }
  }
  
-@@ -524,3 +748,46 @@ private fun formatBytes(bytes: Long): String {
+@@ -524,3 +774,46 @@ private fun formatBytes(bytes: Long): String {
          else -> "$bytes ${localizedByteUnit("B")}"
      }
  }

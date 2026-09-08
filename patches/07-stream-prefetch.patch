@@ -900,27 +900,6 @@ index a7026e75..683000a5 100644
          }
  
          progressEntry
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-index 6bfa84e2..153d22af 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -914,14 +914,11 @@ object AutoStreamDownloader {
-                                 val priorityLabel = streamPriorityLabel(effectiveStream)
-                                 attemptedCount++
-                                 val streamName = effectiveStream.addonName ?: "addon"
--                                DownloadsLiveStatusPlatform.notifyProgress(
--                                    id = notifId,
--                                    title = displayTitle,
--                                    message = "Tentativo avvio con: $streamName ($priorityLabel)...",
--                                )
-+                                updatePhase("Tentativo avvio con: $streamName ($priorityLabel)...")
-                                 log.d { "Tentativo download con addon stream #$attemptedCount ($priorityLabel): $streamName - ${effectiveStream.streamLabel}" }
- 
-                                 val attemptResult = attemptStartDownloadCandidate(
-+                                    placeholderId = placeholderId,
-                                     stream = effectiveStream,
-                                     meta = meta,
-                                     contentType = contentType,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
 index e3214228..d19bd595 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
@@ -1597,11 +1576,11 @@ index d08b58c8..8f454ea2 100644
          page = SettingsPage.Streams,
          key = "streams",
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..ee675eee 100644
+index 90792195..38104c8d 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=135
-+MARKETING_VERSION=0.4.14.14
++CURRENT_PROJECT_VERSION=136
++MARKETING_VERSION=0.4.14.15
