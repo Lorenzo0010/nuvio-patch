@@ -16,7 +16,6 @@ Consulta [ENHANCEMENTS.md](ENHANCEMENTS.md) per la documentazione dettagliata di
 | 📺 **Live TV** | Canali M3U/M3U8, guida TV (EPG), preferiti, ricerca in tempo reale |
 | 📥 **HLS Downloader** | Decrittazione AES-128, fMP4, remux MP4, selezione tracce audio/sub, coda FIFO con retry |
 | ⚡ **Stream Prefetch** | Pre-risoluzione asincrona dei link stream con coda di auto-download |
-| 🔌 **Plugin CloudStream 3** | Supporto plugin nativi `.cs3` (DEX) multi-architettura |
 | 🎨 **UI/UX** | AMOLED puro, selettore colore HEX/HSV, icone app personalizzate, badge qualità stream |
 | 🔄 **Updater** | Auto-aggiornamento reindirizzato su `Lorenzo0010/nuvio-patch` (GitHub Releases) |
 | 🧩 **Widget Launcher** | Widget Android per il launcher |

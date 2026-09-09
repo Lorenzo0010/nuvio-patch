@@ -61,14 +61,9 @@ Questo documento riassume tutte le funzionalità e personalizzazioni avanzate in
 
 ---
 
-## 🔌 Estensioni, Plugin & Integrazioni
+## 🔌 Estensioni & Integrazioni
 
-### 1. Supporto Plugin CloudStream 3 (DEX)
-- Possibilità di caricare ed eseguire repository di plugin DEX nativi (`.cs3`) Android direttamente da Nuvio, oltre ai plugin JS/Stremio.
-- Rilevamento automatico del formato del manifesto e badge dedicato "CloudStream" nelle schede dei repository.
-- Supporto multi-architettura CPU (arm64-v8a, armeabi-v7a, x86_64).
-
-### 2. Provider di Tracciamento & Metadati
+### 1. Provider di Tracciamento & Metadati
 - **SIMKL:** Tracciamento bidirezionale con autenticazione moderna OAuth PKCE, motore di sincronizzazione e visualizzazione stato.
 - **MyAnimeList (MAL) & AniList:** Rating integrati da MDBList con icone vettoriali dedicate e schede informative.
 - **Calendario Uscite in Libreria:** Vista a calendario con le date di rilascio dei prossimi episodi per tutte le serie presenti in "Continua la visione".
