@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 8f6b8ce8..14910fc2 100644
+index 8f6b8ce8..91aa3fbc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -44,6 +44,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -10,7 +10,7 @@ index 8f6b8ce8..14910fc2 100644
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.State
  import androidx.compose.runtime.derivedStateOf
-@@ -108,6 +109,13 @@ import com.nuvio.app.features.details.components.DetailTrailersSection
+@@ -108,6 +109,14 @@ import com.nuvio.app.features.details.components.DetailTrailersSection
  import com.nuvio.app.features.details.components.EpisodeWatchedActionSheet
  import com.nuvio.app.features.details.components.SeasonWatchedActionSheet
  import com.nuvio.app.features.details.components.TrailerPlayerPopup
@@ -21,10 +21,11 @@ index 8f6b8ce8..14910fc2 100644
 +import com.nuvio.app.features.downloads.DownloadStatus
 +import com.nuvio.app.features.downloads.DownloadsRepository
 +import com.nuvio.app.features.downloads.buildLogicalKey
++import com.nuvio.app.features.downloads.rememberDownloadDeleteRequester
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.library.LibraryRepository
  import com.nuvio.app.features.library.PendingTrackingMembershipRemoval
-@@ -117,6 +125,7 @@ import com.nuvio.app.features.library.showTrackingMembershipRewriteFeedback
+@@ -117,6 +126,7 @@ import com.nuvio.app.features.library.showTrackingMembershipRewriteFeedback
  import com.nuvio.app.features.library.toLibraryItem
  import com.nuvio.app.features.player.PlayerSettingsRepository
  import com.nuvio.app.features.streams.StreamAutoPlayPolicy
@@ -32,7 +33,7 @@ index 8f6b8ce8..14910fc2 100644
  import com.nuvio.app.features.tmdb.TmdbSettingsRepository
  import com.nuvio.app.features.tmdb.TmdbService
  import com.nuvio.app.features.trakt.TraktAuthRepository
-@@ -657,6 +666,7 @@ fun MetaDetailsScreen(
+@@ -657,6 +667,7 @@ fun MetaDetailsScreen(
                  var trailerErrorMessage by remember(meta.id) { mutableStateOf<String?>(null) }
                  var trailerRequestToken by remember(meta.id) { mutableIntStateOf(0) }
                  var isLeavingDetails by remember(meta.id) { mutableStateOf(false) }
@@ -40,7 +41,7 @@ index 8f6b8ce8..14910fc2 100644
                  val heroTrailerCandidate = remember(meta.trailers) {
                      selectHeroTrailer(meta.trailers)
                  }
-@@ -736,6 +746,7 @@ fun MetaDetailsScreen(
+@@ -736,6 +747,7 @@ fun MetaDetailsScreen(
                      }
                  }
                  val onPrimaryPlayClick: () -> Unit = {
@@ -48,7 +49,7 @@ index 8f6b8ce8..14910fc2 100644
                      when {
                          (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                              onPlay?.invoke(
-@@ -782,6 +793,7 @@ fun MetaDetailsScreen(
+@@ -782,6 +794,7 @@ fun MetaDetailsScreen(
                      ?.takeIf { showManualPlayOption }
                      ?.let { manualPlay ->
                          {
@@ -56,7 +57,7 @@ index 8f6b8ce8..14910fc2 100644
                              when {
                                  (meta.type == "series" || hasEpisodes) && seriesAction != null -> {
                                      manualPlay(
-@@ -824,6 +836,7 @@ fun MetaDetailsScreen(
+@@ -824,6 +837,7 @@ fun MetaDetailsScreen(
                          }
                      }
                  val onEpisodePlayClick: (MetaVideo) -> Unit = { video ->
@@ -64,7 +65,7 @@ index 8f6b8ce8..14910fc2 100644
                      val season = video.season
                      val episode = video.episode
                      val playbackVideoId = buildPlaybackVideoId(
-@@ -858,6 +871,7 @@ fun MetaDetailsScreen(
+@@ -858,6 +872,7 @@ fun MetaDetailsScreen(
                      )
                  }
                  val onEpisodeManualPlayClick: (MetaVideo) -> Unit = { video ->
@@ -72,7 +73,7 @@ index 8f6b8ce8..14910fc2 100644
                      val season = video.season
                      val episode = video.episode
                      val playbackVideoId = buildPlaybackVideoId(
-@@ -891,6 +905,50 @@ fun MetaDetailsScreen(
+@@ -891,6 +906,50 @@ fun MetaDetailsScreen(
                          savedProgress?.lastPositionMs,
                      )
                  }
@@ -123,7 +124,7 @@ index 8f6b8ce8..14910fc2 100644
                  val listState = rememberLazyListState()
                  val heroStretchState = rememberHeroStretchState(listState)
                  val density = LocalDensity.current
-@@ -1137,6 +1195,9 @@ fun MetaDetailsScreen(
+@@ -1137,6 +1196,9 @@ fun MetaDetailsScreen(
                                      selectedEpisodeForActions = video
                                  },
                                  onSeasonLongPress = { season -> selectedSeasonForActions = season },
@@ -133,7 +134,7 @@ index 8f6b8ce8..14910fc2 100644
                                  onOpenMeta = onOpenMeta,
                                  onCastClick = onCastClick,
                                  onCompanyClick = onCompanyClick,
-@@ -1783,6 +1844,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1783,6 +1845,7 @@ private fun LazyListScope.configuredMetaSectionItems(
      onEpisodeClick: (MetaVideo) -> Unit,
      onEpisodeLongPress: (MetaVideo) -> Unit,
      onSeasonLongPress: (Int) -> Unit,
@@ -141,7 +142,7 @@ index 8f6b8ce8..14910fc2 100644
      onOpenMeta: ((MetaPreview) -> Unit)?,
      onCastClick: ((MetaPerson, String?) -> Unit)?,
      onCompanyClick: ((MetaCompany, String) -> Unit)?,
-@@ -1859,6 +1921,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1859,6 +1922,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      onEpisodeClick = onEpisodeClick,
                      onEpisodeLongPress = onEpisodeLongPress,
                      onSeasonLongPress = onSeasonLongPress,
@@ -149,7 +150,7 @@ index 8f6b8ce8..14910fc2 100644
                      onOpenMeta = onOpenMeta,
                      onCastClick = onCastClick,
                      onCompanyClick = onCompanyClick,
-@@ -1915,6 +1978,7 @@ private fun LazyListScope.configuredMetaSectionItems(
+@@ -1915,6 +1979,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                      blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                      onEpisodeClick = onEpisodeClick,
                      onEpisodeLongPress = onEpisodeLongPress,
@@ -157,7 +158,7 @@ index 8f6b8ce8..14910fc2 100644
                  )
              }
          }
-@@ -2082,6 +2146,7 @@ private fun ConfiguredMetaSections(
+@@ -2082,6 +2147,7 @@ private fun ConfiguredMetaSections(
      onEpisodeClick: (MetaVideo) -> Unit,
      onEpisodeLongPress: (MetaVideo) -> Unit,
      onSeasonLongPress: (Int) -> Unit,
@@ -165,7 +166,7 @@ index 8f6b8ce8..14910fc2 100644
      onOpenMeta: ((MetaPreview) -> Unit)?,
      onCastClick: ((MetaPerson, String?) -> Unit)?,
      onCompanyClick: ((MetaCompany, String) -> Unit)?,
-@@ -2110,6 +2175,37 @@ private fun ConfiguredMetaSections(
+@@ -2110,6 +2176,38 @@ private fun ConfiguredMetaSections(
      fun RenderSection(key: MetaScreenSectionKey, showHeader: Boolean = true) {
          when (key) {
              MetaScreenSectionKey.ACTIONS -> {
@@ -187,6 +188,7 @@ index 8f6b8ce8..14910fc2 100644
 +                val isMovieQueued = remember(pendingQueue, movieContentKey) {
 +                    pendingQueue.any { it.contentKey == movieContentKey }
 +                }
++                val requestDownloadDelete = rememberDownloadDeleteRequester()
 +                val movieDownloadLabel = when {
 +                    isMovieDownloaded -> stringResource(Res.string.downloads_completed_status)
 +                    isMovieDownloading -> stringResource(Res.string.downloads_status_downloading, "")
@@ -203,7 +205,7 @@ index 8f6b8ce8..14910fc2 100644
                  DetailActionButtons(
                      playLabel = playButtonLabel,
                      secondaryActions = buildList {
-@@ -2142,6 +2238,23 @@ private fun ConfiguredMetaSections(
+@@ -2142,6 +2240,26 @@ private fun ConfiguredMetaSections(
                              onClick = onSaveClick,
                              onLongClick = onSaveLongClick,
                          ))
@@ -215,7 +217,10 @@ index 8f6b8ce8..14910fc2 100644
 +                                progressFraction = null,
 +                                onClick = {
 +                                    if (isMovieDownloaded) {
-+                                        NuvioToastController.show("Contenuto già scaricato")
++                                        downloadsUiState.items.firstOrNull {
++                                            it.logicalContentKey == movieContentKey &&
++                                                it.status == DownloadStatus.Completed
++                                        }?.let { requestDownloadDelete(it) }
 +                                    } else if (isMovieDownloading || isMovieQueued) {
 +                                        NuvioToastController.show("Download già in corso...")
 +                                    } else {
@@ -227,7 +232,7 @@ index 8f6b8ce8..14910fc2 100644
                      },
                      isTablet = isTablet,
                      onPlayClick = onPrimaryPlayClick,
-@@ -2211,6 +2324,7 @@ private fun ConfiguredMetaSections(
+@@ -2211,6 +2329,7 @@ private fun ConfiguredMetaSections(
                          onEpisodeClick = onEpisodeClick,
                          onEpisodeLongPress = onEpisodeLongPress,
                          onSeasonLongPress = onSeasonLongPress,
@@ -454,7 +459,7 @@ index 274295f8..ca87e082 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
-index a7026e75..d781e23f 100644
+index a7026e75..327e9a05 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailSeriesContent.kt
 @@ -3,6 +3,8 @@ package com.nuvio.app.features.details.components
@@ -474,7 +479,7 @@ index a7026e75..d781e23f 100644
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
-@@ -35,10 +38,25 @@ import androidx.compose.foundation.lazy.LazyRow
+@@ -35,10 +38,26 @@ import androidx.compose.foundation.lazy.LazyRow
  import androidx.compose.foundation.lazy.items
  import androidx.compose.foundation.lazy.itemsIndexed
  import androidx.compose.foundation.lazy.rememberLazyListState
@@ -498,10 +503,11 @@ index a7026e75..d781e23f 100644
 +import com.nuvio.app.features.downloads.DownloadsRepository
 +import com.nuvio.app.features.downloads.DownloadStatus
 +import com.nuvio.app.features.downloads.buildLogicalKey
++import com.nuvio.app.features.downloads.rememberDownloadDeleteRequester
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.getValue
-@@ -108,6 +126,7 @@ fun DetailSeriesContent(
+@@ -108,6 +127,7 @@ fun DetailSeriesContent(
      onEpisodeClick: ((MetaVideo) -> Unit)? = null,
      onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
      onSeasonLongPress: ((Int) -> Unit)? = null,
@@ -509,7 +515,7 @@ index a7026e75..d781e23f 100644
  ) {
      val hasVideos = meta.videos.isNotEmpty()
      if (meta.type != "series" && !hasVideos) return
-@@ -230,6 +249,7 @@ fun DetailSeriesContent(
+@@ -230,6 +250,7 @@ fun DetailSeriesContent(
                              ),
                              onEpisodeClick = onEpisodeClick,
                              onEpisodeLongPress = onEpisodeLongPress,
@@ -517,7 +523,7 @@ index a7026e75..d781e23f 100644
                          )
                      } else {
                          Column(
-@@ -244,6 +264,7 @@ fun DetailSeriesContent(
+@@ -244,6 +265,7 @@ fun DetailSeriesContent(
                                  )
                                  EpisodeListCard(
                                      video = episode,
@@ -525,7 +531,7 @@ index a7026e75..d781e23f 100644
                                      fallbackImage = meta.background ?: meta.poster,
                                      progressEntry = progressByVideoId[episodeVideoId],
                                      imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -258,6 +279,7 @@ fun DetailSeriesContent(
+@@ -258,6 +280,7 @@ fun DetailSeriesContent(
                                      sizing = sizing,
                                      onClick = { onEpisodeClick?.invoke(episode) },
                                      onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -533,7 +539,7 @@ index a7026e75..d781e23f 100644
                                  )
                              }
                          }
-@@ -313,6 +335,7 @@ internal fun DetailSeriesListEpisode(
+@@ -313,6 +336,7 @@ internal fun DetailSeriesListEpisode(
      blurUnwatchedEpisodes: Boolean,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -541,7 +547,7 @@ index a7026e75..d781e23f 100644
      modifier: Modifier = Modifier,
  ) {
      BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-@@ -325,6 +348,7 @@ internal fun DetailSeriesListEpisode(
+@@ -325,6 +349,7 @@ internal fun DetailSeriesListEpisode(
          )
          EpisodeListCard(
              video = episode,
@@ -549,7 +555,7 @@ index a7026e75..d781e23f 100644
              fallbackImage = meta.background ?: meta.poster,
              progressEntry = progressByVideoId[episodeVideoId],
              imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -339,6 +363,7 @@ internal fun DetailSeriesListEpisode(
+@@ -339,6 +364,7 @@ internal fun DetailSeriesListEpisode(
              sizing = sizing,
              onClick = { onEpisodeClick?.invoke(episode) },
              onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -557,7 +563,7 @@ index a7026e75..d781e23f 100644
          )
      }
  }
-@@ -711,6 +736,7 @@ private fun EpisodeHorizontalRow(
+@@ -711,6 +737,7 @@ private fun EpisodeHorizontalRow(
      preferredEpisodeNumber: Int? = null,
      onEpisodeClick: ((MetaVideo) -> Unit)?,
      onEpisodeLongPress: ((MetaVideo) -> Unit)?,
@@ -565,7 +571,7 @@ index a7026e75..d781e23f 100644
  ) {
      val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
      val listState = rememberLazyListState()
-@@ -755,6 +781,7 @@ private fun EpisodeHorizontalRow(
+@@ -755,6 +782,7 @@ private fun EpisodeHorizontalRow(
              )
              EpisodeHorizontalCard(
                  video = episode,
@@ -573,7 +579,7 @@ index a7026e75..d781e23f 100644
                  fallbackImage = fallbackImage,
                  progressEntry = progressByVideoId[episodeVideoId],
                  imdbRating = episode.seasonEpisodeKey()?.let { episodeRatings[it] } ?: episode.rating,
-@@ -769,6 +796,7 @@ private fun EpisodeHorizontalRow(
+@@ -769,6 +797,7 @@ private fun EpisodeHorizontalRow(
                  metrics = rowMetrics,
                  onClick = { onEpisodeClick?.invoke(episode) },
                  onLongPress = { onEpisodeLongPress?.invoke(episode) },
@@ -581,7 +587,7 @@ index a7026e75..d781e23f 100644
              )
          }
      }
-@@ -778,6 +806,7 @@ private fun EpisodeHorizontalRow(
+@@ -778,6 +807,7 @@ private fun EpisodeHorizontalRow(
  @Composable
  private fun EpisodeHorizontalCard(
      video: MetaVideo,
@@ -589,7 +595,7 @@ index a7026e75..d781e23f 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -786,7 +815,34 @@ private fun EpisodeHorizontalCard(
+@@ -786,7 +816,35 @@ private fun EpisodeHorizontalCard(
      metrics: EpisodeHorizontalCardMetrics,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -618,13 +624,14 @@ index a7026e75..d781e23f 100644
 +    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
 +    }
++    val requestDownloadDelete = rememberDownloadDeleteRequester()
 +    val downloadProgressFraction = if (isDownloading) {
 +        episodeDownloadItem?.progressFraction ?: 0f
 +    } else null
      val cardShape = RoundedCornerShape(metrics.cornerRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -846,12 +902,88 @@ private fun EpisodeHorizontalCard(
+@@ -846,12 +904,93 @@ private fun EpisodeHorizontalCard(
                  ),
          )
  
@@ -660,7 +667,12 @@ index a7026e75..d781e23f 100644
 +                            .fillMaxSize()
 +                            .clickable(role = Role.Button) {
 +                                if (isDownloaded) {
-+                                    NuvioToastController.show("Episodio già scaricato")
++                                    val dlItem = episodeDownloadItem
++                                    if (dlItem != null) {
++                                        requestDownloadDelete(dlItem)
++                                    } else {
++                                        NuvioToastController.show("Episodio già scaricato")
++                                    }
 +                                } else if (isDownloading) {
 +                                    NuvioToastController.show("Download già in corso...")
 +                                } else if (isQueued) {
@@ -716,7 +728,7 @@ index a7026e75..d781e23f 100644
  
          Column(
              modifier = Modifier
-@@ -1160,6 +1292,7 @@ private fun ImdbEpisodeRatingBadge(
+@@ -1160,6 +1299,7 @@ private fun ImdbEpisodeRatingBadge(
  @Composable
  private fun EpisodeListCard(
      video: MetaVideo,
@@ -724,7 +736,7 @@ index a7026e75..d781e23f 100644
      fallbackImage: String?,
      progressEntry: WatchProgressEntry?,
      imdbRating: Double?,
-@@ -1169,7 +1302,34 @@ private fun EpisodeListCard(
+@@ -1169,7 +1309,35 @@ private fun EpisodeListCard(
      modifier: Modifier = Modifier,
      onClick: (() -> Unit)? = null,
      onLongPress: (() -> Unit)? = null,
@@ -753,13 +765,14 @@ index a7026e75..d781e23f 100644
 +    val episodeDownloadItem = remember(downloadsUiState.items, episodeContentKey) {
 +        downloadsUiState.items.firstOrNull { it.logicalContentKey == episodeContentKey }
 +    }
++    val requestDownloadDelete = rememberDownloadDeleteRequester()
 +    val downloadProgressFraction = if (isDownloading) {
 +        episodeDownloadItem?.progressFraction ?: 0f
 +    } else null
      val cardShape = RoundedCornerShape(sizing.cardRadius)
      val ratingLabel = remember(imdbRating) { imdbRating?.takeIf { it > 0.0 }?.let(::formatEpisodeRating) }
      val formattedDate = remember(video.released) { video.released?.let { formatReleaseDateForDisplay(it) } }
-@@ -1192,6 +1352,7 @@ private fun EpisodeListCard(
+@@ -1192,6 +1360,7 @@ private fun EpisodeListCard(
      ) {
          Row(
              modifier = Modifier.fillMaxSize(),
@@ -767,7 +780,7 @@ index a7026e75..d781e23f 100644
          ) {
              // Image area - fixed width matching card height per spec
              Box(
-@@ -1305,6 +1466,111 @@ private fun EpisodeListCard(
+@@ -1305,6 +1474,116 @@ private fun EpisodeListCard(
                      )
                  }
              }
@@ -800,7 +813,12 @@ index a7026e75..d781e23f 100644
 +                                .fillMaxSize()
 +                                .clickable(role = Role.Button) {
 +                                    if (isDownloaded) {
-+                                        NuvioToastController.show("Episodio già scaricato")
++                                        val dlItem = episodeDownloadItem
++                                        if (dlItem != null) {
++                                            requestDownloadDelete(dlItem)
++                                        } else {
++                                            NuvioToastController.show("Episodio già scaricato")
++                                        }
 +                                    } else if (isDownloading) {
 +                                        NuvioToastController.show("Download già in corso...")
 +                                    } else if (isQueued) {
@@ -879,28 +897,78 @@ index a7026e75..d781e23f 100644
          }
  
          progressEntry
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-index 61b58bf1..7be8a28f 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -728,7 +728,7 @@ object AutoStreamDownloader {
-                         "AutoDownloader",
-                         "Errore non gestito per ${next.displayTitle}, riprovo: ${e.message}",
-                     )
--                    placeholderIdForKey(next.contentKey)?.let { pid ->
-+                    DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
-                         DownloadsRepository.updatePlaceholderPhase(pid, "Errore temporaneo, riprovo...")
-                     }
-                     AutoDownloadOutcome.RETRY
-@@ -758,7 +758,7 @@ object AutoStreamDownloader {
-                                 "AutoDownloader",
-                                 "Rinuncio a ${next.displayTitle} dopo $consecutive tentativi.",
-                             )
--                            placeholderIdForKey(next.contentKey)?.let { pid ->
-+                            DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
-                                 DownloadsRepository.updatePlaceholderPhase(pid, "Download non riuscito — tocca Riprova")
-                             }
-                             workerRetryCounts.remove(next.contentKey)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadDeleteConfirmationDialog.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadDeleteConfirmationDialog.kt
+new file mode 100644
+index 00000000..d4e97fd1
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadDeleteConfirmationDialog.kt
+@@ -0,0 +1,65 @@
++package com.nuvio.app.features.downloads
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import com.nuvio.app.core.ui.NuvioStatusModal
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.action_cancel
++import nuvio.composeapp.generated.resources.action_delete
++import nuvio.composeapp.generated.resources.action_delete_confirm_title
++import nuvio.composeapp.generated.resources.downloads_delete_confirm_message
++import org.jetbrains.compose.resources.stringResource
++
++/**
++ * Restituisce una lambda che chiede conferma prima di eliminare un download
++ * completato. Da invocare quando l'utente preme il pulsante "scaricato" (✓):
++ * mostra un dialog "Eliminare il download?" e, su conferma, rimuove la riga e
++ * il file (via [DownloadsRepository.cancelDownload]).
++ *
++ * Va composta nello stesso ambito composable di chi la usa (es. la schermata
++ * dettaglio del film o la card di un episodio).
++ */
++@Composable
++fun rememberDownloadDeleteRequester(): (DownloadItem) -> Unit {
++    var pendingDeletion by remember { mutableStateOf<DownloadItem?>(null) }
++
++    pendingDeletion?.let { item ->
++        NuvioStatusModal(
++            title = stringResource(Res.string.action_delete_confirm_title),
++            message = stringResource(
++                Res.string.downloads_delete_confirm_message,
++                downloadDeleteDisplayTitle(item),
++            ),
++            isVisible = true,
++            confirmText = stringResource(Res.string.action_delete),
++            dismissText = stringResource(Res.string.action_cancel),
++            onConfirm = {
++                pendingDeletion = null
++                DownloadsRepository.cancelDownload(item.id)
++            },
++            onDismiss = { pendingDeletion = null },
++        )
++    }
++
++    return remember {
++        { item: DownloadItem ->
++            pendingDeletion = item
++        }
++    }
++}
++
++private fun downloadDeleteDisplayTitle(item: DownloadItem): String =
++    if (item.isEpisode && item.seasonNumber != null && item.episodeNumber != null) {
++        buildString {
++            append(item.title)
++            append(" S")
++            append(item.seasonNumber.toString().padStart(2, '0'))
++            append("E")
++            append(item.episodeNumber.toString().padStart(2, '0'))
++        }
++    } else {
++        item.title.ifBlank { item.streamTitle }
++    }
+\ No newline at end of file
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
 index e3214228..d19bd595 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
@@ -1577,12 +1645,12 @@ index d08b58c8..8f454ea2 100644
          page = SettingsPage.Streams,
          key = "streams",
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index f2c37773..361be4e6 100644
+index f2c37773..c5a200f8 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=142
 -MARKETING_VERSION=0.4.14.21
 \ No newline at end of file
-+CURRENT_PROJECT_VERSION=143
-+MARKETING_VERSION=0.4.14.22
++CURRENT_PROJECT_VERSION=144
++MARKETING_VERSION=0.4.14.23

@@ -2617,7 +2617,7 @@ index 00000000..515bac48
 +    return androidUri.path?.substringAfterLast(':') ?: uri
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index cc827e54..745d0c7f 100644
+index cc827e54..c4ffa879 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
 @@ -256,7 +256,7 @@
@@ -2629,15 +2629,16 @@ index cc827e54..745d0c7f 100644
    <string name="compose_settings_root_general_section">GENERALI</string>
    <string name="compose_settings_root_integrations_description">Collega i servizi TMDB e MDBList.</string>
    <string name="compose_settings_root_notifications_description">Gestisci gli avvisi per l'uscita di nuovi episodi e invia una notifica di test.</string>
-@@ -290,6 +290,7 @@
+@@ -290,6 +290,8 @@
    <string name="downloads_section_shows">Serie TV</string>
    <string name="downloads_show_downloads">Mostra download</string>
    <string name="downloads_status_completed">Completato • %1$s</string>
 +  <string name="downloads_completed_status">Scaricato</string>
++  <string name="downloads_delete_confirm_message">Il download di “%1$s” verrà eliminato dal dispositivo.</string>
    <string name="downloads_status_downloading">Download in corso • %1$s</string>
    <string name="downloads_status_failed">Fallito</string>
    <string name="downloads_status_paused">In pausa • %1$s</string>
-@@ -973,6 +974,8 @@
+@@ -973,6 +975,8 @@
    <string name="details_networks">Network</string>
    <string name="details_no_addon_meta">Nessun addon fornisce metadati per questo contenuto.</string>
    <string name="download_failed">Download fallito</string>
@@ -2646,7 +2647,7 @@ index cc827e54..745d0c7f 100644
    <string name="downloads_channel_description">Mostra i progressi e i controlli dei download in corso.</string>
    <string name="downloads_channel_name">Download</string>
    <string name="downloads_live_completed">Download completato</string>
-@@ -1948,4 +1951,66 @@
+@@ -1948,4 +1952,66 @@
    <string name="entity_browse_about">Informazioni</string>
    <string name="player_external_loading_subtitles">Caricamento sottotitoli dagli addon...</string>
    <string name="player_external_downloading_subtitles">Download dei sottotitoli...</string>
@@ -2714,7 +2715,7 @@ index cc827e54..745d0c7f 100644
 +  <string name="settings_meta_preload_streams_description">Anticipa la ricerca dei flussi da addon e plugin non appena si apre la scheda del contenuto per azzerare l\'attesa al tocco di Riproduci.</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 58d554ab..074b37c3 100644
+index 58d554ab..c2a4e4cf 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -425,7 +425,7 @@
@@ -2735,7 +2736,7 @@ index 58d554ab..074b37c3 100644
      <string name="compose_settings_root_general_section">GENERAL</string>
      <string name="compose_settings_root_integrations_description">Manage available integrations</string>
      <string name="compose_settings_root_notifications_description">Manage episode release alerts and send a test notification.</string>
-@@ -622,11 +622,32 @@
+@@ -622,11 +622,33 @@
      <string name="downloads_section_active">Active</string>
      <string name="downloads_section_movies">Movies</string>
      <string name="downloads_section_shows">Shows</string>
@@ -2744,6 +2745,7 @@ index 58d554ab..074b37c3 100644
      <string name="downloads_show_downloads">Show Downloads</string>
      <string name="downloads_status_completed">Completed • %1$s</string>
 +    <string name="downloads_completed_status">Downloaded</string>
++    <string name="downloads_delete_confirm_message">The download of “%1$s” will be removed from this device.</string>
      <string name="downloads_status_downloading">Downloading • %1$s</string>
      <string name="downloads_status_failed">Failed</string>
      <string name="downloads_status_paused">Paused • %1$s</string>
@@ -2768,7 +2770,7 @@ index 58d554ab..074b37c3 100644
      <string name="episodes_cd_watched">Watched</string>
      <string name="episodes_season">Season %1$d</string>
      <string name="episodes_specials">Specials</string>
-@@ -943,6 +964,12 @@
+@@ -943,6 +965,12 @@
      <string name="settings_meta_tab_layout_description">Group sections into tabs like the TV app. Assign up to 3 sections per tab group.</string>
      <string name="settings_meta_trailers">Trailers</string>
      <string name="settings_meta_trailers_description">Trailer rail and playback shortcuts.</string>
@@ -2781,7 +2783,7 @@ index 58d554ab..074b37c3 100644
      <string name="settings_notifications_disabled_in_app">Notifications are currently disabled in Nuvio.</string>
      <string name="settings_notifications_episode_release_alerts">Episode release alerts</string>
      <string name="settings_notifications_episode_release_alerts_description">Schedule local notifications when a new episode for a saved show becomes available.</string>
-@@ -1636,6 +1663,8 @@
+@@ -1636,6 +1664,8 @@
      <string name="details_networks">Networks</string>
      <string name="details_no_addon_meta">No addon provides meta for this content.</string>
      <string name="download_failed">Download failed</string>
@@ -2790,7 +2792,7 @@ index 58d554ab..074b37c3 100644
      <string name="downloads_channel_description">Shows live download progress and controls.</string>
      <string name="downloads_channel_name">Downloads</string>
      <string name="downloads_live_completed">Download completed</string>
-@@ -2245,4 +2274,40 @@
+@@ -2245,4 +2275,40 @@
          <item quantity="one">%d title</item>
          <item quantity="other">%d titles</item>
      </plurals>
@@ -3590,7 +3592,7 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..61b58bf1
+index 00000000..7be8a28f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 @@ -0,0 +1,1280 @@
@@ -4324,7 +4326,7 @@ index 00000000..61b58bf1
 +                        "AutoDownloader",
 +                        "Errore non gestito per ${next.displayTitle}, riprovo: ${e.message}",
 +                    )
-+                    placeholderIdForKey(next.contentKey)?.let { pid ->
++                    DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
 +                        DownloadsRepository.updatePlaceholderPhase(pid, "Errore temporaneo, riprovo...")
 +                    }
 +                    AutoDownloadOutcome.RETRY
@@ -4354,7 +4356,7 @@ index 00000000..61b58bf1
 +                                "AutoDownloader",
 +                                "Rinuncio a ${next.displayTitle} dopo $consecutive tentativi.",
 +                            )
-+                            placeholderIdForKey(next.contentKey)?.let { pid ->
++                            DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
 +                                DownloadsRepository.updatePlaceholderPhase(pid, "Download non riuscito — tocca Riprova")
 +                            }
 +                            workerRetryCounts.remove(next.contentKey)
