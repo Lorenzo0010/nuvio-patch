@@ -879,6 +879,28 @@ index a7026e75..d781e23f 100644
          }
  
          progressEntry
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+index 61b58bf1..7be8a28f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
+@@ -728,7 +728,7 @@ object AutoStreamDownloader {
+                         "AutoDownloader",
+                         "Errore non gestito per ${next.displayTitle}, riprovo: ${e.message}",
+                     )
+-                    placeholderIdForKey(next.contentKey)?.let { pid ->
++                    DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
+                         DownloadsRepository.updatePlaceholderPhase(pid, "Errore temporaneo, riprovo...")
+                     }
+                     AutoDownloadOutcome.RETRY
+@@ -758,7 +758,7 @@ object AutoStreamDownloader {
+                                 "AutoDownloader",
+                                 "Rinuncio a ${next.displayTitle} dopo $consecutive tentativi.",
+                             )
+-                            placeholderIdForKey(next.contentKey)?.let { pid ->
++                            DownloadsRepository.placeholderIdForKey(next.contentKey)?.let { pid ->
+                                 DownloadsRepository.updatePlaceholderPhase(pid, "Download non riuscito — tocca Riprova")
+                             }
+                             workerRetryCounts.remove(next.contentKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
 index e3214228..d19bd595 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.kt
@@ -1555,11 +1577,12 @@ index d08b58c8..8f454ea2 100644
          page = SettingsPage.Streams,
          key = "streams",
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 90792195..f638ee3f 100644
+index f2c37773..361be4e6 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
--CURRENT_PROJECT_VERSION=122
--MARKETING_VERSION=0.4.14.2
-+CURRENT_PROJECT_VERSION=142
-+MARKETING_VERSION=0.4.14.21
+-CURRENT_PROJECT_VERSION=142
+-MARKETING_VERSION=0.4.14.21
+\ No newline at end of file
++CURRENT_PROJECT_VERSION=143
++MARKETING_VERSION=0.4.14.22
