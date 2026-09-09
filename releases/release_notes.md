@@ -1,5 +1,13 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.14.23
+
+### 🗑️ Cancellazione con conferma dal pulsante "Scaricato" (✓)
+- **Film**: quando un film è già scaricato, toccando il pulsante con il tic (✓) accanto al pulsante Play ora compare una finestra di conferma: "Il download di … verrà eliminato dal dispositivo". Confermando, la riga e il file vengono rimossi; annullando, non succede nulla.
+- **Serie TV**: stesso comportamento su ogni episodio scaricato, sia nella card orizzontale (schermo) sia nella vista elenco: il tic (✓) ora chiede conferma prima di eliminare l'episodio. Nessuna cancellazione accidentale.
+- Prima il tocco sul tic mostrava solo un avviso "Contenuto già scaricato": ora l'azione di eliminazione è davvero disponibile da lì (la cancellazione resta comunque possibile anche dalla schermata Download).
+- **Firma e integrità**: versione pulita `0.4.14.23` (versionCode `144`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.14.22
 
 ### 🛡️ Download Debrid Cached: niente più crash a fine download e episodi mai persi
