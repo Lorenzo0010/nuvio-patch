@@ -1,5 +1,5 @@
-﻿diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index ac0f668..8f074e1 100644
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
+index ac0f6685..8f074e13 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 @@ -146,6 +146,11 @@ open class MainActivity : AppCompatActivity() {
@@ -15,7 +15,7 @@ index ac0f668..8f074e1 100644
          super.onNewIntent(intent)
          setIntent(intent)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
-index 426603f..d8c25e8 100644
+index 426603fc..f3033196 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
 @@ -14,8 +14,10 @@ actual object LiveTvStorage {
@@ -33,14 +33,14 @@ index 426603f..d8c25e8 100644
                  if (channel.tvgId.isNullOrBlank()) remove(recentChannelTvgIdKey) else putString(recentChannelTvgIdKey, channel.tvgId)
              }
          }?.apply()
-+
++    
 +        appContext?.let { ctx ->
 +            com.nuvio.app.widget.NuvioAppWidgetProvider.notifyDataChanged(ctx)
 +        }
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressStorage.android.kt
-index 5cc0712..0de9611 100644
+index 5cc07129..0de9611a 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressStorage.android.kt
 @@ -8,8 +8,10 @@ actual object WatchProgressStorage {
@@ -68,7 +68,7 @@ index 5cc0712..0de9611 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
 new file mode 100644
-index 0000000..047798a
+index 00000000..047798a9
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioAppWidgetProvider.kt
 @@ -0,0 +1,441 @@
@@ -515,7 +515,7 @@ index 0000000..047798a
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt
 new file mode 100644
-index 0000000..319f2db
+index 00000000..319f2db7
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioNavbarWidgetProvider.kt
 @@ -0,0 +1,104 @@
@@ -625,7 +625,7 @@ index 0000000..319f2db
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
 new file mode 100644
-index 0000000..73dc6c1
+index 00000000..73dc6c17
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/widget/NuvioWidgetDataHelper.kt
 @@ -0,0 +1,237 @@
@@ -776,7 +776,7 @@ index 0000000..73dc6c1
 +        return if (entry.isEpisode) {
 +            val s = entry.seasonNumber ?: 1
 +            val e = entry.episodeNumber ?: 1
-+            "CONTINUA ÔÇó S%d, E%d".format(s, e)
++            "CONTINUA • S%d, E%d".format(s, e)
 +        } else {
 +            "CONTINUA"
 +        }
@@ -868,7 +868,7 @@ index 0000000..73dc6c1
 +}
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml b/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml
 new file mode 100644
-index 0000000..73f36c1
+index 00000000..73f36c17
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_brand_logo.xml
 @@ -0,0 +1,32 @@
@@ -906,7 +906,7 @@ index 0000000..73f36c1
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_download.xml b/composeApp/src/androidMain/res/drawable/ic_widget_download.xml
 new file mode 100644
-index 0000000..bb7e510
+index 00000000..bb7e510f
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_download.xml
 @@ -0,0 +1,10 @@
@@ -922,7 +922,7 @@ index 0000000..bb7e510
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_library.xml b/composeApp/src/androidMain/res/drawable/ic_widget_library.xml
 new file mode 100644
-index 0000000..39c37a3
+index 00000000..39c37a35
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_library.xml
 @@ -0,0 +1,10 @@
@@ -938,7 +938,7 @@ index 0000000..39c37a3
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml b/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml
 new file mode 100644
-index 0000000..2a3db77
+index 00000000..2a3db773
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_livetv.xml
 @@ -0,0 +1,10 @@
@@ -954,7 +954,7 @@ index 0000000..2a3db77
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_play.xml b/composeApp/src/androidMain/res/drawable/ic_widget_play.xml
 new file mode 100644
-index 0000000..65144ca
+index 00000000..65144ca1
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_play.xml
 @@ -0,0 +1,10 @@
@@ -970,7 +970,7 @@ index 0000000..65144ca
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_poster_placeholder.xml b/composeApp/src/androidMain/res/drawable/ic_widget_poster_placeholder.xml
 new file mode 100644
-index 0000000..e892e8a
+index 00000000..e892e8a9
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_poster_placeholder.xml
 @@ -0,0 +1,10 @@
@@ -986,7 +986,7 @@ index 0000000..e892e8a
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/ic_widget_search.xml b/composeApp/src/androidMain/res/drawable/ic_widget_search.xml
 new file mode 100644
-index 0000000..85a5128
+index 00000000..85a5128b
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/ic_widget_search.xml
 @@ -0,0 +1,10 @@
@@ -1002,7 +1002,7 @@ index 0000000..85a5128
 +</vector>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_background.xml b/composeApp/src/androidMain/res/drawable/widget_background.xml
 new file mode 100644
-index 0000000..0e03a1f
+index 00000000..0e03a1fe
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_background.xml
 @@ -0,0 +1,9 @@
@@ -1017,7 +1017,7 @@ index 0000000..0e03a1f
 +</shape>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_button_bg.xml b/composeApp/src/androidMain/res/drawable/widget_button_bg.xml
 new file mode 100644
-index 0000000..54df0a8
+index 00000000..54df0a8d
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_button_bg.xml
 @@ -0,0 +1,6 @@
@@ -1029,7 +1029,7 @@ index 0000000..54df0a8
 +</shape>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_card_bg.xml b/composeApp/src/androidMain/res/drawable/widget_card_bg.xml
 new file mode 100644
-index 0000000..7c7677b
+index 00000000..7c7677bc
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_card_bg.xml
 @@ -0,0 +1,6 @@
@@ -1041,7 +1041,7 @@ index 0000000..7c7677b
 +</shape>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml b/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml
 new file mode 100644
-index 0000000..057c607
+index 00000000..057c6077
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_nav_button_bg.xml
 @@ -0,0 +1,13 @@
@@ -1060,7 +1060,7 @@ index 0000000..057c607
 +</ripple>
 diff --git a/composeApp/src/androidMain/res/drawable/widget_progress_bar.xml b/composeApp/src/androidMain/res/drawable/widget_progress_bar.xml
 new file mode 100644
-index 0000000..5889f09
+index 00000000..5889f098
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/drawable/widget_progress_bar.xml
 @@ -0,0 +1,17 @@
@@ -1083,7 +1083,7 @@ index 0000000..5889f09
 +</layer-list>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
 new file mode 100644
-index 0000000..3c7ca80
+index 00000000..3c7ca802
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_compact.xml
 @@ -0,0 +1,128 @@
@@ -1217,7 +1217,7 @@ index 0000000..3c7ca80
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
 new file mode 100644
-index 0000000..0a05a20
+index 00000000..0a05a20b
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_large.xml
 @@ -0,0 +1,204 @@
@@ -1427,7 +1427,7 @@ index 0000000..0a05a20
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
 new file mode 100644
-index 0000000..9f598bc
+index 00000000..9f598bc1
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_medium.xml
 @@ -0,0 +1,183 @@
@@ -1616,7 +1616,7 @@ index 0000000..9f598bc
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml
 new file mode 100644
-index 0000000..8cd85b3
+index 00000000..8cd85b30
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar.xml
 @@ -0,0 +1,136 @@
@@ -1758,7 +1758,7 @@ index 0000000..8cd85b3
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml
 new file mode 100644
-index 0000000..481cdc1
+index 00000000..481cdc16
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_navbar_compact.xml
 @@ -0,0 +1,92 @@
@@ -1856,7 +1856,7 @@ index 0000000..481cdc1
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
 new file mode 100644
-index 0000000..85d0d73
+index 00000000..85d0d731
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_single.xml
 @@ -0,0 +1,77 @@
@@ -1939,7 +1939,7 @@ index 0000000..85d0d73
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
 new file mode 100644
-index 0000000..4621f63
+index 00000000..4621f638
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/layout/widget_nuvio_tall.xml
 @@ -0,0 +1,199 @@
@@ -2143,7 +2143,7 @@ index 0000000..4621f63
 +    </LinearLayout>
 +</LinearLayout>
 diff --git a/composeApp/src/androidMain/res/values/strings.xml b/composeApp/src/androidMain/res/values/strings.xml
-index 1a6cd81..b3cf4c0 100644
+index 1a6cd817..b3cf4c0b 100644
 --- a/composeApp/src/androidMain/res/values/strings.xml
 +++ b/composeApp/src/androidMain/res/values/strings.xml
 @@ -1,3 +1,9 @@
@@ -2159,7 +2159,7 @@ index 1a6cd81..b3cf4c0 100644
 \ No newline at end of file
 diff --git a/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml b/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml
 new file mode 100644
-index 0000000..01c720d
+index 00000000..01c720d9
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/xml/nuvio_app_widget_info.xml
 @@ -0,0 +1,15 @@
@@ -2180,7 +2180,7 @@ index 0000000..01c720d
 +    android:widgetCategory="home_screen" />
 diff --git a/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml b/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml
 new file mode 100644
-index 0000000..a323067
+index 00000000..a3230678
 --- /dev/null
 +++ b/composeApp/src/androidMain/res/xml/nuvio_navbar_widget_info.xml
 @@ -0,0 +1,14 @@
@@ -2198,34 +2198,8 @@ index 0000000..a323067
 +    android:targetCellHeight="1"
 +    android:updatePeriodMillis="86400000"
 +    android:widgetCategory="home_screen" />
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 443cf0b..6895542 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -775,6 +775,21 @@ internal fun MainAppContent(
-                         AppDeepLinkRepository.markConsumed(deepLink)
-                     }
- 
-+                    AppDeepLink.Library -> {
-+                        activateTab(AppScreenTab.Library)
-+                        AppDeepLinkRepository.markConsumed(deepLink)
-+                    }
-+
-+                    AppDeepLink.Search -> {
-+                        activateTab(AppScreenTab.Search)
-+                        AppDeepLinkRepository.markConsumed(deepLink)
-+                    }
-+
-+                    AppDeepLink.LiveTv -> {
-+                        AppScreenTab.entries.firstOrNull { it.name.equals("LiveTv", ignoreCase = true) }?.let { activateTab(it) }
-+                        AppDeepLinkRepository.markConsumed(deepLink)
-+                    }
-+
-                     null -> Unit
-                 }
-             }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/deeplink/AppUrlBridge.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/deeplink/AppUrlBridge.kt
-index 5dde070..1beedce 100644
+index 5dde0700..1beedce4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/deeplink/AppUrlBridge.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/deeplink/AppUrlBridge.kt
 @@ -19,6 +19,9 @@ internal sealed interface AppDeepLink {
