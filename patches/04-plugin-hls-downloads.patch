@@ -1073,10 +1073,10 @@ index be7b3c66..803b5065 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 8bda6002..9ee5a2ea 100644
+index 8bda6002..30b2f7a4 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,27 +2,151 @@ package com.nuvio.app.features.downloads
+@@ -2,27 +2,127 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -1085,7 +1085,6 @@ index 8bda6002..9ee5a2ea 100644
 +import android.media.MediaFormat
 +import android.net.Uri
 +import androidx.media3.common.Format
-+import androidx.media3.common.MimeTypes
 +import androidx.media3.muxer.BufferInfo
 +import androidx.media3.muxer.Mp4Muxer
  import androidx.core.content.FileProvider
@@ -1127,13 +1126,6 @@ index 8bda6002..9ee5a2ea 100644
 +import com.nuvio.app.features.player.PlayerPlaybackNetworking
 +import kotlin.coroutines.coroutineContext
 +import kotlinx.coroutines.withContext
-+
-+import java.security.SecureRandom
-+import java.security.cert.X509Certificate
-+import javax.net.ssl.HostnameVerifier
-+import javax.net.ssl.SSLContext
-+import javax.net.ssl.TrustManager
-+import javax.net.ssl.X509TrustManager
 +
 +private fun withDefaultUserAgent(headers: Map<String, String>): Map<String, String> {
 +    if (headers.keys.any { it.equals("User-Agent", ignoreCase = true) }) {
@@ -1199,26 +1191,10 @@ index 8bda6002..9ee5a2ea 100644
 +        1 -> 800L
 +        else -> 2_000L
 +    }
-+
-+private val trustAllManager = object : X509TrustManager {
-+    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-+    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-+    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-+}
-+
-+private val downloadHostnameVerifier = HostnameVerifier { _, _ -> true }
-+
-+private val sslContext: SSLContext by lazy {
-+    SSLContext.getInstance("TLS").apply {
-+        init(null, arrayOf<TrustManager>(trustAllManager), SecureRandom())
-+    }
-+}
  
  private val downloadHttpClient = OkHttpClient.Builder()
 -    .connectTimeout(60, TimeUnit.SECONDS)
 +    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
-+    .sslSocketFactory(sslContext.socketFactory, trustAllManager)
-+    .hostnameVerifier(downloadHostnameVerifier)
 +    .cookieJar(downloadCookieJar)
 +    .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
 +    .dispatcher(Dispatcher().apply {
@@ -1229,7 +1205,7 @@ index 8bda6002..9ee5a2ea 100644
      .readTimeout(60, TimeUnit.SECONDS)
      .writeTimeout(60, TimeUnit.SECONDS)
      .followRedirects(true)
-@@ -32,6 +156,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
+@@ -32,6 +132,21 @@ private val downloadHttpClient = OkHttpClient.Builder()
  internal actual object DownloadsPlatformDownloader {
      private var appContext: Context? = null
  
@@ -1251,7 +1227,7 @@ index 8bda6002..9ee5a2ea 100644
      fun initialize(context: Context) {
          appContext = context.applicationContext
      }
-@@ -39,30 +178,83 @@ internal actual object DownloadsPlatformDownloader {
+@@ -39,30 +154,83 @@ internal actual object DownloadsPlatformDownloader {
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -1342,7 +1318,7 @@ index 8bda6002..9ee5a2ea 100644
                          requestBuilder.header(key, value)
                      }
                      if (rangeStart != null && rangeStart > 0L) {
-@@ -73,21 +265,35 @@ internal actual object DownloadsPlatformDownloader {
+@@ -73,21 +241,35 @@ internal actual object DownloadsPlatformDownloader {
  
                  var attemptedRangeRequest = resumeFromBytes > 0L
                  var httpRequest = buildRequest(if (attemptedRangeRequest) resumeFromBytes else null)
@@ -1387,7 +1363,7 @@ index 8bda6002..9ee5a2ea 100644
                  }
  
                  response.use { response ->
-@@ -120,7 +326,7 @@ internal actual object DownloadsPlatformDownloader {
+@@ -120,7 +302,7 @@ internal actual object DownloadsPlatformDownloader {
                      onProgress(downloadedBytes, totalBytes)
  
                      body.byteStream().use { input ->
@@ -1396,7 +1372,7 @@ index 8bda6002..9ee5a2ea 100644
                              val buffer = ByteArray(16 * 1024)
                              while (true) {
                                  ensureActive()
-@@ -138,20 +344,26 @@ internal actual object DownloadsPlatformDownloader {
+@@ -138,20 +320,26 @@ internal actual object DownloadsPlatformDownloader {
                          destination.delete()
                      }
                      if (!tempFile.renameTo(destination)) {
@@ -1426,7 +1402,7 @@ index 8bda6002..9ee5a2ea 100644
          }
  
          return AndroidDownloadsTaskHandle(job)
-@@ -159,34 +371,116 @@ internal actual object DownloadsPlatformDownloader {
+@@ -159,34 +347,116 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -1560,7 +1536,7 @@ index 8bda6002..9ee5a2ea 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -234,14 +528,94 @@ private class AndroidDownloadsTaskHandle(
+@@ -234,14 +504,94 @@ private class AndroidDownloadsTaskHandle(
      }
  }
  
@@ -1600,7 +1576,8 @@ index 8bda6002..9ee5a2ea 100644
 +                    input.copyTo(output)
 +                }
 +            }
-+        }
+         }
+-    }.getOrNull()
 +    }
 +}
 +
@@ -1655,13 +1632,12 @@ index 8bda6002..9ee5a2ea 100644
 +            other.openOutputStream(false).use { output ->
 +                input.copyTo(output)
 +            }
-         }
--    }.getOrNull()
++        }
 +    }
  }
  
  private fun resolveTotalBytes(
-@@ -268,3 +642,801 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -268,3 +618,823 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -2186,7 +2162,9 @@ index 8bda6002..9ee5a2ea 100644
 +            AndroidLog.i("Remux", "audioMime=$audioMime sampleRate=$sampleRate channels=$channelCount")
 +
 +            val audioFormat = Format.Builder()
-+                .setSampleMimeType(MimeTypes.AUDIO_AAC)
++                // Usare il MIME reale estratto (Opus/AC3/EAC3/AAC...): fissare
++                // AUDIO_AAC produceva file con codec dichiarato errato.
++                .setSampleMimeType(audioMime)
 +                .setSampleRate(sampleRate)
 +                .setChannelCount(channelCount)
 +                .apply {
@@ -2371,14 +2349,16 @@ index 8bda6002..9ee5a2ea 100644
 +            raf.seek(raf.length() - searchLen)
 +            val tail = ByteArray(searchLen.toInt())
 +            raf.readFully(tail)
-+            val hasMoov = tail.decodeToString().contains("moov")
++            // Ricerca binaria del fourCC "moov": decodeToString() in UTF-8 fallisce
++            // silenziosamente su dati MP4 binari (byte non-UTF8) con falsi negativi.
++            val hasMoov = tail.containsFourCC(MOOV_FOURCC)
 +            if (!hasMoov) {
 +                AndroidLog.w("Remux", "moov not found in last $searchLen bytes, scanning full file...")
 +                InAppLogger.warn("Remux", "moov not found in last $searchLen bytes, scanning full file...")
 +                raf.seek(0)
 +                val full = ByteArray(raf.length().toInt().coerceAtMost(5_242_880))
 +                raf.read(full)
-+                val fullHasMoov = full.decodeToString().contains("moov")
++                val fullHasMoov = full.containsFourCC(MOOV_FOURCC)
 +                AndroidLog.i("Remux", "full scan hasMoov=$fullHasMoov")
 +                InAppLogger.debug("Remux", "full scan hasMoov=$fullHasMoov")
 +                fullHasMoov
@@ -2389,6 +2369,24 @@ index 8bda6002..9ee5a2ea 100644
 +    } catch (_: Exception) {
 +        false
 +    }
++}
++
++private val MOOV_FOURCC = byteArrayOf(0x6D, 0x6F, 0x6F, 0x76)
++
++/** Cerca la sequenza di byte [fourcc] (fourCC ASCII) all'interno di questo array. */
++private fun ByteArray.containsFourCC(fourcc: ByteArray): Boolean {
++    if (size < fourcc.size) return false
++    for (i in 0 until size - fourcc.size + 1) {
++        if (
++            this[i] == fourcc[0] &&
++            this[i + 1] == fourcc[1] &&
++            this[i + 2] == fourcc[2] &&
++            this[i + 3] == fourcc[3]
++        ) {
++            return true
++        }
++    }
++    return false
 +}
 +
 +private fun OutputStream.closeSafe() {
@@ -3592,10 +3590,10 @@ index 00000000..b271ad42
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
 new file mode 100644
-index 00000000..7be8a28f
+index 00000000..74071ac6
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/AutoStreamDownloader.kt
-@@ -0,0 +1,1280 @@
+@@ -0,0 +1,1284 @@
 +package com.nuvio.app.features.downloads
 +
 +import co.touchlab.kermit.Logger
@@ -4278,6 +4276,10 @@ index 00000000..7be8a28f
 +            episodeThumbnail = episodeThumbnail,
 +        )
 +        _pendingQueue.update { it + request }
++        // Persistenza immediata della coda: se l'app crasha tra questo momento
++        // e la creazione del placeholder, al riavvio l'elemento deve comunque
++        // essere in coda (e il placeholder verrà ricreato da loadPendingQueue).
++        savePendingQueue()
 +
 +        // Riga subito visibile in Download (anche durante prefetch): id stabile,
 +        // aggiornata in place per ogni fase, mai ricreata.
@@ -5298,18 +5300,25 @@ index 00000000..74e04ebc
 +}
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
-index 48da488c..6f487d61 100644
+index 48da488c..2863b2f2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
-@@ -2,6 +2,7 @@ package com.nuvio.app.features.downloads
+@@ -1,13 +1,7 @@
+ package com.nuvio.app.features.downloads
  
  import kotlinx.serialization.Serializable
- import kotlinx.coroutines.runBlocking
+-import kotlinx.coroutines.runBlocking
+-import nuvio.composeapp.generated.resources.Res
+-import nuvio.composeapp.generated.resources.downloads_enqueue_missing_url
+-import nuvio.composeapp.generated.resources.downloads_enqueue_replaced
+-import nuvio.composeapp.generated.resources.downloads_enqueue_started
+-import nuvio.composeapp.generated.resources.downloads_enqueue_unsupported_format
+-import org.jetbrains.compose.resources.getString
 +import kotlinx.serialization.Transient
- import nuvio.composeapp.generated.resources.Res
- import nuvio.composeapp.generated.resources.downloads_enqueue_missing_url
- import nuvio.composeapp.generated.resources.downloads_enqueue_replaced
-@@ -15,8 +16,14 @@ enum class DownloadStatus {
+ 
+ @Serializable
+ enum class DownloadStatus {
+@@ -15,8 +9,14 @@ enum class DownloadStatus {
      Paused,
      Completed,
      Failed,
@@ -5324,7 +5333,7 @@ index 48da488c..6f487d61 100644
  @Serializable
  data class DownloadItem(
      val id: String,
-@@ -47,6 +54,18 @@ data class DownloadItem(
+@@ -47,6 +47,18 @@ data class DownloadItem(
      val errorMessage: String? = null,
      val createdAtEpochMs: Long,
      val updatedAtEpochMs: Long,
@@ -5343,25 +5352,23 @@ index 48da488c..6f487d61 100644
  ) {
      val isEpisode: Boolean
          get() = seasonNumber != null && episodeNumber != null
-@@ -87,7 +106,8 @@ enum class DownloadEnqueueResult {
+@@ -87,18 +99,31 @@ enum class DownloadEnqueueResult {
      Started,
      Replaced,
      MissingUrl,
 -    UnsupportedFormat;
 +    UnsupportedFormat,
 +    HlsNeedsSelection;
++}
  
-     fun toastMessage(): String = runBlocking {
-         when (this@DownloadEnqueueResult) {
-@@ -95,10 +115,32 @@ enum class DownloadEnqueueResult {
-             Replaced -> getString(Res.string.downloads_enqueue_replaced)
-             MissingUrl -> getString(Res.string.downloads_enqueue_missing_url)
-             UnsupportedFormat -> getString(Res.string.downloads_enqueue_unsupported_format)
-+            HlsNeedsSelection -> ""
-         }
-     }
- }
- 
+-    fun toastMessage(): String = runBlocking {
+-        when (this@DownloadEnqueueResult) {
+-            Started -> getString(Res.string.downloads_enqueue_started)
+-            Replaced -> getString(Res.string.downloads_enqueue_replaced)
+-            MissingUrl -> getString(Res.string.downloads_enqueue_missing_url)
+-            UnsupportedFormat -> getString(Res.string.downloads_enqueue_unsupported_format)
+-        }
+-    }
 +data class HlsDownloadSelection(
 +    val variantUrl: String,
 +    val audioUrls: List<String> = emptyList(),
@@ -5376,8 +5383,8 @@ index 48da488c..6f487d61 100644
 +    val audioUrl: String? get() = audioUrls.firstOrNull()
 +    @Deprecated("Use subtitleUrls instead")
 +    val subtitleUrl: String? get() = subtitleUrls.firstOrNull()
-+}
-+
+ }
+ 
 +data class HlsStreamMetadata(
 +    val masterPlaylist: HlsMasterPlaylist,
 +    val baseUrl: String,
@@ -5439,15 +5446,16 @@ index 077b8530..2ed05010 100644
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index b0440dc8..5f7c0216 100644
+index b0440dc8..8f6a0cb8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-@@ -1,6 +1,15 @@
+@@ -1,7 +1,15 @@
  package com.nuvio.app.features.downloads
  
 +import com.nuvio.app.core.logging.InAppLogger
 +import com.nuvio.app.core.ui.NuvioToastController
  import com.nuvio.app.features.streams.StreamItem
+-import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.Job
@@ -5455,18 +5463,16 @@ index b0440dc8..5f7c0216 100644
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.withContext
- import kotlinx.coroutines.runBlocking
  import kotlinx.coroutines.flow.MutableStateFlow
  import kotlinx.coroutines.flow.StateFlow
-@@ -10,6 +19,7 @@ import kotlinx.serialization.Serializable
- import kotlinx.serialization.decodeFromString
- import kotlinx.serialization.encodeToString
+ import kotlinx.coroutines.flow.asStateFlow
+@@ -12,32 +20,91 @@ import kotlinx.serialization.encodeToString
  import kotlinx.serialization.json.Json
-+import kotlin.concurrent.Volatile
  import nuvio.composeapp.generated.resources.*
  import org.jetbrains.compose.resources.getString
++import java.util.concurrent.atomic.AtomicBoolean
  
-@@ -17,27 +27,93 @@ object DownloadsRepository {
+ object DownloadsRepository {
      private val _uiState = MutableStateFlow(DownloadsUiState())
      val uiState: StateFlow<DownloadsUiState> = _uiState.asStateFlow()
  
@@ -5490,9 +5496,10 @@ index b0440dc8..5f7c0216 100644
 +    private const val MAX_CONCURRENT_DOWNLOADS = 2
 +    private const val MAX_CONCURRENT_HLS_DOWNLOADS = 1
 +
-+    // Cross-platform lock (kotlinx.coroutines Mutex, non-suspend via tryLock).
-+    // Le sezioni critiche sono microscopiche; la contesa è transitoria.
-+    private val schedulerLock = kotlinx.coroutines.sync.Mutex()
++    // Lock per le sezioni critiche dello scheduler (non-suspend, uso da callback
++    // su thread arbitrari). synchronized su JVM/Android è rientrante, ottimizzato
++    // per sezioni brevi e rilascia sempre il monitor anche in caso di eccezione.
++    private val schedulerLock = Any()
 +    private val scheduledQueue = ArrayDeque<String>()
 +    private val activeDownloadIds = mutableSetOf<String>()
 +    private var schedulerPumping = false
@@ -5500,16 +5507,7 @@ index b0440dc8..5f7c0216 100644
 +    // Persistenza di progress: non scrivere su SharedPreferences ad ogni chunk.
 +    private var lastThrottledPersistEpochMs = 0L
 +
-+    private inline fun <T> schedulerLocked(block: () -> T): T {
-+        while (!schedulerLock.tryLock()) {
-+            // spin breve: sezioni critiche sub-microsecondo
-+        }
-+        return try {
-+            block()
-+        } finally {
-+            schedulerLock.unlock()
-+        }
-+    }
++    private inline fun <T> schedulerLocked(block: () -> T): T = synchronized(schedulerLock) { block() }
 +
      fun ensureLoaded() {
          if (hasLoaded) return
@@ -5562,7 +5560,7 @@ index b0440dc8..5f7c0216 100644
      fun findPlayableDownloadByVideoId(videoId: String?): DownloadItem? {
          ensureLoaded()
          val normalizedVideoId = videoId?.trim().orEmpty()
-@@ -100,6 +176,13 @@ object DownloadsRepository {
+@@ -100,6 +167,13 @@ object DownloadsRepository {
          return resolvedUri
      }
  
@@ -5576,7 +5574,7 @@ index b0440dc8..5f7c0216 100644
      fun enqueueFromStream(
          contentType: String,
          videoId: String,
-@@ -126,6 +209,422 @@ object DownloadsRepository {
+@@ -126,6 +200,69 @@ object DownloadsRepository {
              return DownloadEnqueueResult.UnsupportedFormat
          }
  
@@ -5610,10 +5608,13 @@ index b0440dc8..5f7c0216 100644
 +        }
 +    }
 +
-+    fun fetchHlsMasterPlaylist(stream: StreamItem): HlsStreamMetadata? {
++    suspend fun fetchHlsMasterPlaylist(stream: StreamItem): HlsStreamMetadata? {
 +        val sourceUrl = stream.playableDirectUrl?.trim()?.takeIf { it.isNotBlank() } ?: return null
 +        val headers = sanitizeRequestHeaders(stream.behaviorHints.proxyHeaders?.request)
-+        val content = DownloadsPlatformDownloader.fetchUrlAsString(sourceUrl, headers) ?: return null
++        // L'HTTP è bloccante: sempre fuori dal Main thread (Dispatchers.IO).
++        val content = withContext(Dispatchers.IO) {
++            DownloadsPlatformDownloader.fetchUrlAsString(sourceUrl, headers)
++        } ?: return null
 +        val master = HlsPlaylistParser.parseMasterPlaylist(content, sourceUrl)
 +        InAppLogger.info("HlsSheet", "parsed ${master.audioTracks.size} audio tracks, ${master.subtitleTracks.size} subtitle tracks")
 +        master.audioTracks.forEachIndexed { i, t ->
@@ -5640,18 +5641,16 @@ index b0440dc8..5f7c0216 100644
 +    ): DownloadEnqueueResult {
 +        ensureLoaded()
 +
-+        val now = DownloadsClock.nowEpochMs()
-+        val logicalKey = buildLogicalKey(
-+            parentMetaId = parentMetaId,
-+            seasonNumber = seasonNumber,
-+            episodeNumber = episodeNumber,
-+        )
-+
-+        var replacedExisting = false
-+        val currentItems = _uiState.value.items.toMutableList()
-+        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
-+        if (existing != null) {
-+            replacedExisting = true
+         val now = DownloadsClock.nowEpochMs()
+         val logicalKey = buildLogicalKey(
+             parentMetaId = parentMetaId,
+@@ -138,9 +275,363 @@ object DownloadsRepository {
+         val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
+         if (existing != null) {
+             replacedExisting = true
+-            activeHandles.remove(existing.id)?.cancel()
+-            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
+-            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
 +            abandonDownload(existing)
 +            currentItems.removeAll { it.id == existing.id }
 +        }
@@ -5996,21 +5995,23 @@ index b0440dc8..5f7c0216 100644
 +        stream: StreamItem,
 +        sourceUrl: String,
 +    ): DownloadEnqueueResult {
-         val now = DownloadsClock.nowEpochMs()
-         val logicalKey = buildLogicalKey(
-             parentMetaId = parentMetaId,
-@@ -138,9 +637,7 @@ object DownloadsRepository {
-         val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
-         if (existing != null) {
-             replacedExisting = true
--            activeHandles.remove(existing.id)?.cancel()
--            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
--            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
++        val now = DownloadsClock.nowEpochMs()
++        val logicalKey = buildLogicalKey(
++            parentMetaId = parentMetaId,
++            seasonNumber = seasonNumber,
++            episodeNumber = episodeNumber,
++        )
++
++        var replacedExisting = false
++        val currentItems = _uiState.value.items.toMutableList()
++        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
++        if (existing != null) {
++            replacedExisting = true
 +            abandonDownload(existing)
              currentItems.removeAll { it.id == existing.id }
          }
  
-@@ -152,6 +649,7 @@ object DownloadsRepository {
+@@ -152,6 +643,7 @@ object DownloadsRepository {
              episodeTitle = episodeTitle,
              fallbackTitle = stream.streamLabel,
              sourceUrl = sourceUrl,
@@ -6018,7 +6019,7 @@ index b0440dc8..5f7c0216 100644
              nowEpochMs = now,
          )
  
-@@ -201,9 +699,17 @@ object DownloadsRepository {
+@@ -201,9 +693,17 @@ object DownloadsRepository {
      fun pauseDownload(downloadId: String) {
          ensureLoaded()
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
@@ -6038,7 +6039,7 @@ index b0440dc8..5f7c0216 100644
          mutateItem(downloadId) { current ->
              current.copy(
                  status = DownloadStatus.Paused,
-@@ -211,6 +717,7 @@ object DownloadsRepository {
+@@ -211,6 +711,7 @@ object DownloadsRepository {
                  errorMessage = null,
              )
          }
@@ -6046,7 +6047,7 @@ index b0440dc8..5f7c0216 100644
      }
  
      fun pauseActiveDownloads() {
-@@ -224,6 +731,7 @@ object DownloadsRepository {
+@@ -224,6 +725,7 @@ object DownloadsRepository {
      fun resumeDownload(downloadId: String) {
          ensureLoaded()
          val item = _uiState.value.items.firstOrNull { it.id == downloadId } ?: return
@@ -6054,7 +6055,7 @@ index b0440dc8..5f7c0216 100644
          if (item.status != DownloadStatus.Paused && item.status != DownloadStatus.Failed) return
  
          val reset = item.copy(
-@@ -244,14 +752,25 @@ object DownloadsRepository {
+@@ -244,14 +746,25 @@ object DownloadsRepository {
  
      fun cancelDownload(downloadId: String) {
          ensureLoaded()
@@ -6082,7 +6083,7 @@ index b0440dc8..5f7c0216 100644
      }
  
      private fun loadFromDisk() {
-@@ -264,11 +783,40 @@ object DownloadsRepository {
+@@ -264,11 +777,40 @@ object DownloadsRepository {
          }
  
          var shouldPersistNormalized = false
@@ -6125,7 +6126,7 @@ index b0440dc8..5f7c0216 100644
                          errorMessage = null,
                      )
                  } else {
-@@ -287,89 +835,349 @@ object DownloadsRepository {
+@@ -287,89 +829,356 @@ object DownloadsRepository {
          if (shouldPersistNormalized) {
              persist()
          }
@@ -6267,7 +6268,8 @@ index b0440dc8..5f7c0216 100644
 +        val shouldPump = schedulerLocked {
 +            if (schedulerPumping) {
 +                false
-+            } else {
+             } else {
+-                item
 +                schedulerPumping = true
 +                true
 +            }
@@ -6327,12 +6329,14 @@ index b0440dc8..5f7c0216 100644
 +                    result = candidate
 +                }
 +                result
-+            }
+             }
 +            if (next == null) break
 +            launchPlatformDownload(next)
-+        }
+         }
 +    }
-+
+ 
+-        if (changed) {
+-            publish(updated)
 +    private fun abandonDownload(item: DownloadItem) {
 +        schedulerLocked {
 +            activeHandles.remove(item.id)?.cancel()
@@ -6351,8 +6355,7 @@ index b0440dc8..5f7c0216 100644
 +        mutateItemThrottled(downloadId) { current ->
 +            if (current.status != DownloadStatus.Downloading) {
 +                current
-             } else {
--                item
++            } else {
 +                current.copy(
 +                    downloadedBytes = downloadedBytes.coerceAtLeast(0L),
 +                    totalBytes = totalBytes?.takeIf { it > 0L },
@@ -6371,13 +6374,11 @@ index b0440dc8..5f7c0216 100644
 +                    totalBytes = totalBytes?.takeIf { it > 0L },
 +                )
 +                current + (downloadId to itemProgress)
-             }
-         }
++            }
++        }
 +        notifyLiveStatusPlatform()
 +    }
- 
--        if (changed) {
--            publish(updated)
++
 +    private fun handleTrackProgress(downloadId: String, trackName: String, downloadedBytes: Long, totalBytes: Long?) {
 +        val currentItem = _uiState.value.items.firstOrNull { it.id == downloadId }
 +        if (currentItem?.status == DownloadStatus.Downloading) {
@@ -6450,23 +6451,30 @@ index b0440dc8..5f7c0216 100644
 +            )
 +        }
 +        schedulerLocked {
-+            processingRemovalJobs[downloadId] = scope.launch {
-+                delay(1500L)
-+                _processingItemIds.update { it - downloadId }
++            processingRemovalJobs.remove(downloadId)?.cancel()
++        }
++        val removalJob = scope.launch {
++            delay(1500L)
++            _processingItemIds.update { it - downloadId }
++            schedulerLocked {
 +                processingRemovalJobs.remove(downloadId)
 +            }
 +        }
++        schedulerLocked {
++            processingRemovalJobs[downloadId] = removalJob
++        }
 +    }
 +
-+    private fun handleDownloadFailure(downloadId: String, displayTitle: String, message: String) {
++    private suspend fun handleDownloadFailure(downloadId: String, displayTitle: String, message: String) {
 +        schedulerLocked {
 +            activeHandles.remove(downloadId)
 +            processingRemovalJobs.remove(downloadId)?.cancel()
 +        }
 +        _trackProgress.update { it - downloadId }
 +        _processingItemIds.update { it - downloadId }
-+        val failureMessage = message.ifBlank { runBlocking { getString(Res.string.download_failed) } }
-+        NuvioToastController.show(runBlocking { getString(Res.string.download_failed) } + ": " + displayTitle)
++        val genericFailure = getString(Res.string.download_failed)
++        val failureMessage = message.ifBlank { genericFailure }
++        NuvioToastController.show("$genericFailure: $displayTitle")
 +        mutateItem(downloadId) { current ->
 +            if (current.status != DownloadStatus.Downloading && current.status != DownloadStatus.Processing) {
 +                current
@@ -6522,12 +6530,11 @@ index b0440dc8..5f7c0216 100644
      }
  
      private fun publish(items: List<DownloadItem>) {
-@@ -379,15 +1187,29 @@ object DownloadsRepository {
+@@ -379,15 +1188,27 @@ object DownloadsRepository {
          notifyLiveStatusPlatform()
      }
  
-+    @Volatile
-+    private var notifyScheduled = false
++    private val notifyScheduled = AtomicBoolean(false)
 +
 +    /**
 +     * Notifica lo stato alla piattaforma sempre dal thread Main e in modalità
@@ -6538,10 +6545,9 @@ index b0440dc8..5f7c0216 100644
      private fun notifyLiveStatusPlatform() {
 -        runCatching {
 -            DownloadsLiveStatusPlatform.onItemsChanged(_uiState.value.items)
-+        if (notifyScheduled) return
-+        notifyScheduled = true
++        if (!notifyScheduled.compareAndSet(false, true)) return
 +        scope.launch {
-+            notifyScheduled = false
++            notifyScheduled.set(false)
 +            runCatching {
 +                DownloadsLiveStatusPlatform.onItemsChanged(_uiState.value.items)
 +            }
@@ -6555,7 +6561,7 @@ index b0440dc8..5f7c0216 100644
          )
      }
  
-@@ -478,7 +1300,7 @@ private fun sanitizeResponseHeaders(headers: Map<String, String>?): Map<String,
+@@ -478,7 +1299,7 @@ private fun sanitizeResponseHeaders(headers: Map<String, String>?): Map<String,
          }
          .toMap()
  
@@ -6564,7 +6570,7 @@ index b0440dc8..5f7c0216 100644
      parentMetaId: String,
      seasonNumber: Int?,
      episodeNumber: Int?,
-@@ -495,6 +1317,7 @@ private fun buildFileName(
+@@ -495,6 +1316,7 @@ private fun buildFileName(
      episodeTitle: String?,
      fallbackTitle: String,
      sourceUrl: String,
@@ -6572,7 +6578,7 @@ index b0440dc8..5f7c0216 100644
      nowEpochMs: Long,
  ): String {
      val baseTitle = if (seasonNumber != null && episodeNumber != null) {
-@@ -513,7 +1336,7 @@ private fun buildFileName(
+@@ -513,7 +1335,7 @@ private fun buildFileName(
          title.ifBlank { fallbackTitle }
      }
  
@@ -6581,7 +6587,7 @@ index b0440dc8..5f7c0216 100644
      return buildString {
          append(baseTitle.sanitizeFileName().ifBlank { "download" }.take(92))
          append('_')
-@@ -523,6 +1346,44 @@ private fun buildFileName(
+@@ -523,6 +1345,44 @@ private fun buildFileName(
      }
  }
  
@@ -6626,7 +6632,7 @@ index b0440dc8..5f7c0216 100644
  private fun String.sanitizeFileName(): String =
      trim().replace(Regex("[^A-Za-z0-9._ -]"), "_")
  
-@@ -542,8 +1403,22 @@ private fun String.fileExtensionFromUrl(): String {
+@@ -542,8 +1402,22 @@ private fun String.fileExtensionFromUrl(): String {
  private fun String.isSupportedDownloadUrl(): Boolean {
      val normalized = trim().lowercase()
      if (normalized.startsWith("magnet:")) return false
@@ -7656,10 +7662,10 @@ index 00000000..5bf68166
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 00000000..4b5a0304
+index 00000000..78a58613
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
-@@ -0,0 +1,490 @@
+@@ -0,0 +1,481 @@
 +package com.nuvio.app.features.downloads
 +
 +internal sealed interface HlsPlaylist {
@@ -8045,7 +8051,10 @@ index 00000000..4b5a0304
 +                    val resolution = attrs["RESOLUTION"]
 +                    val codecs = attrs["CODECS"]
 +                    i++
-+                    val urlLine = resolveUrl(lines.getOrNull(i)?.trim().orEmpty(), baseUrl)
++                    // resolveHlsUrl gestisce correttamente path assoluti (/...),
++                    // URL relativi, ".." e query/fragment (resolveUrl no).
++                    val rawUrlLine = lines.getOrNull(i)?.trim().orEmpty()
++                    val urlLine = if (rawUrlLine.isBlank()) "" else resolveHlsUrl(rawUrlLine, baseUrl)
 +                    if (urlLine.isNotBlank() && !urlLine.startsWith("#")) {
 +                        variants.add(HlsVariant(url = urlLine, bandwidth = bandwidth, resolution = resolution, codecs = codecs))
 +                    }
@@ -8056,7 +8065,8 @@ index 00000000..4b5a0304
 +                    val groupId = attrs["GROUP-ID"]?.trim() ?: ""
 +                    val name = removeQuotes(attrs["NAME"]?.trim().orEmpty())
 +                    val language = attrs["LANGUAGE"]?.trim()?.let { removeQuotes(it) }
-+                    val uri = attrs["URI"]?.trim()?.let { resolveUrl(removeQuotes(it), baseUrl) }
++                    val uri = attrs["URI"]?.trim()?.takeIf { it.isNotBlank() }
++                        ?.let { resolveHlsUrl(removeQuotes(it), baseUrl) }
 +                    val isDefault = attrs["DEFAULT"]?.trim()?.uppercase() == "YES"
 +                    val isForced = attrs["FORCED"]?.trim()?.uppercase() == "YES"
 +
@@ -8136,19 +8146,6 @@ index 00000000..4b5a0304
 +
 +    private fun removeQuotes(value: String): String =
 +        value.trim().removeSurrounding("\"")
-+
-+    fun resolveUrl(relative: String, baseUrl: String): String {
-+        val trimmed = relative.trim()
-+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
-+        if (trimmed.isBlank()) return trimmed
-+        val base = baseUrl.trimEnd('/')
-+        val basePath = if (base.contains('/')) {
-+            base.substringBeforeLast('/')
-+        } else {
-+            base
-+        }
-+        return "$basePath/$trimmed"
-+    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 index 5b4e16ac..8f622d7b 100644
@@ -8419,7 +8416,7 @@ index 00000000..602b8e1b
 +
 +var globalNetworkSettingsRepository: NetworkSettingsRepository? = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index d6f6f988..d455d1da 100644
+index d6f6f988..50a4029a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 @@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -8433,15 +8430,24 @@ index d6f6f988..d455d1da 100644
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import androidx.compose.material3.ExperimentalMaterial3Api
-@@ -161,6 +164,7 @@ fun StreamsScreen(
+@@ -160,7 +163,16 @@ fun StreamsScreen(
+     val clipboardManager = LocalClipboardManager.current
      val streamLinkCopiedText = stringResource(Res.string.streams_link_copied)
      val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
++    // Messaggi di esito enqueue pre-caricati (niente runBlocking nei callback).
++    val downloadsEnqueueToastMessages = mapOf(
++        DownloadEnqueueResult.Started to stringResource(Res.string.downloads_enqueue_started),
++        DownloadEnqueueResult.Replaced to stringResource(Res.string.downloads_enqueue_replaced),
++        DownloadEnqueueResult.MissingUrl to stringResource(Res.string.downloads_enqueue_missing_url),
++        DownloadEnqueueResult.UnsupportedFormat to stringResource(Res.string.downloads_enqueue_unsupported_format),
++        DownloadEnqueueResult.HlsNeedsSelection to "",
++    )
      var streamActionsTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
 +    var hlsDownloadTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
      val downloadScope = rememberCoroutineScope()
      var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
      var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
-@@ -402,57 +406,66 @@ fun StreamsScreen(
+@@ -402,57 +414,66 @@ fun StreamsScreen(
                  }
              },
              onDownload = { stream ->
@@ -8459,32 +8465,7 @@ index d6f6f988..d455d1da 100644
 -                            stream = stream,
 -                            season = seasonNumber,
 -                            episode = episodeNumber,
-+                        val effectiveStream = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
-+                            val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
-+                                stream = stream,
-+                                season = seasonNumber,
-+                                episode = episodeNumber,
-+                            )
-+                            when (resolved) {
-+                                is DirectDebridPlayableResult.Success -> resolved.stream
-+                                else -> {
-+                                    val message = resolved.toastMessage()
-+                                    if (message != null) {
-+                                        NuvioToastController.show(message)
-+                                    }
-+                                    return@launch
-+                                }
-+                            }
-+                        } else {
-+                            stream
-+                        }
-+
-+                        val resolvedUrl = effectiveStream.playableDirectUrl.orEmpty()
-+                        val isHlsStream = resolvedUrl.isNotBlank() && (
-+                            HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
-+                            HlsPlaylistParser.isHlsStream(effectiveStream.streamType) ||
-+                            DownloadsRepository.probeIsHls(effectiveStream)
-                         )
+-                        )
 -                        when (resolved) {
 -                            is DirectDebridPlayableResult.Success -> {
 -                                val result = DownloadsRepository.enqueueFromStream(
@@ -8502,6 +8483,38 @@ index d6f6f988..d455d1da 100644
 -                                    episodeThumbnail = episodeThumbnail,
 -                                    stream = resolved.stream,
 -                                )
+-                                NuvioToastController.show(result.toastMessage())
+-                            }
+-                            else -> {
+-                                val message = resolved.toastMessage()
+-                                if (message != null) {
+-                                    NuvioToastController.show(message)
++                        val effectiveStream = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
++                            val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
++                                stream = stream,
++                                season = seasonNumber,
++                                episode = episodeNumber,
++                            )
++                            when (resolved) {
++                                is DirectDebridPlayableResult.Success -> resolved.stream
++                                else -> {
++                                    val message = resolved.toastMessage()
++                                    if (message != null) {
++                                        NuvioToastController.show(message)
++                                    }
++                                    return@launch
+                                 }
+                             }
++                        } else {
++                            stream
++                        }
++
++                        val resolvedUrl = effectiveStream.playableDirectUrl.orEmpty()
++                        val isHlsStream = resolvedUrl.isNotBlank() && (
++                            HlsPlaylistParser.isHlsUrl(resolvedUrl) ||
++                            HlsPlaylistParser.isHlsStream(effectiveStream.streamType) ||
++                            DownloadsRepository.probeIsHls(effectiveStream)
++                        )
 +                        if (isHlsStream) {
 +                            hlsDownloadTarget = effectiveStream
 +                        } else {
@@ -8523,14 +8536,8 @@ index d6f6f988..d455d1da 100644
 +                            if (result == DownloadEnqueueResult.HlsNeedsSelection) {
 +                                hlsDownloadTarget = effectiveStream
 +                            } else {
-                                 NuvioToastController.show(result.toastMessage())
-                             }
--                            else -> {
--                                val message = resolved.toastMessage()
--                                if (message != null) {
--                                    NuvioToastController.show(message)
--                                }
--                            }
++                                NuvioToastController.show(downloadsEnqueueToastMessages[result] ?: "")
++                            }
                          }
                      }
 -                } else {
@@ -8553,7 +8560,7 @@ index d6f6f988..d455d1da 100644
                  }
              },
              onOpen = { stream, openExternally ->
-@@ -464,6 +477,32 @@ fun StreamsScreen(
+@@ -464,6 +485,32 @@ fun StreamsScreen(
                  )
              },
          )
@@ -8579,7 +8586,7 @@ index d6f6f988..d455d1da 100644
 +                    stream = stream,
 +                    selection = selection,
 +                )
-+                NuvioToastController.show(result.toastMessage())
++                NuvioToastController.show(downloadsEnqueueToastMessages[result] ?: "")
 +                hlsDownloadTarget = null
 +            },
 +        )
