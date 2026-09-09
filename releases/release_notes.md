@@ -1,5 +1,25 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.14.24
+
+### 🔧 Hardening del sottosistema Download (bug report interno)
+Risolti 11 problemi individuati nell'analisi del codice di download:
+
+- **B-01 – Spin-lock eliminato**: il lock dello scheduler usava un busy-wait su `Mutex.tryLock()` (consumo CPU e rischio race). Sostituito con `synchronized` JVM (rientrante, sezioni critiche brevi).
+- **B-02 – SSL trust-all rimosso**: i download non accettano più certificati arbitrari con verifica hostname disabilitata (rischio MITM). Ora il client usa la PKI di sistema Android.
+- **B-03 – Niente più `runBlocking` su Main in caso di failure**: `handleDownloadFailure` è ora suspend e usa una sola stringa precaricata (niente UI bloccata, messaggi coerenti).
+- **B-04 – Race `notifyScheduled` eliminata**: coalescing delle notifiche ora con `AtomicBoolean.compareAndSet` (niente doppie notifiche concorrenti).
+- **B-05 – Fetch playlist HLS fuori dal Main**: `fetchHlsMasterPlaylist` è ora `suspend` con HTTP su `Dispatchers.IO`.
+- **B-06 – Validazione MP4 binaria**: la ricerca dell'atom `moov` ora è binaria (fourCC) invece di `decodeToString()` UTF-8, che produceva falsi negativi su file MP4.
+- **B-07 – URL HLS con path assoluti**: sostituito il resolver difettoso con `resolveHlsUrl` che gestisce path `/assoluti`, `..` e query (niente più 400/404 su CDN).
+- **B-08 – Coda persa a riavvio**: la pending queue ora viene salvata subito dopo l'accodamento (prima c'era una finestra di crash che perdeva l'episodio).
+- **B-09 – `runBlocking` nei toast rimossi**: i messaggi di esito enqueue sono precaricati via `stringResource` nei context composable.
+- **B-10 – Job di cleanup fuori dal lock**: il lancio della coroutine di rimozione "Processing" non avviene più dentro `schedulerLocked`.
+- **B-11 – MIME audio reale nel remux**: il muxer usa il codec effettivo estratto (Opus/AC3/EAC3/AAC) invece di forzare sempre `AUDIO_AAC`.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.14.24` (versionCode `145`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.14.23
 
 ### 🗑️ Cancellazione con conferma dal pulsante "Scaricato" (✓)
