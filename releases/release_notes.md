@@ -1,3 +1,16 @@
+# Note di rilascio — Nuvio Plus Mobile
+
+## Novità in Nuvio Plus Mobile 0.4.14.22
+
+### 🛡️ Download Debrid Cached: niente più crash a fine download e episodi mai persi
+
+- **Pipeline HLS riscritta**: un segmento che fallisce in ritardo (CDN debrid che tronca la connessione dopo l'ultimo byte) non fa più fallire l'intero download già completo. Prima un segmento "pigro" poteva generare un errore proprio alla fine → download fallito o porta di crash. Ora ogni segmento consegna successo o errore una sola volta e il motore scrive su disco in modo deterministico: se tutti i byte sono arrivati, il file viene finalizzato.
+- **Fallback automatico riparato**: quando uno stream falliva in partenza, la riga NON tornava più allo stato di placeholder → il candidato successivo non trovava la riga e l'episodio spariva o restava bloccato ("scaricato e non salvato"). Ora il fallback ripristina correttamente la riga e prova lo stream successivo.
+- **Retry automatico dei download falliti a metà**: se un download parte ma fallisce durante il trasferimento (CDN instabile, playlist scaduta), l'episodio viene riaccedato automaticamente UNA volta con nuova ricerca stream invece di restare "Failed" in lista.
+- **Worker di coda resiliente**: gli errori non gestiti non cancellano più la riga né fermano la coda: l'episodio resta visibile e il worker riprova (fino a 3 tentativi), poi lascia la riga con messaggio esplicito. Niente più episodi che "spariscono in silenzio".
+- **Righe orfane recuperate all'avvio**: eventuali download bloccati senza sorgente vengono marcati come falliti con messaggio chiaro (prima ripartivano all'infinito o restavano "in coda" per sempre).
+- **Firma e integrità**: versione pulita `0.4.14.22` (versionCode `143`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.14.21
 
 ### 📡 Download HLS: retry automatico su 403/502 e gestione CDN instabili
