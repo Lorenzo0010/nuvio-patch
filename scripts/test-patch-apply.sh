@@ -23,7 +23,15 @@ trap cleanup EXIT
 
 echo "Clonazione upstream ($UPSTREAM_URL, branch: $UPSTREAM_BRANCH)..."
 export GIT_LFS_SKIP_SMUDGE=1
-git clone --branch "$UPSTREAM_BRANCH" "$UPSTREAM_URL" "$TEST_DIR" --depth 50 --quiet
+# Clone con storia completa: git apply --3way richiede i blobs degli antenati,
+# che un clone shallow non contiene.
+git clone --branch "$UPSTREAM_BRANCH" "$UPSTREAM_URL" "$TEST_DIR" --quiet
+
+PIN_SHA=$(head -n 1 "${SCRIPT_DIR}/../.last_built_upstream_sha" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$PIN_SHA" ]; then
+    echo "Pinning upstream allo SHA: $PIN_SHA (da .last_built_upstream_sha)..."
+    git -C "$TEST_DIR" checkout "$PIN_SHA" --quiet
+fi
 
 cd "$TEST_DIR"
 

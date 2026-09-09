@@ -17,7 +17,22 @@ New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 try {
     Write-Host "Clonazione upstream ($UpstreamUrl, branch: $UpstreamBranch)..." -ForegroundColor Yellow
     $env:GIT_LFS_SKIP_SMUDGE = "1"
-    git clone --branch $UpstreamBranch $UpstreamUrl $testDir --depth 500 --quiet
+    # Clone con storia completa: git apply --3way richiede i blobs degli antenati,
+    # che un clone shallow non contiene.
+    git clone --branch $UpstreamBranch $UpstreamUrl $testDir --quiet
+
+    $pinSha = (Get-Content (Join-Path $PSScriptRoot "..\.last_built_upstream_sha") -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
+    if ($pinSha) {
+        Write-Host "Pinning upstream allo SHA: $pinSha (da .last_built_upstream_sha)..." -ForegroundColor Yellow
+        Push-Location $testDir
+        git checkout $pinSha --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Pop-Location
+            Write-Error "Impossibile fare checkout dello SHA pinnato $pinSha"
+            return
+        }
+        Pop-Location
+    }
     
     Push-Location $testDir
 
