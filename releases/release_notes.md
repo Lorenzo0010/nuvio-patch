@@ -1,5 +1,17 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.1
+
+### ⬆️ Porting su base upstream 0.4.15 (100% upstream + patch Plus)
+- **Nuovo sistema di download in background upstream**: i download HTTP/HTTPS diretti usano ora `AndroidDownloadScheduler` con store persistente su disco, retry automatici e User-Initiated Jobs su Android 14+ (`DownloadsTransferJobService`) / WorkManager (`DownloadsTransferWorker`) sulle versioni precedenti.
+- **Download HLS Plus invariati**: gli stream `.m3u8` continuano a usare il motore Plus (download parallelo segmenti, decrypt AES-128, remux MP4, selezione tracce audio/sottotitoli, coda dinamica, progress per traccia, notifiche con tasti Pausa/Riprendi).
+- **Coda dinamica e tasti preservati**: pausa/ripresa/annullamento e coda FIFO Plus funzionano sopra il nuovo scheduler; le notifiche mostrano i tasti e il progresso per traccia.
+- **Nuove funzioni upstream integrate**: editor temi personalizzati (gradienti/colori custom), disponibilità riproduzione (`PlaybackAvailability`: il tasto Play si disabilita quando non c'è sorgente), resume position condiviso, lingua russa, miglioramenti home/player/sottotitoli (risoluzione formati off-main-thread).
+- **Bugfix player**: rimossi i duplicati del resolver MIME sottotitoli (ora si usa `PlaybackSubtitleMime` upstream), ripristinato il cleanup libass (`releaseWithAssSupportCompat`), risoluzione item media in `LaunchedEffect` (niente più rete sul Main thread).
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.1` (versionCode `146`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.14.24
 
 ### 🔧 Hardening del sottosistema Download (bug report interno)

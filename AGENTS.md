@@ -9,6 +9,20 @@ Mantenere il fork e le patch personalizzate perfettamente allineate con l'upstre
 
 ---
 
+## ⚖️ Regola di Completezza Funzionale (Rielaborazione Patch)
+
+1. **Risultato = 100% Upstream + Patch**: Il prodotto finale (le APK e la copia di lavoro `NuvioMobile/`) deve contenere **sempre il 100% delle funzioni dell'app originale upstream** e **in aggiunta** tutte le funzioni introdotte dalle patch Plus richieste dall'utente (Live TV, download HLS, updater, widget, prefetch, branding, ecc.). Nessuna funzione di base dell'app originale deve essere persa, oscurata, sostituita o degradata dalle patch.
+2. **Funzioni presenti o aggiunte dall'Upstream con una nostra patch**: Se una funzione esiste già, oppure viene aggiunta successivamente nel repository upstream, e su quella stessa funzione noi avevamo realizzato una patch, il risultato deve essere:
+   - **il 100% della funzionalità del repository originale** basata sul codice ufficiale più aggiornato (con relativi bugfix/ottimizzazioni upstream),
+   - **più una rielaborazione delle nostre patch** per ottenere gli stessi risultati/comportamenti Plus richiesti dall'utente, senza sovrapposizioni né conflitti con il codice upstream.
+3. **Obbligo di Rielaborazione delle Patch**: Quando l'upstream modifica o aggiunge codice riguardante una funzione toccata da una nostra patch, l'agente **non** deve semplicemente scartare il codice upstream né sovrascriverlo ciecamente: deve **rielaborare/reintegrare la patch** affinché:
+   - le funzioni di base dell'app restino quelle originali/aggiornate upstream;
+   - le funzioni Plus richieste continuino a essere presenti, visibili e funzionanti;
+   - il risultato sia **funzionante al 100%** (compila, non regredisce e non perde alcuna feature).
+4. **Visibilità per l'Utente Finale**: nell'app installata l'utente deve sempre vedere **le funzioni di base dell'app + quelle aggiunte dalle patch che ha richiesto** (`base + Plus`). Se un aggiornamento upstream rende una patch obsoleta o in conflitto, l'agente deve rielaborarla — riscrivendo se necessario parti della patch — per mantenere invariato quel comportamento completo, senza rimuovere o degradare nulla.
+
+---
+
 ## 🔗 Repository Collegati (Ecosistema Nuvio Plus)
 Questo repository (`Nuvio Mobile` / `nuvio-patch`) e il repository Desktop (`F:\GitHub\nuviodesktop`, `Nuvio Desktop` / `nuvio-desktop-patch`) sono **strettamente collegati** e formano l'ecosistema multipiattaforma **Nuvio Plus**:
 - **Mobile / Android**: `F:\GitHub\nuvio` (Remote fork: `Lorenzo0010/nuvio-patch`, Upstream: `https://github.com/NuvioMedia/NuvioMobile.git`, branch `cmp-rewrite`)
@@ -164,6 +178,7 @@ Copy-Item androidApp\build\outputs\apk\full\release\androidApp-full-x86-release.
 - [ ] Sviluppato in `NuvioMobile/`; nuovi file aggiunti alla lista `$filesNN` dello script di rigenerazione
 - [ ] Patch rigenerate (`update-patch-*.ps1` / `generate-patch-06.ps1`) e testate (`test-patch-apply.ps1`)
 - [ ] Regola di versionamento rispettata: `X.Y.Z` da upstream, `.W` dall'utente; versione effettiva via patch 07
+- [ ] Completezza funzionale: risultato = 100% upstream + patch rielaborate; funzioni base e Plus richieste tutte presenti, visibili e funzionanti (`base + Plus`)
 - [ ] Nessun suffisso/hash in versione, tag (`<versione>`) e nomi APK (`nuvio_plus_<versione>_<abi>.apk`)
 - [ ] `local.properties` presente nella dir di build (mai committato); firma = keystore persistente
 - [ ] Build con `.\gradlew.bat :androidApp:assembleFullRelease`; verificati `applicationId`/`versionName`/`versionCode`

@@ -1,8 +1,13 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
-index c46b828a..9530dcf8 100644
+index 1bf51ef9..ef04f94a 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt
-@@ -300,7 +300,11 @@ private fun ExoPlayerSurface(
+@@ -294,11 +294,16 @@ private fun ExoPlayerSurface(
+             }
+             .build()
+     }
++
+     var probeAttempted by remember(playerSourceKey) { mutableStateOf(false) }
  
      val extractorsFactory = remember {
          DefaultExtractorsFactory()
@@ -15,11 +20,40 @@ index c46b828a..9530dcf8 100644
              .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
      }
      val dataSourceFactory = remember(
+@@ -574,9 +579,25 @@ private fun ExoPlayerSurface(
+                         }
+                         if (probedMime != null) {
+                             Log.d(TAG, "Playback failed with source error. Probed MIME type: $probedMime. Retrying...")
+-                            resolvedMediaItem = resolvedMediaItem?.buildUpon()
+-                                ?.setMimeType(probedMime)
+-                                ?.build()
++                            resolvedMediaItem = MediaItem.Builder()
++                                .setUri(sourceUrl)
++                                .setMimeType(probedMime)
++                                .setMediaId(sourceUrl)
++                                .apply {
++                                    val subtitleConfigs = externalSubtitles.map { subtitle ->
++                                        val mimeType = resolveSubtitleMimeType(subtitle.url, subtitle.headers)
++                                        MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
++                                            .setMimeType(mimeType)
++                                            .setLanguage(subtitle.language)
++                                            .setLabel(subtitle.name ?: subtitle.language)
++                                            .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
++                                            .build()
++                                    }
++                                    if (subtitleConfigs.isNotEmpty()) {
++                                        setSubtitleConfigurations(subtitleConfigs)
++                                    }
++                                }
++                                .build()
+                             latestOnError.value(null)
+                             return@launch
+                         }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
-index 0cfa80aa..61d0dbb1 100644
+index e104f21c..61d0dbb1 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt
-@@ -5,9 +5,12 @@ import android.app.NotificationManager
+@@ -5,10 +5,12 @@ import android.app.NotificationManager
  import android.app.Service
  import android.content.Context
  import android.content.Intent
@@ -27,14 +61,26 @@ index 0cfa80aa..61d0dbb1 100644
  import android.os.Build
  import android.os.IBinder
  import android.util.Log
+-import androidx.core.content.IntentCompat
 +import androidx.core.app.ServiceCompat
 +import com.nuvio.app.R
  import com.nuvio.app.core.build.AppFeaturePolicy
  import com.nuvio.app.core.concurrent.ConflatedTaskDispatcher
  import java.util.concurrent.Executors
-@@ -29,13 +32,19 @@ class PlayerNowPlayingService : Service() {
+@@ -18,7 +20,6 @@ internal const val NOW_PLAYING_TAG = "NuvioNowPlaying"
+ internal const val NOW_PLAYING_CHANNEL_ID = "nuvio_playback"
+ internal const val NOW_PLAYING_NOTIFICATION_ID = 0x4E55
+ private const val ACTION_START_FOREGROUND = "com.nuvio.app.nowplaying.START_FOREGROUND"
+-private const val EXTRA_START_NOTIFICATION = "com.nuvio.app.nowplaying.START_NOTIFICATION"
  
-         val startNotification = PlayerNowPlayingServiceState.consumeStartNotification()
+ class PlayerNowPlayingService : Service() {
+     override fun onBind(intent: Intent?): IBinder? = null
+@@ -29,15 +30,21 @@ class PlayerNowPlayingService : Service() {
+             return START_NOT_STICKY
+         }
+ 
+-        val startNotification = IntentCompat.getParcelableExtra(intent, EXTRA_START_NOTIFICATION, Notification::class.java)
++        val startNotification = PlayerNowPlayingServiceState.consumeStartNotification()
              ?: PlayerNowPlayingServiceState.notification
 -        if (startNotification == null) {
 -            stopSelf(startId)
@@ -57,7 +103,7 @@ index 0cfa80aa..61d0dbb1 100644
          }.onFailure { error ->
              Log.w(NOW_PLAYING_TAG, "Unable to promote playback service", error)
          }.isSuccess
-@@ -54,6 +63,20 @@ class PlayerNowPlayingService : Service() {
+@@ -56,6 +63,20 @@ class PlayerNowPlayingService : Service() {
          return START_NOT_STICKY
      }
  
@@ -78,6 +124,43 @@ index 0cfa80aa..61d0dbb1 100644
      override fun onDestroy() {
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
              stopForeground(STOP_FOREGROUND_REMOVE)
+@@ -125,9 +146,9 @@ private object PlayerNowPlayingServiceController {
+     private fun publishNow(command: PlayerNowPlayingServiceCommand.Publish) {
+         if (PlayerNowPlayingServiceState.notification !== command.notification) return
+         if (startRequested.compareAndSet(false, true)) {
++            PlayerNowPlayingServiceState.pendingStartNotification = command.notification
+             val intent = Intent(command.context, PlayerNowPlayingService::class.java)
+                 .setAction(ACTION_START_FOREGROUND)
+-                .putExtra(EXTRA_START_NOTIFICATION, command.notification)
+             val started = runCatching {
+                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                     command.context.startForegroundService(intent)
+@@ -138,6 +159,7 @@ private object PlayerNowPlayingServiceController {
+                 Log.w(NOW_PLAYING_TAG, "Unable to start playback service", error)
+             }.isSuccess
+             if (!started) {
++                PlayerNowPlayingServiceState.clearPendingStartNotification(command.notification)
+                 startRequested.set(false)
+                 return
+             }
+@@ -171,4 +193,17 @@ private object PlayerNowPlayingServiceController {
+ private object PlayerNowPlayingServiceState {
+     @Volatile
+     var notification: Notification? = null
++
++    @Volatile
++    var pendingStartNotification: Notification? = null
++
++    fun consumeStartNotification(): Notification? = synchronized(this) {
++        pendingStartNotification.also { pendingStartNotification = null }
++    }
++
++    fun clearPendingStartNotification(notification: Notification) = synchronized(this) {
++        if (pendingStartNotification === notification) {
++            pendingStartNotification = null
++        }
++    }
+ }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt
 index 29da4ad2..18673abc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt
@@ -174,12 +257,12 @@ index 391966fc..68d40118 100644
                  modifier = Modifier.fillMaxSize(),
              ) {
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index 4e1952e2..f2c37773 100644
+index cba08104..c82f8e80 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
--CURRENT_PROJECT_VERSION=118
--MARKETING_VERSION=0.4.14
-+CURRENT_PROJECT_VERSION=142
-+MARKETING_VERSION=0.4.14.21
+-CURRENT_PROJECT_VERSION=120
+-MARKETING_VERSION=0.4.15
++CURRENT_PROJECT_VERSION=146
++MARKETING_VERSION=0.4.15.1
 \ No newline at end of file

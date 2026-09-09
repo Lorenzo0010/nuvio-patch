@@ -13,13 +13,13 @@ $files04 = @(
     "androidApp/build.gradle.kts",
     "androidApp/src/main/AndroidManifest.xml",
     "composeApp/build.gradle.kts",
+    "composeApp/src/androidMain/AndroidManifest.xml",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt",
-    "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt",
     "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt",
@@ -70,6 +70,12 @@ $files04 = @(
     "gradle/libs.versions.toml"
 )
 
+# File NUOVI aggiunti dall'upstream 0.4.15 ("background downloads" con JobService/
+# WorkManager): vengono MANTENUTI integralmente. Coesistono con il sistema HLS Plus:
+# i download HTTP/HTTPS diretti usano AndroidDownloadScheduler (0.4.15), i download
+# HLS (.m3u8) usano HlsDownloadEngine/DownloadsForegroundService (Plus).
+$files04Deleted = @()
+
 try {
     Write-Host "Clonazione upstream ($UpstreamUrl, branch: $UpstreamBranch)..." -ForegroundColor Yellow
     $env:GIT_LFS_SKIP_SMUDGE = "1"
@@ -104,6 +110,14 @@ try {
     Write-Host "Copia file aggiornati da NuvioMobile..." -ForegroundColor Yellow
     foreach ($rel in $files04) {
         $src = Join-Path $NuvioMobileDir ($rel -replace '/', '\')
+        if (-not (Test-Path $src)) {
+            # File rimosso dal working copy (es. file upstream sostituiti):
+            # lo eliminiamo dal worktree del tree di generazione (niente stage:
+            # la deletion deve comparire nel git diff unstaged della patch).
+            Write-Host "  DEL: $rel" -ForegroundColor Gray
+            Remove-Item -Path (Join-Path $testDir ($rel -replace '/', '\')) -Force -ErrorAction SilentlyContinue
+            continue
+        }
         $dst = Join-Path $testDir ($rel -replace '/', '\')
         $dstDir = Split-Path $dst -Parent
         if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
@@ -111,9 +125,13 @@ try {
     }
 
     git add -N .
+    foreach ($rel in $files04Deleted) {
+        Write-Host "  DEL: $rel" -ForegroundColor Gray
+        Remove-Item -Path (Join-Path $testDir ($rel -replace '/', '\')) -Force -ErrorAction SilentlyContinue
+    }
     $patch04Path = Join-Path $PatchesDir "04-plugin-hls-downloads.patch"
     Write-Host "Generazione git diff per 04-plugin-hls-downloads.patch..." -ForegroundColor Yellow
-    git diff --binary "--output=$patch04Path" -- $files04
+    git diff --binary "--output=$patch04Path" -- ($files04 + $files04Deleted)
     Write-Host "Patch 04 aggiornata con successo! Dimensione: $((Get-Item $patch04Path).Length) bytes" -ForegroundColor Green
 
 } finally {

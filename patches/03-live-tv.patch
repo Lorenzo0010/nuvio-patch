@@ -1,4 +1,4 @@
-From 0a5cb495db47c609951178486ac869a8d1eadfbb Mon Sep 17 00:00:00 2001
+﻿From 0a5cb495db47c609951178486ac869a8d1eadfbb Mon Sep 17 00:00:00 2001
 From: Nuvio Bot <bot@nuvio.app>
 Date: Tue, 1 Sep 2026 23:04:54 +0200
 Subject: [PATCH 3/4] apply 03
@@ -656,7 +656,7 @@ index 0000000..d97c01a
 +        mutableUiState.value = mutableUiState.value.copy(recentChannel = recentChannel)
 +    }
 +
-++    private fun selectRelevantEpgUrls(urls: List<String>): List<String> {
++    private fun selectRelevantEpgUrls(urls: List<String>): List<String> {
 +        if (urls.isEmpty()) return emptyList()
 +        val italianEpgs = urls.filter { it.contains("IT", ignoreCase = true) || it.contains("italy", ignoreCase = true) }
 +        val candidates = if (italianEpgs.isNotEmpty()) italianEpgs else urls
@@ -2228,4 +2228,5 @@ index 0000000..89f0858
 +}
 -- 
 2.54.0.windows.1
+
 
