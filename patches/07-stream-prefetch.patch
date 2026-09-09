@@ -988,10 +988,10 @@ index e3214228..d19bd595 100644
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt
 new file mode 100644
-index 00000000..efb1e841
+index 00000000..ae535ab4
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PatchesPlusSettingsPage.kt
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,454 @@
 +package com.nuvio.app.features.settings
 +
 +import androidx.compose.foundation.clickable
@@ -1007,7 +1007,6 @@ index 00000000..efb1e841
 +import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.rounded.CloudDownload
 +import androidx.compose.material.icons.rounded.Extension
-+import androidx.compose.material.icons.rounded.Folder
 +import androidx.compose.material.icons.rounded.FolderOpen
 +import androidx.compose.material.icons.rounded.RestartAlt
 +import androidx.compose.material.icons.rounded.Source
@@ -1029,12 +1028,10 @@ index 00000000..efb1e841
 +import androidx.compose.ui.text.font.FontWeight
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
 +import com.nuvio.app.core.ui.NuvioTokens
-+import com.nuvio.app.core.ui.NuvioToastController
 +import com.nuvio.app.core.ui.nuvio
 +import com.nuvio.app.features.addons.AddonRepository
 +import com.nuvio.app.features.addons.enabledAddons
 +import com.nuvio.app.features.downloads.AutoDownloadSource
-+import com.nuvio.app.features.downloads.DownloadsPlatformDownloader
 +import com.nuvio.app.features.downloads.DownloadsSettingsRepository
 +import com.nuvio.app.features.plugins.PluginRepository
 +import nuvio.composeapp.generated.resources.*
@@ -1064,8 +1061,6 @@ index 00000000..efb1e841
 +        var showAddonFilterDialog by rememberSaveable { mutableStateOf(false) }
 +        var showRepoFilterDialog by rememberSaveable { mutableStateOf(false) }
 +        var showLocationPicker by rememberSaveable { mutableStateOf(false) }
-+
-+        val openDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
 +
 +        // Sezione 1: Riproduzione e Dettagli
 +        SettingsSection(
@@ -1154,22 +1149,7 @@ index 00000000..efb1e841
 +
 +                SettingsGroupDivider(isTablet = isTablet)
 +
-+                // 4. Apri cartella download (spostato dall'header della pagina download)
-+                SettingsNavigationRow(
-+                    title = stringResource(Res.string.downloads_open_directory),
-+                    description = "Accedi ai file multimediali scaricati nel gestore file",
-+                    icon = Icons.Rounded.Folder,
-+                    isTablet = isTablet,
-+                    onClick = {
-+                        if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
-+                            NuvioToastController.show(openDirectoryFailedText)
-+                        }
-+                    },
-+                )
-+
-+                SettingsGroupDivider(isTablet = isTablet)
-+
-+                // 5. Posizione di download (spostato dall'header/impostazioni della pagina download)
++                // 4. Posizione di download (spostato dall'header/impostazioni della pagina download)
 +                SettingsNavigationRow(
 +                    title = stringResource(Res.string.settings_downloads_location_title),
 +                    description = downloadLocationUri?.let { formatUriForDisplay(it) } ?: stringResource(Res.string.settings_downloads_location_private),
@@ -1178,7 +1158,7 @@ index 00000000..efb1e841
 +                    onClick = { showLocationPicker = true },
 +                )
 +
-+                // 6. Ripristina percorso predefinito se personalizzato
++                // 5. Ripristina percorso predefinito se personalizzato
 +                if (downloadLocationUri != null) {
 +                    SettingsGroupDivider(isTablet = isTablet)
 +                    SettingsNavigationRow(

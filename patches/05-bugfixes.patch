@@ -257,12 +257,11 @@ index 391966fc..68d40118 100644
                  modifier = Modifier.fillMaxSize(),
              ) {
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index cba08104..c82f8e80 100644
+index cba08104..69cbe435 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=120
 -MARKETING_VERSION=0.4.15
-+CURRENT_PROJECT_VERSION=146
-+MARKETING_VERSION=0.4.15.1
-\ No newline at end of file
++CURRENT_PROJECT_VERSION=147
++MARKETING_VERSION=0.4.15.2

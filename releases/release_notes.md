@@ -1,5 +1,15 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.2
+
+### 📂 Cartella personalizzata per tutti i download
+- La cartella di download scelta nelle impostazioni (Plus → Posizione di download) ora vale per **tutti i tipi di download**, non solo per gli HLS: al completamento, anche i file scaricati dal sistema in background vengono spostati automaticamente nella cartella scelta.
+- Se il download era già stato completato in background ad app chiusa, il file viene adottato senza riscaricarlo (e spostato nella cartella personalizzata se impostata).
+- Rimosso il tasto "Apri cartella download" dalla schermata Offline e dalla scheda Plus (la gestione dei file resta al file manager di sistema).
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.2` (versionCode `147`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.1
 
 ### ⬆️ Porting su base upstream 0.4.15 (100% upstream + patch Plus)

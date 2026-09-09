@@ -1034,10 +1034,12 @@ index 209b599f..9ede76e7 100644
 +}
 \ No newline at end of file
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..a727924f 100644
+index 1f6484c5..d7bd9114 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -2,24 +2,155 @@ package com.nuvio.app.features.downloads
+@@ -1,25 +1,164 @@
+-package com.nuvio.app.features.downloads
++﻿package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -1095,7 +1097,6 @@ index 1f6484c5..a727924f 100644
  import kotlinx.coroutines.flow.takeWhile
 -import java.io.File
 -import java.net.URI
-+import kotlinx.coroutines.checkNotNull
 +
 +private fun withDefaultUserAgent(headers: Map<String, String>): Map<String, String> {
 +    if (headers.keys.any { it.equals("User-Agent", ignoreCase = true) }) {
@@ -1149,11 +1150,22 @@ index 1f6484c5..a727924f 100644
 +    }
 +}
 +
-+private val downloadCookieJar = NuvioCookieJar()
++private val plusDownloadCookieJar = NuvioCookieJar()
 +
-+private val downloadHttpClient = OkHttpClient.Builder()
++private const val MAX_HTTP_START_RETRY_ATTEMPTS = 2
++
++private fun isTransientStartupStatus(status: Int): Boolean =
++    status == 403 || status == 408 || status == 429 || status >= 500
++
++private fun startupRetryBackoffMs(attempt: Int): Long =
++    when (attempt) {
++        1 -> 800L
++        else -> 2_000L
++    }
++
++private val plusDownloadHttpClient = OkHttpClient.Builder()
 +    .dns(com.nuvio.app.core.network.AndroidDnsProvider)
-+    .cookieJar(downloadCookieJar)
++    .cookieJar(plusDownloadCookieJar)
 +    .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
 +    .dispatcher(Dispatcher().apply {
 +        maxRequests = 32
@@ -1172,8 +1184,6 @@ index 1f6484c5..a727924f 100644
      private var downloadScheduler: AndroidDownloadScheduler? = null
      private val observerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
  
-+    private var appContext: Context? = null
-+
 +    private fun resolveTarget(context: Context, uriString: String): DownloadTarget? {
 +        val uri = Uri.parse(uriString)
 +        return if (uri.scheme == "content") {
@@ -1195,13 +1205,51 @@ index 1f6484c5..a727924f 100644
          scheduler(context)
      }
  
-@@ -32,71 +163,192 @@ internal actual object DownloadsPlatformDownloader {
-     internal fun managedTransfers(): List<AndroidDownloadTransfer> =
+@@ -29,74 +168,273 @@ internal actual object DownloadsPlatformDownloader {
+         return downloadScheduler ?: AndroidDownloadScheduler(context.applicationContext).also { downloadScheduler = it }
+     }
+ 
+-    internal fun managedTransfers(): List<AndroidDownloadTransfer> =
++internal fun managedTransfers(): List<AndroidDownloadTransfer> =
          downloadScheduler?.store?.transfers?.value?.values?.toList().orEmpty()
  
 -    actual fun restoreItem(item: DownloadItem): DownloadItem = downloadScheduler?.restore(item)
 -        ?: if (item.status == DownloadStatus.Downloading) item.copy(status = DownloadStatus.Paused) else item
--
++    /**
++     * Sposta un file completato nella cartella personalizzata (se impostata
++     * nelle impostazioni download). Vale per TUTTI i tipi di download
++     * (diretti e HLS). Ritorna l'URI del file nella destinazione, oppure
++     * null se non c'e' una custom location o lo spostamento fallisce
++     * (il chiamante usa in quel caso l'URI originale, sempre valido).
++     */
++    private fun relocateCompletedToCustomLocation(
++        context: Context,
++        sourceUriString: String,
++        fileName: String,
++    ): String? {
++        DownloadsSettingsRepository.ensureLoaded()
++        val customLocationUriString = DownloadsSettingsRepository.downloadLocationUri.value
++        val customLocationUri = customLocationUriString?.let { Uri.parse(it) }
++        if (customLocationUri == null || customLocationUri.scheme != "content") return null
++        return runCatching {
++            val tree = DocumentFile.fromTreeUri(context, customLocationUri) ?: return null
++            val source = resolveTarget(context, sourceUriString) ?: return null
++            if (!source.exists()) return null
++            val dest = DocumentDownloadTarget(context, tree, fileName)
++            // Sostituiamo un eventuale file preesistente con lo stesso nome.
++            if (dest.exists()) dest.delete()
++            val sourceLength = source.length()
++            source.copyTo(dest)
++            if (!dest.exists() || dest.length() != sourceLength) {
++                dest.delete()
++                return null
++            }
++            val finalUri = dest.toUriString().takeIf { it.isNotBlank() } ?: return null
++            source.delete()
++            finalUri
++        }.getOrNull()
++    }
+ 
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
@@ -1213,6 +1261,8 @@ index 1f6484c5..a727924f 100644
 +        onPhase: ((phase: String) -> Unit)?,
 +        onTrackProgress: ((trackName: String, downloadedBytes: Long, totalBytes: Long?) -> Unit)?,
      ): DownloadsTaskHandle {
+-        val scheduler = checkNotNull(downloadScheduler) { "Downloads are not initialized" }
+-        val transfer = scheduler.enqueue(request.item)
 +        val job = SupervisorJob()
 +        val scope = CoroutineScope(job + Dispatchers.IO)
 +        val keepAliveContext = appContext
@@ -1248,9 +1298,38 @@ index 1f6484c5..a727924f 100644
 +            return AndroidDownloadsTaskHandle(job)
 +        }
 +
-         val scheduler = checkNotNull(downloadScheduler) { "Downloads are not initialized" }
--        val transfer = scheduler.enqueue(request.item)
++val scheduler = checkNotNull(downloadScheduler) { "Downloads are not initialized" }
 +        val enqueuedItem = checkNotNull(request.item) { "Download item is missing" }
++
++        // Adozione di un download gia' completato dallo scheduler (es. job di
++        // background terminato ad app chiusa): niente riscaricamento, il file
++        // viene solo spostato nella cartella personalizzata se impostata.
++        val completedTransfer = scheduler.store.get(request.destinationFileName)
++            ?.takeIf { it.item.id == enqueuedItem.id && it.item.status == DownloadStatus.Completed }
++            ?.item
++        val adoptableUri = completedTransfer?.localFileUri?.takeIf { uri ->
++            val ctx = appContext
++            ctx != null && resolveTarget(ctx, uri)?.exists() == true
++        }
++        if (adoptableUri != null && completedTransfer != null) {
++            val adoptJob = observerScope.launch {
++                val context = appContext
++                val finalUri = if (context != null) {
++                    withContext(Dispatchers.IO) {
++                        relocateCompletedToCustomLocation(context, adoptableUri, completedTransfer.fileName)
++                    } ?: adoptableUri
++                } else {
++                    adoptableUri
++                }
++                onSuccess(finalUri, completedTransfer.totalBytes, null)
++            }
++            return object : DownloadsTaskHandle {
++                override fun cancel() {
++                    adoptJob.cancel()
++                }
++            }
++        }
++
 +        val transfer = scheduler.enqueue(enqueuedItem)
          val observer = observerScope.launch {
              scheduler.store.transfers.map { it[request.destinationFileName] }
@@ -1264,9 +1343,22 @@ index 1f6484c5..a727924f 100644
 -                        DownloadStatus.Failed -> onFailure(item.errorMessage ?: "Download failed")
 -                        DownloadStatus.Paused -> onPaused()
 +                    val currentItem = current.item
-+                    when (currentItem.status) {
++when (currentItem.status) {
 +                        DownloadStatus.Downloading -> onProgress(currentItem.downloadedBytes, currentItem.totalBytes)
-+                        DownloadStatus.Completed -> onSuccess(checkNotNull(currentItem.localFileUri), currentItem.totalBytes, null)
++                        DownloadStatus.Completed -> {
++                            val localUri = checkNotNull(currentItem.localFileUri)
++                            val context = appContext
++                            // Se l'utente ha scelto una cartella personalizzata, il file
++                            // completato viene spostato li' (per tutti i tipi di download).
++                            val finalUri = if (context != null) {
++                                withContext(Dispatchers.IO) {
++                                    relocateCompletedToCustomLocation(context, localUri, currentItem.fileName)
++                                } ?: localUri
++                            } else {
++                                localUri
++                            }
++                            onSuccess(finalUri, currentItem.totalBytes, null)
++                        }
 +                        DownloadStatus.Failed -> onFailure(currentItem.errorMessage ?: "Download failed")
 +                        DownloadStatus.Paused -> {}
 +                        DownloadStatus.Processing -> {}
@@ -1365,7 +1457,7 @@ index 1f6484c5..a727924f 100644
 +            withDefaultUserAgent(effectiveHeaders).forEach { (key, value) ->
 +                requestBuilder.header(key, value)
 +            }
-+            val response = downloadHttpClient.newCall(requestBuilder.get().build()).execute()
++            val response = plusDownloadHttpClient.newCall(requestBuilder.get().build()).execute()
 +            response.use { resp ->
 +                if (resp.isSuccessful) {
 +                    return resp.body?.string()
@@ -1396,7 +1488,7 @@ index 1f6484c5..a727924f 100644
 +        return try {
 +            val headBuilder = Request.Builder().url(url).head()
 +            effectiveHeaders.forEach { (key, value) -> headBuilder.header(key, value) }
-+            val headResp = downloadHttpClient.newCall(headBuilder.build()).execute()
++            val headResp = plusDownloadHttpClient.newCall(headBuilder.build()).execute()
 +            val headContentType = headResp.header("Content-Type")?.lowercase().orEmpty()
 +            headResp.close()
 +            if (headContentType.contains("mpegurl") || headContentType.contains("m3u8")) {
@@ -1405,7 +1497,7 @@ index 1f6484c5..a727924f 100644
 +
 +            val getBuilder = Request.Builder().url(url).header("Range", "bytes=0-512")
 +            effectiveHeaders.forEach { (key, value) -> getBuilder.header(key, value) }
-+            val getResp = downloadHttpClient.newCall(getBuilder.build()).execute()
++            val getResp = plusDownloadHttpClient.newCall(getBuilder.build()).execute()
 +            getResp.use { resp ->
 +                val ct = resp.header("Content-Type")?.lowercase().orEmpty()
 +                if (ct.contains("mpegurl") || ct.contains("m3u8")) return true
@@ -1418,7 +1510,7 @@ index 1f6484c5..a727924f 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +388,946 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +474,947 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1492,7 +1584,8 @@ index 1f6484c5..a727924f 100644
 +        val doc = getDoc() ?: return false
 +        if (other is DocumentDownloadTarget && other.tree.uri == tree.uri) {
 +            return doc.renameTo(other.fileName)
-+        }
+         }
+-    }.getOrNull()
 +        return false
 +    }
 +    override fun copyTo(other: DownloadTarget) {
@@ -1501,10 +1594,9 @@ index 1f6484c5..a727924f 100644
 +            other.openOutputStream(false).use { output ->
 +                input.copyTo(output)
 +            }
-         }
--    }.getOrNull()
++        }
 +    }
- }
++}
 +
 +private class DocumentSingleTarget(
 +    private val context: Context,
@@ -1525,7 +1617,7 @@ index 1f6484c5..a727924f 100644
 +            }
 +        }
 +    }
-+}
+ }
 +
 +private fun resolveTotalBytes(
 +    startingBytes: Long,
@@ -1938,7 +2030,7 @@ index 1f6484c5..a727924f 100644
 +        )
 +    }
 +
-+    val response = downloadHttpClient.newCall(requestBuilder.get().build()).execute()
++    val response = plusDownloadHttpClient.newCall(requestBuilder.get().build()).execute()
 +    return response.use { resp ->
 +        HlsHttpResult(
 +            status = resp.code,
@@ -2369,6 +2461,7 @@ index 1f6484c5..a727924f 100644
 +    extractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 +    return sps to pps
 +}
++
 +
 +
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
@@ -6683,10 +6776,10 @@ index 041a38ee..5873958c 100644
 +    return "$stem.$resolvedExtension"
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..0de89202 100644
+index 7019a10c..6f2a8b90 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-@@ -10,14 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -10,14 +10,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
  import androidx.compose.foundation.layout.height
  import androidx.compose.foundation.layout.padding
  import androidx.compose.foundation.layout.size
@@ -6697,7 +6790,7 @@ index 7019a10c..0de89202 100644
  import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.rounded.ClosedCaption
  import androidx.compose.material.icons.rounded.Delete
- import androidx.compose.material.icons.rounded.Folder
+-import androidx.compose.material.icons.rounded.Folder
  import androidx.compose.material.icons.rounded.Pause
  import androidx.compose.material.icons.rounded.PlayArrow
  import androidx.compose.material.icons.rounded.Refresh
@@ -6710,7 +6803,7 @@ index 7019a10c..0de89202 100644
  import androidx.compose.material3.Icon
  import androidx.compose.material3.IconButton
  import androidx.compose.material3.LinearProgressIndicator
-@@ -29,17 +38,25 @@ import androidx.compose.runtime.getValue
+@@ -29,18 +37,25 @@ import androidx.compose.runtime.getValue
  import androidx.compose.runtime.mutableStateOf
  import androidx.compose.runtime.remember
  import androidx.compose.runtime.saveable.rememberSaveable
@@ -6732,12 +6825,13 @@ index 7019a10c..0de89202 100644
  import com.nuvio.app.core.ui.NuvioScreen
  import com.nuvio.app.core.ui.NuvioScreenHeader
 -import com.nuvio.app.core.ui.NuvioStatusModal
+-import com.nuvio.app.core.ui.NuvioToastController
 +import com.nuvio.app.core.ui.PlatformBackHandler
 +import com.nuvio.app.features.settings.DownloadsSettingsScreen
- import com.nuvio.app.core.ui.NuvioToastController
  import nuvio.composeapp.generated.resources.*
  import org.jetbrains.compose.resources.stringResource
-@@ -52,13 +69,17 @@ fun DownloadsScreen(
+ 
+@@ -52,14 +67,17 @@ fun DownloadsScreen(
      onNavigateToShow: ((showId: String, title: String) -> Unit)? = null,
      onBackFromShow: (() -> Unit)? = null,
  ) {
@@ -6752,11 +6846,12 @@ index 7019a10c..0de89202 100644
 +
      var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
 -    var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
+-    val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
 +    var showSettings by rememberSaveable { mutableStateOf(false) }
-     val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
  
      val completedEpisodes = remember(uiState.items) {
-@@ -73,6 +94,20 @@ fun DownloadsScreen(
+         uiState.completedItems
+@@ -73,6 +91,20 @@ fun DownloadsScreen(
          }
      }
  
@@ -6777,10 +6872,21 @@ index 7019a10c..0de89202 100644
      NuvioScreen {
          stickyHeader {
              NuvioScreenHeader(
-@@ -89,6 +124,15 @@ fun DownloadsScreen(
+@@ -89,17 +121,14 @@ fun DownloadsScreen(
                      }
                  },
                  actions = {
+-                    IconButton(
+-                        onClick = {
+-                            if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
+-                                NuvioToastController.show(openDownloadsDirectoryFailedText)
+-                            }
+-                        },
+-                    ) {
+-                        Icon(
+-                            imageVector = Icons.Rounded.Folder,
+-                            contentDescription = stringResource(Res.string.downloads_open_directory),
+-                        )
 +                    if (selectedShowId == null) {
 +                        IconButton(onClick = { showSettings = true }) {
 +                            Icon(
@@ -6789,19 +6895,10 @@ index 7019a10c..0de89202 100644
 +                                tint = Color.White,
 +                            )
 +                        }
-+                    }
-                     IconButton(
-                         onClick = {
-                             if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
-@@ -99,6 +143,7 @@ fun DownloadsScreen(
-                         Icon(
-                             imageVector = Icons.Rounded.Folder,
-                             contentDescription = stringResource(Res.string.downloads_open_directory),
-+                            tint = Color.White,
-                         )
                      }
                  },
-@@ -108,44 +153,30 @@ fun DownloadsScreen(
+             )
+@@ -108,44 +137,30 @@ fun DownloadsScreen(
          if (selectedShowId == null) {
              downloadsRootContent(
                  uiState = uiState,
@@ -6851,7 +6948,7 @@ index 7019a10c..0de89202 100644
  ) {
      val activeItems = uiState.activeItems
      val completedMovies = uiState.completedItems.filterNot(DownloadItem::isEpisode)
-@@ -159,6 +190,8 @@ private fun LazyListScope.downloadsRootContent(
+@@ -159,6 +174,8 @@ private fun LazyListScope.downloadsRootContent(
          }
          .sortedBy { (item, _) -> item.title.lowercase() }
  
@@ -6860,7 +6957,7 @@ index 7019a10c..0de89202 100644
      if (activeItems.isNotEmpty()) {
          item {
              SectionTitle(stringResource(Res.string.downloads_section_active))
-@@ -170,10 +203,18 @@ private fun LazyListScope.downloadsRootContent(
+@@ -170,10 +187,18 @@ private fun LazyListScope.downloadsRootContent(
              DownloadRow(
                  item = item,
                  onOpen = { onOpenDownload(item) },
@@ -6883,7 +6980,7 @@ index 7019a10c..0de89202 100644
              )
          }
      }
-@@ -191,8 +232,10 @@ private fun LazyListScope.downloadsRootContent(
+@@ -191,8 +216,10 @@ private fun LazyListScope.downloadsRootContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6895,7 +6992,7 @@ index 7019a10c..0de89202 100644
              )
          }
      }
-@@ -247,7 +290,7 @@ private fun LazyListScope.downloadsRootContent(
+@@ -247,7 +274,7 @@ private fun LazyListScope.downloadsRootContent(
          }
      }
  
@@ -6904,7 +7001,7 @@ index 7019a10c..0de89202 100644
          item {
              Box(
                  modifier = Modifier
-@@ -269,7 +312,7 @@ private fun LazyListScope.downloadsShowContent(
+@@ -269,7 +296,7 @@ private fun LazyListScope.downloadsShowContent(
      showId: String,
      episodes: List<DownloadItem>,
      onOpenDownload: (DownloadItem) -> Unit,
@@ -6913,7 +7010,7 @@ index 7019a10c..0de89202 100644
  ) {
      val showEpisodes = episodes
          .filter { it.parentMetaId == showId }
-@@ -324,8 +367,10 @@ private fun LazyListScope.downloadsShowContent(
+@@ -324,8 +351,10 @@ private fun LazyListScope.downloadsShowContent(
                  onOpen = { onOpenDownload(item) },
                  onPause = { DownloadsRepository.pauseDownload(item.id) },
                  onResume = { DownloadsRepository.resumeDownload(item.id) },
@@ -6925,7 +7022,7 @@ index 7019a10c..0de89202 100644
              )
          }
      }
-@@ -339,6 +384,8 @@ private fun DownloadRow(
+@@ -339,6 +368,8 @@ private fun DownloadRow(
      onResume: () -> Unit,
      onRetry: () -> Unit,
      onDelete: () -> Unit,
@@ -6934,7 +7031,7 @@ index 7019a10c..0de89202 100644
  ) {
      val displayTitle = item.displayTitle()
      val displaySubtitle = downloadDisplaySubtitle(
-@@ -392,13 +439,25 @@ private fun DownloadRow(
+@@ -392,13 +423,25 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -6965,7 +7062,7 @@ index 7019a10c..0de89202 100644
                              }
                          }
                          DownloadStatus.Paused -> {
-@@ -409,6 +468,7 @@ private fun DownloadRow(
+@@ -409,6 +452,7 @@ private fun DownloadRow(
                                  )
                              }
                          }
@@ -6973,7 +7070,7 @@ index 7019a10c..0de89202 100644
                          DownloadStatus.Failed -> {
                              IconButton(onClick = onRetry) {
                                  Icon(
-@@ -424,6 +484,18 @@ private fun DownloadRow(
+@@ -424,6 +468,18 @@ private fun DownloadRow(
                                      contentDescription = stringResource(Res.string.action_play),
                                  )
                              }
@@ -6992,7 +7089,7 @@ index 7019a10c..0de89202 100644
                          }
                      }
                      IconButton(onClick = onDelete) {
-@@ -435,8 +507,52 @@ private fun DownloadRow(
+@@ -435,8 +491,52 @@ private fun DownloadRow(
                  }
              }
  
@@ -7047,7 +7144,7 @@ index 7019a10c..0de89202 100644
                      LinearProgressIndicator(
                          progress = item.progressFraction,
                          modifier = Modifier.fillMaxWidth(),
-@@ -469,10 +585,10 @@ private fun downloadDisplaySubtitle(
+@@ -469,10 +569,10 @@ private fun downloadDisplaySubtitle(
          return item.displaySubtitle
      }
  
@@ -7060,7 +7157,7 @@ index 7019a10c..0de89202 100644
      )
      return listOf(
          episodeCode,
-@@ -481,6 +597,22 @@ private fun downloadDisplaySubtitle(
+@@ -481,6 +581,22 @@ private fun downloadDisplaySubtitle(
      ).filterNotNull().joinToString(" • ")
  }
  
@@ -7083,7 +7180,7 @@ index 7019a10c..0de89202 100644
  @Composable
  private fun SectionTitle(title: String) {
      Text(
-@@ -492,22 +624,106 @@ private fun SectionTitle(title: String) {
+@@ -492,22 +608,106 @@ private fun SectionTitle(title: String) {
      )
  }
  
@@ -7196,7 +7293,7 @@ index 7019a10c..0de89202 100644
      }
  }
  
-@@ -524,3 +740,46 @@ private fun formatBytes(bytes: Long): String {
+@@ -524,3 +724,46 @@ private fun formatBytes(bytes: Long): String {
          else -> "$bytes ${localizedByteUnit("B")}"
      }
  }
