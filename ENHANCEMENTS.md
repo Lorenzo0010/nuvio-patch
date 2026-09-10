@@ -37,7 +37,8 @@ Questo documento descrive le **sole** personalizzazioni del fork Plus rispetto a
 
 - `require('crypto')` / `require('node:crypto')`: `createHash` (MD5/SHA-1/256/384/512), `createHmac`, `createCipheriv`/`createDecipheriv` (AES-CBC/ECB 128/192/256), `pbkdf2Sync`, `randomBytes`/`randomFillSync`/`randomInt`/`randomUUID`, `timingSafeEqual` — eseguiti sui bridge crittografici nativi dell'app.
 - `Buffer` globale minimo + `require('buffer')` (`from`/`alloc`/`concat`/`isBuffer`/`byteLength`, `toString('hex'/'base64'/'utf8'/...)`).
-- Serve ai plugin che usano helper di tipo `cloudflare_provider_fetch.js` (prima fallivano con `Module 'crypto' is not available` e il ripiego Cloudflare non partiva).
+- `require('fs')` (in-memory: `read/write/exists/unlink/stat/rename/mkdir`), `require('path')` (posix: `join`/`resolve`/`dirname`/`basename`/`extname`), `require('http'/'https')` (stub `Agent`), `require('axios')` (minimale sopra fetch nativo: `get`/`post`/`create`, `CancelToken`, `isCancel`), globale `process` (`env`/`cwd`/`versions`/...) e timer `setTimeout`/`clearTimeout`/`setInterval` (no-op sicuri: le richieste usano i timeout nativi).
+- Serve ai plugin che usano helper di tipo `cloudflare_provider_fetch.js` (prima fallivano con `Module 'crypto'/'fs' is not available` e il ripiego Cloudflare non partiva). Verificato contro i bundle EasyStreams: gli unici externals usati sono `axios`, `crypto`, `fs`, `http`/`https`, `path` (`undici` è già in `try/catch` nel plugin).
 
 ## Rimosso rispetto alle build Plus precedenti
 

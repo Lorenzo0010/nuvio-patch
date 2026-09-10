@@ -1,5 +1,15 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.6
+
+### 🔌 Fix plugin: moduli `fs`, `axios` e altri mancanti
+- Dopo il fix `crypto`, i plugin (es. helper `cloudflare_provider_fetch.js`) chiedevano altri moduli Node: analizzati tutti i bundle EasyStreams, gli externals usati sono `axios`, `crypto`, `fs`, `http`/`https`, `path` (`undici` è già in `try/catch` nel plugin e non serve).
+- Ora il runtime JS fornisce: `require('fs')` (in-memory), `require('path')` (posix), `require('http'/'https')` (stub `Agent`), `require('axios')` (minimale sopra fetch nativo, con `CancelToken`/`isCancel`), globale `process` e timer `setTimeout`/`clearTimeout` (no-op sicuri, le richieste usano i timeout nativi).
+- Restano validati: `require('crypto')`, `Buffer`, base upstream invariata (`e377942`, 100% funzioni originali).
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.6` (versionCode `151`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.5
 
 ### 🔌 Fix plugin: modulo `crypto` non disponibile

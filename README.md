@@ -17,7 +17,7 @@ Consulta [ENHANCEMENTS.md](ENHANCEMENTS.md) per la documentazione dettagliata di
 | **HLS Downloader** | Long-press sullo stream: torrent -> motore originale, HLS -> motore Plus (AES-128, remux MP4, tracce audio/sub) |
 | **Cartella download** | Posizione personalizzata per tutti i download (ingranaggio nella schermata Download) |
 | **Updater** | Auto-aggiornamento reindirizzato su `Lorenzo0010/nuvio-patch` (GitHub Releases) |
-| **Plugin JS** | Compatibilita `require('crypto')` + `Buffer` per i plugin (hash/HMAC/AES/PBKDF2/random) |
+| **Plugin JS** | Compatibilita `require('crypto'/'fs'/'path'/'axios'/...)` + `Buffer`/`process`/timer per i plugin |
 
 ---
 
@@ -31,7 +31,7 @@ F:\GitHub\nuvio\
 â”‚   â”œâ”€â”€ 03-live-tv.patch              # Live TV, storage, parser M3U, tab navbar, pannello player
 â”‚   â”œâ”€â”€ 04-hls-downloads.patch        # Motore HLS, sheet tracce, hook long-press, tab Download
 â”‚   â”œâ”€â”€ 05-download-folder.patch      # Cartella download personalizzata + versione corrente
-â”‚   â””â”€â”€ 06-plugin-crypto.patch        # Compatibilita require('crypto')/Buffer per i plugin JS
+â”‚   â””â”€â”€ 06-plugin-crypto.patch        # Compatibilita require()/globali per i plugin JS
 â”œâ”€â”€ scripts/                          # Script PowerShell e Bash
 â”‚   â”œâ”€â”€ apply-patches.ps1 / .sh       # Applica le patch su un clone fresco
 â”‚   â”œâ”€â”€ apply-to-submodule.ps1        # Applica patch + copia asset in NuvioMobile/

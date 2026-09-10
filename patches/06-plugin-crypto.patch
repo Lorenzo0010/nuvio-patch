@@ -1,17 +1,23 @@
 diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
-index 5e239048..e740c5b7 100644
+index 5e239048..9c1eec97 100644
 --- a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
 +++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
-@@ -15,6 +15,8 @@ internal object JsBindings {
+@@ -15,6 +15,14 @@ internal object JsBindings {
              ${urlPolyfill()}
              ${cryptoPolyfill()}
              ${textEncoderPolyfill()}
 +            ${bufferPolyfill()}
 +            ${nodeCryptoPolyfill()}
++            ${processPolyfill()}
++            ${pathPolyfill()}
++            ${fsPolyfill()}
++            ${httpPolyfill()}
++            ${axiosPolyfill()}
++            ${timersPolyfill()}
              ${cheerioPolyfill()}
              ${requirePolyfill()}
              ${arrayPolyfill()}
-@@ -907,6 +909,303 @@ internal object JsBindings {
+@@ -907,6 +915,740 @@ internal object JsBindings {
          }
      """.trimIndent()
  
@@ -312,10 +318,447 @@ index 5e239048..e740c5b7 100644
 +        })();
 +    """.trimIndent()
 +
++    private fun processPolyfill() = """
++        if (typeof globalThis.process === 'undefined') {
++            globalThis.process = {
++                env: {},
++                argv: [],
++                title: 'nuvio',
++                version: 'v18.0.0',
++                versions: {},
++                platform: 'android',
++                arch: 'arm64',
++                pid: 1,
++                cwd: function() { return '/nuvio'; },
++                nextTick: function(fn) {
++                    var args = Array.prototype.slice.call(arguments, 1);
++                    Promise.resolve().then(function() { fn.apply(null, args); });
++                },
++                exit: function() {},
++                uptime: function() { return 0; },
++                hrtime: function() { return [0, 0]; }
++            };
++        }
++    """.trimIndent()
++
++    private fun pathPolyfill() = """
++        var nodePath = (function() {
++            function normalize(p) {
++                p = String(p || '');
++                var absolute = p.charAt(0) === '/';
++                var trailing = p.length > 1 && p.charAt(p.length - 1) === '/';
++                var parts = p.split('/');
++                var out = [];
++                for (var i = 0; i < parts.length; i++) {
++                    var seg = parts[i];
++                    if (seg === '' || seg === '.') continue;
++                    if (seg === '..') {
++                        if (out.length > 0 && out[out.length - 1] !== '..') out.pop();
++                        else if (!absolute) out.push('..');
++                        continue;
++                    }
++                    out.push(seg);
++                }
++                var res = (absolute ? '/' : '') + out.join('/');
++                if (res === '') {
++                    res = absolute ? '/' : '.';
++                } else if (trailing && res.charAt(res.length - 1) !== '/') {
++                    res += '/';
++                }
++                return res;
++            }
++            function join() {
++                var joined = '';
++                for (var i = 0; i < arguments.length; i++) {
++                    var seg = String(arguments[i] || '');
++                    if (seg === '') continue;
++                    joined += (joined === '' ? '' : '/') + seg;
++                }
++                return normalize(joined);
++            }
++            function resolve() {
++                var resolved = '';
++                var absolute = false;
++                for (var i = arguments.length - 1; i >= 0; i--) {
++                    var seg = String(arguments[i] || '');
++                    if (seg === '') continue;
++                    resolved = resolved === '' ? seg : seg + '/' + resolved;
++                    if (seg.charAt(0) === '/') { absolute = true; break; }
++                }
++                if (!absolute) resolved = '/nuvio/' + resolved;
++                return normalize(resolved);
++            }
++            function dirname(p) {
++                p = String(p || '');
++                var stripped = p.replace(/\/+$/, '');
++                if (stripped === '' || stripped.indexOf('/') < 0) return '.';
++                if (stripped === '/') return '/';
++                var idx = stripped.lastIndexOf('/');
++                if (idx === 0) return '/';
++                if (idx < 0) return '.';
++                return stripped.substring(0, idx) || '/';
++            }
++            function basename(p, ext) {
++                p = String(p || '');
++                var stripped = p.replace(/\/+$/, '');
++                var idx = stripped.lastIndexOf('/');
++                var base = idx < 0 ? stripped : stripped.substring(idx + 1);
++                if (ext && base.length > ext.length && base.substring(base.length - ext.length) === ext) {
++                    base = base.substring(0, base.length - ext.length);
++                }
++                return base;
++            }
++            function extname(p) {
++                var base = basename(String(p || ''));
++                var idx = base.lastIndexOf('.');
++                if (idx <= 0) return '';
++                return base.substring(idx);
++            }
++            function isAbsolute(p) { return String(p || '').charAt(0) === '/'; }
++            return {
++                sep: '/',
++                delimiter: ':',
++                normalize: normalize,
++                join: join,
++                resolve: resolve,
++                dirname: dirname,
++                basename: basename,
++                extname: extname,
++                isAbsolute: isAbsolute,
++                relative: function(from, to) { return String(to || ''); }
++            };
++        })();
++    """.trimIndent()
++
++    private fun fsPolyfill() = """
++        var nodeFs = (function() {
++            var __memFsFiles = {};
++            function key(p) { return nodePath.normalize(String(p || '')); }
++            function toBytes(data, encoding) {
++                if (typeof data === 'string') return __stringToBytes(data, encoding);
++                return __copyUint8Array(__toUint8Array(data));
++            }
++            function missing(op, p) { throw new Error("ENOENT: no such file or directory, " + op + " '" + p + "'"); }
++            var fs = {
++                existsSync: function(p) { return Object.prototype.hasOwnProperty.call(__memFsFiles, key(p)); },
++                readFileSync: function(p, opts) {
++                    var k = key(p);
++                    if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) missing('open', p);
++                    var bytes = __memFsFiles[k];
++                    var enc = typeof opts === 'string' ? opts : (opts && opts.encoding);
++                    if (enc) return __bufferToString(bytes, enc);
++                    return globalThis.Buffer.from(bytes);
++                },
++                writeFileSync: function(p, data, opts) {
++                    var enc = typeof opts === 'string' ? opts : (opts && opts.encoding);
++                    __memFsFiles[key(p)] = toBytes(data, enc);
++                },
++                appendFileSync: function(p, data, opts) {
++                    var enc = typeof opts === 'string' ? opts : (opts && opts.encoding);
++                    var k = key(p);
++                    var prev = Object.prototype.hasOwnProperty.call(__memFsFiles, k) ? __memFsFiles[k] : new Uint8Array(0);
++                    __memFsFiles[k] = __concatBytesCompat(prev, toBytes(data, enc));
++                },
++                unlinkSync: function(p) {
++                    var k = key(p);
++                    if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) missing('unlink', p);
++                    delete __memFsFiles[k];
++                },
++                mkdirSync: function(p) { return undefined; },
++                rmdirSync: function() { return undefined; },
++                chmodSync: function() { return undefined; },
++                renameSync: function(oldP, newP) {
++                    var k = key(oldP);
++                    if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) missing('rename', oldP);
++                    __memFsFiles[key(newP)] = __memFsFiles[k];
++                    delete __memFsFiles[k];
++                },
++                copyFileSync: function(src, dst) {
++                    var k = key(src);
++                    if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) missing('copyfile', src);
++                    __memFsFiles[key(dst)] = __copyUint8Array(__memFsFiles[k]);
++                },
++                statSync: function(p) {
++                    var k = key(p);
++                    if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) missing('stat', p);
++                    var size = __memFsFiles[k].length;
++                    return {
++                        size: size,
++                        isFile: function() { return true; },
++                        isDirectory: function() { return false; },
++                        isSymbolicLink: function() { return false; },
++                        mtime: new Date(),
++                        ctime: new Date()
++                    };
++                },
++                readdirSync: function(p) {
++                    var prefix = key(p).replace(/\/+$/, '') + '/';
++                    var out = [];
++                    for (var k in __memFsFiles) {
++                        if (!Object.prototype.hasOwnProperty.call(__memFsFiles, k)) continue;
++                        if (k.substring(0, prefix.length) === prefix) {
++                            var rest = k.substring(prefix.length);
++                            if (rest !== '' && rest.indexOf('/') < 0) out.push(rest);
++                        }
++                    }
++                    return out;
++                }
++            };
++            return fs;
++        })();
++
++        function __concatBytesCompat(a, b) {
++            var x = __toUint8Array(a);
++            var y = __toUint8Array(b);
++            var out = new Uint8Array(x.length + y.length);
++            out.set(x, 0);
++            out.set(y, x.length);
++            return out;
++        }
++    """.trimIndent()
++
++    private fun httpPolyfill() = """
++        var nodeHttp = (function() {
++            function Agent(opts) {
++                this.options = opts || {};
++                this.keepAlive = !!(opts && opts.keepAlive);
++                this.maxSockets = (opts && opts.maxSockets) || 10;
++            }
++            Agent.prototype.destroy = function() {};
++            return { Agent: Agent, globalAgent: new Agent({ keepAlive: true }) };
++        })();
++        var nodeHttps = (function() {
++            function Agent(opts) {
++                this.options = opts || {};
++                this.keepAlive = !!(opts && opts.keepAlive);
++                this.maxSockets = (opts && opts.maxSockets) || 10;
++                this.rejectUnauthorized = !(opts && opts.rejectUnauthorized === false);
++            }
++            Agent.prototype.destroy = function() {};
++            return { Agent: Agent, globalAgent: new Agent({ keepAlive: true }) };
++        })();
++    """.trimIndent()
++
++    private fun axiosPolyfill() = """
++        var axios = (function() {
++            function mergeConfig(config) {
++                var out = { method: 'GET', headers: {}, validateStatus: null, responseType: 'text', maxRedirects: 5 };
++                if (config) {
++                    for (var k in config) {
++                        if (Object.prototype.hasOwnProperty.call(config, k)) out[k] = config[k];
++                    }
++                }
++                out.method = String(out.method || 'GET').toUpperCase();
++                out.headers = out.headers || {};
++                return out;
++            }
++            function normalizeHeaders(headers) {
++                var out = {};
++                if (!headers) return out;
++                var keys = Object.keys(headers);
++                for (var i = 0; i < keys.length; i++) {
++                    var v = headers[keys[i]];
++                    if (v !== undefined && v !== null) out[keys[i]] = String(v);
++                }
++                return out;
++            }
++            function buildError(message, code, config, response) {
++                var err = new Error(message);
++                err.code = code;
++                err.config = config;
++                if (response !== undefined) err.response = response;
++                return err;
++            }
++            function doRequest(config) {
++                config = mergeConfig(config);
++                if (config.cancelToken && config.cancelToken.reason) {
++                    return Promise.reject(config.cancelToken.reason);
++                }
++                var url = String(config.url || '');
++                var headers = normalizeHeaders(config.headers);
++                var body = '';
++                if (config.data !== undefined && config.data !== null) {
++                    if (typeof config.data === 'string') {
++                        body = config.data;
++                    } else if (typeof ArrayBuffer !== 'undefined' && (config.data instanceof ArrayBuffer || (ArrayBuffer.isView && ArrayBuffer.isView(config.data)))) {
++                        body = __bufferToString(__toUint8Array(config.data), 'latin1');
++                    } else if (typeof config.data === 'object') {
++                        body = JSON.stringify(config.data);
++                        var hasCt = false;
++                        for (var hk in headers) {
++                            if (hk.toLowerCase() === 'content-type') { hasCt = true; break; }
++                        }
++                        if (!hasCt) headers['Content-Type'] = 'application/json';
++                    } else {
++                        body = String(config.data);
++                    }
++                }
++                var followRedirects = config.maxRedirects !== 0;
++                var raw;
++                try {
++                    raw = __native_fetch(url, config.method, JSON.stringify(headers), body, followRedirects);
++                } catch (e) {
++                    return Promise.reject(buildError(e && e.message ? e.message : 'Network Error', 'ERR_NETWORK', config));
++                }
++                var parsed;
++                try {
++                    parsed = JSON.parse(raw);
++                } catch (e) {
++                    return Promise.reject(buildError('Invalid response from native fetch', 'ERR_NETWORK', config));
++                }
++                if (!parsed.ok && !(parsed.status >= 200 && parsed.status <= 299) && parsed.status === 0) {
++                    return Promise.reject(buildError(parsed.statusText || 'Network Error', 'ERR_NETWORK', config));
++                }
++                var data = parsed.body;
++                if (config.responseType === 'json') {
++                    try {
++                        data = parsed.body === '' ? null : JSON.parse(parsed.body);
++                    } catch (e) {
++                        data = parsed.body;
++                    }
++                } else if (config.responseType === 'arraybuffer') {
++                    data = __bytesToArrayBuffer(__stringToBytes(parsed.body || '', 'latin1'));
++                }
++                var response = {
++                    data: data,
++                    status: parsed.status,
++                    statusText: parsed.statusText,
++                    headers: parsed.headers || {},
++                    config: config,
++                    request: {
++                        res: { responseUrl: parsed.url || url },
++                        _redirectable: { _currentUrl: parsed.url || url }
++                    }
++                };
++                var validate = config.validateStatus;
++                if (validate === false || validate === null || validate === undefined) {
++                    if (parsed.status >= 200 && parsed.status <= 299) return Promise.resolve(response);
++                    if (validate === false) return Promise.resolve(response);
++                }
++                if (typeof validate === 'function') {
++                    if (validate(parsed.status)) return Promise.resolve(response);
++                    return Promise.reject(buildError('Request failed with status code ' + parsed.status, parsed.status >= 500 ? 'ERR_BAD_RESPONSE' : 'ERR_BAD_REQUEST', config, response));
++                }
++                if (parsed.status >= 200 && parsed.status <= 299) return Promise.resolve(response);
++                return Promise.reject(buildError('Request failed with status code ' + parsed.status, parsed.status >= 500 ? 'ERR_BAD_RESPONSE' : 'ERR_BAD_REQUEST', config, response));
++            }
++            function axiosFn(config) {
++                if (typeof config === 'string') return doRequest({ url: config });
++                return doRequest(config);
++            }
++            axiosFn.request = doRequest;
++            axiosFn.get = function(url, config) {
++                config = config || {};
++                config.url = url;
++                config.method = 'GET';
++                return doRequest(config);
++            };
++            axiosFn.post = function(url, data, config) {
++                config = config || {};
++                config.url = url;
++                config.method = 'POST';
++                config.data = data;
++                return doRequest(config);
++            };
++            axiosFn.put = function(url, data, config) {
++                config = config || {};
++                config.url = url;
++                config.method = 'PUT';
++                config.data = data;
++                return doRequest(config);
++            };
++            axiosFn.delete = function(url, config) {
++                config = config || {};
++                config.url = url;
++                config.method = 'DELETE';
++                return doRequest(config);
++            };
++            axiosFn.head = function(url, config) {
++                config = config || {};
++                config.url = url;
++                config.method = 'HEAD';
++                return doRequest(config);
++            };
++            axiosFn.create = function(defaults) {
++                defaults = defaults || {};
++                var instance = function(config) {
++                    if (typeof config === 'string') config = { url: config };
++                    var merged = {};
++                    for (var k in defaults) {
++                        if (Object.prototype.hasOwnProperty.call(defaults, k)) merged[k] = defaults[k];
++                    }
++                    for (var j in config) {
++                        if (Object.prototype.hasOwnProperty.call(config, j)) merged[j] = config[j];
++                    }
++                    if (defaults.headers || config.headers) {
++                        merged.headers = {};
++                        var h;
++                        if (defaults.headers) {
++                            for (h in defaults.headers) merged.headers[h] = defaults.headers[h];
++                        }
++                        if (config.headers) {
++                            for (h in config.headers) merged.headers[h] = config.headers[h];
++                        }
++                    }
++                    return doRequest(merged);
++                };
++                function verb(method) {
++                    return function(url, data, config) {
++                        if (method === 'GET' || method === 'DELETE' || method === 'HEAD') {
++                            config = data || {};
++                            config.url = url;
++                            config.method = method;
++                        } else {
++                            config = config || {};
++                            config.url = url;
++                            config.method = method;
++                            config.data = data;
++                        }
++                        return instance(config);
++                    };
++                }
++                instance.request = function(config) { return instance(config); };
++                instance.get = verb('GET');
++                instance.post = verb('POST');
++                instance.put = verb('PUT');
++                instance.delete = verb('DELETE');
++                instance.head = verb('HEAD');
++                instance.defaults = defaults;
++                return instance;
++            };
++            function CancelToken(executor) {
++                this.reason = null;
++                var self = this;
++                executor(function(message) {
++                    self.reason = { message: message || 'canceled', __axiosCancel: true };
++                });
++            }
++            CancelToken.source = function() {
++                var cancel;
++                var token = new CancelToken(function(c) { cancel = c; });
++                return { token: token, cancel: cancel };
++            };
++            axiosFn.CancelToken = CancelToken;
++            axiosFn.isCancel = function(value) { return !!(value && value.__axiosCancel); };
++            axiosFn.isAxiosError = function(value) { return !!(value && value.config && (value.response !== undefined || value.code)); };
++            return axiosFn;
++        })();
++    """.trimIndent()
++
++    private fun timersPolyfill() = """
++        if (typeof globalThis.setTimeout === 'undefined') {
++            var __timerSeq = 1;
++            globalThis.setTimeout = function() { return __timerSeq++; };
++            globalThis.clearTimeout = function() {};
++            globalThis.setInterval = function() { return __timerSeq++; };
++            globalThis.clearInterval = function() {};
++        }
++    """.trimIndent()
++
      private fun requirePolyfill() = """
          var require = function(moduleName) {
              if (moduleName === 'cheerio' || moduleName === 'cheerio-without-node-native' || moduleName === 'react-native-cheerio') {
-@@ -915,6 +1214,12 @@ internal object JsBindings {
+@@ -915,6 +1657,27 @@ internal object JsBindings {
              if (moduleName === 'crypto-js') {
                  return CryptoJS;
              }
@@ -324,6 +767,21 @@ index 5e239048..e740c5b7 100644
 +            }
 +            if (moduleName === 'buffer' || moduleName === 'node:buffer') {
 +                return { Buffer: globalThis.Buffer, kMaxLength: 2147483647 };
++            }
++            if (moduleName === 'fs' || moduleName === 'node:fs') {
++                return nodeFs;
++            }
++            if (moduleName === 'path' || moduleName === 'node:path') {
++                return nodePath;
++            }
++            if (moduleName === 'http' || moduleName === 'node:http') {
++                return nodeHttp;
++            }
++            if (moduleName === 'https' || moduleName === 'node:https') {
++                return nodeHttps;
++            }
++            if (moduleName === 'axios') {
++                return axios;
 +            }
              throw new Error("Module '" + moduleName + "' is not available");
          };

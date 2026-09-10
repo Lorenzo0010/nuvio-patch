@@ -58,7 +58,7 @@ Questo NON è un fork con i sorgenti: è un **repository di manutenzione a patch
 3. `03-live-tv.patch` — Live TV, storage, parser M3U, tab navbar, pannello canali nel player, stringhe `live_tv_*`
 4. `04-hls-downloads.patch` — Motore download HLS (segmenti paralleli, decrypt AES-128, remux MP4, tracce companion), sheet selezione tracce, hook long-press in `StreamsScreen` (torrent → motore originale, HLS → motore Plus), tab Download navbar, dipendenze Gradle (media3-muxer, documentfile)
 5. `05-download-folder.patch` — Cartella di download personalizzata (repository, picker SAF, ingranaggio nella schermata Download, storage per-profile) + **versione corrente di `Version.xcconfig`**
-6. `06-plugin-crypto.patch` — Compatibilità runtime plugin JS: `require('crypto'/'node:crypto')` (hash/HMAC/AES-CBC-ECB/PBKDF2/random su bridge nativi) + `Buffer`/`require('buffer')` minimi
+6. `06-plugin-crypto.patch` — Compatibilità runtime plugin JS: `require('crypto'/'node:crypto')` (hash/HMAC/AES-CBC-ECB/PBKDF2/random su bridge nativi), `Buffer`/`require('buffer')` minimi, `require('fs'/'path'/'http'/'https'/'axios')` (fs in-memory, axios sopra fetch nativo), globali `process` e timer `setTimeout/clearTimeout` (no-op sicuri)
 
 ### `local.properties` (mai committare)
 Ogni directory di build (la copia `NuvioMobile/` o un clone temporaneo con patch applicate) deve contenere un `local.properties` con:
