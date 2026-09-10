@@ -1,5 +1,18 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.3
+
+### 🧹 Riprogettazione: base originale + sole patch essenziali
+- L'app torna al **100% alla base originale NuvioMobile 0.4.15**, con in aggiunta **solo**:
+  - **Download HLS**: tieni premuto uno stream — se è torrent parte il motore originale, se è `.m3u8` si apre la selezione qualità/tracce e scarica il motore Plus (segmenti paralleli, decrypt AES-128, remux MP4, audio/sottotitoli companion).
+  - **Cartella di download personalizzata**: ingranaggio nella schermata Download → scegli la cartella (vale per tutti i download).
+  - **Live TV**: playlist M3U, preferiti, pannello canali nel player.
+  - **Updater Plus e branding** (`com.nuvio.app.plus`, nome Nuvio Plus).
+- **Rimosso tutto il resto**: widget launcher, prefetch/auto-download, coda Plus, pagina "Patches Plus" nelle Impostazioni (le Impostazioni tornano identiche all'originale), pulsanti download extra, dialog e icone aggiuntive. I download diretti usano di nuovo il flusso originale invariato.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.3` (versionCode `148`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.2
 
 ### 📂 Cartella personalizzata per tutti i download

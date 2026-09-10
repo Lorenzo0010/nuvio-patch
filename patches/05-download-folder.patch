@@ -1,0 +1,451 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
+index 01ad3280..fcd0f5d5 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
+@@ -7,6 +7,7 @@ import com.nuvio.app.core.storage.ProfileScopedKey
+ internal actual object DownloadsStorage {
+     private const val preferencesName = "nuvio_downloads"
+     private const val payloadKey = "downloads_payload"
++    private const val downloadLocationUriKey = "download_location_uri"
+ 
+     private var preferences: SharedPreferences? = null
+ 
+@@ -23,4 +24,20 @@ internal actual object DownloadsStorage {
+             ?.putString(ProfileScopedKey.of(payloadKey), payload)
+             ?.apply()
+     }
++
++    actual fun getDownloadLocationUri(): String? =
++        preferences?.getString(ProfileScopedKey.of(downloadLocationUriKey), null)
++
++    actual fun setDownloadLocationUri(uri: String?) {
++        preferences
++            ?.edit()
++            ?.run {
++                if (uri == null) {
++                    remove(ProfileScopedKey.of(downloadLocationUriKey))
++                } else {
++                    putString(ProfileScopedKey.of(downloadLocationUriKey), uri)
++                }
++            }
++            ?.apply()
++    }
+ }
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
+new file mode 100644
+index 00000000..515bac48
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
+@@ -0,0 +1,37 @@
++package com.nuvio.app.features.settings
++
++import android.content.Intent
++import androidx.activity.compose.rememberLauncherForActivityResult
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.ui.platform.LocalContext
++
++@Composable
++internal actual fun DownloadLocationPicker(
++    onLocationSelected: (uri: String) -> Unit,
++    onDismiss: () -> Unit,
++) {
++    val context = LocalContext.current
++    val launcher = rememberLauncherForActivityResult(
++        contract = ActivityResultContracts.OpenDocumentTree()
++    ) { uri ->
++        if (uri != null) {
++            context.contentResolver.takePersistableUriPermission(
++                uri,
++                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
++            )
++            onLocationSelected(uri.toString())
++        }
++        onDismiss()
++    }
++
++    LaunchedEffect(Unit) {
++        launcher.launch(null)
++    }
++}
++
++internal actual fun formatUriForDisplay(uri: String): String {
++    val androidUri = android.net.Uri.parse(uri)
++    return androidUri.path?.substringAfterLast(':') ?: uri
++}
+diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+index 7d67bd29..b0442a2d 100644
+--- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
+@@ -1992,4 +1992,8 @@
+   <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
+   <string name="downloads_foreground_title">Download</string>
+   <string name="downloads_foreground_subtitle">Download in corso in background</string>
++  <!-- Posizione download -->
++  <string name="settings_downloads_location_title">Posizione Download</string>
++  <string name="settings_downloads_location_private">Archivio Interno (Privato)</string>
++  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index db20084d..82ce88b2 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -2308,4 +2308,8 @@
+     <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
+     <string name="downloads_foreground_title">Downloads</string>
+     <string name="downloads_foreground_subtitle">Downloading in background</string>
++    <!-- Download location -->
++    <string name="settings_downloads_location_title">Download Location</string>
++    <string name="settings_downloads_location_private">Internal Storage (Private)</string>
++    <string name="settings_downloads_location_reset">Reset to Default</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+index 7019a10c..59782a69 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
+@@ -18,6 +18,8 @@ import androidx.compose.material.icons.rounded.Folder
+ import androidx.compose.material.icons.rounded.Pause
+ import androidx.compose.material.icons.rounded.PlayArrow
+ import androidx.compose.material.icons.rounded.Refresh
++import androidx.compose.material.icons.rounded.Settings
++import androidx.compose.material.icons.rounded.Warning
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.LinearProgressIndicator
+@@ -32,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+@@ -41,6 +44,7 @@ import com.nuvio.app.core.ui.NuvioScreen
+ import com.nuvio.app.core.ui.NuvioScreenHeader
+ import com.nuvio.app.core.ui.NuvioStatusModal
+ import com.nuvio.app.core.ui.NuvioToastController
++import com.nuvio.app.features.settings.DownloadsSettingsScreen
+ import nuvio.composeapp.generated.resources.*
+ import org.jetbrains.compose.resources.stringResource
+ 
+@@ -58,6 +62,7 @@ fun DownloadsScreen(
+     }.collectAsStateWithLifecycle()
+ 
+     var selectedShowId by rememberSaveable(initialShowId) { mutableStateOf(initialShowId) }
++    var showSettings by rememberSaveable { mutableStateOf(false) }
+     var downloadPendingDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
+     val openDownloadsDirectoryFailedText = stringResource(Res.string.downloads_open_directory_failed)
+ 
+@@ -73,6 +78,13 @@ fun DownloadsScreen(
+         }
+     }
+ 
++    if (showSettings) {
++        DownloadsSettingsScreen(
++            onBack = { showSettings = false },
++        )
++        return
++    }
++
+     NuvioScreen {
+         stickyHeader {
+             NuvioScreenHeader(
+@@ -89,6 +101,14 @@ fun DownloadsScreen(
+                     }
+                 },
+                 actions = {
++                    if (selectedShowId == null) {
++                        IconButton(onClick = { showSettings = true }) {
++                            Icon(
++                                imageVector = Icons.Rounded.Settings,
++                                contentDescription = stringResource(Res.string.compose_settings_page_root),
++                            )
++                        }
++                    }
+                     IconButton(
+                         onClick = {
+                             if (!DownloadsPlatformDownloader.openDownloadsDirectory()) {
+@@ -392,6 +412,16 @@ private fun DownloadRow(
+                 }
+ 
+                 Row(verticalAlignment = Alignment.CenterVertically) {
++                    if (item.hlsWarningMessage != null) {
++                        Icon(
++                            imageVector = Icons.Rounded.Warning,
++                            contentDescription = item.hlsWarningMessage,
++                            modifier = Modifier
++                                .padding(end = 4.dp)
++                                .size(20.dp),
++                            tint = Color(0xFFFFC107),
++                        )
++                    }
+                     when (item.status) {
+                         DownloadStatus.Downloading -> {
+                             IconButton(onClick = onPause) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
+new file mode 100644
+index 00000000..3150accc
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
+@@ -0,0 +1,28 @@
++package com.nuvio.app.features.downloads
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++object DownloadsSettingsRepository {
++    private val _downloadLocationUri = MutableStateFlow<String?>(null)
++    val downloadLocationUri: StateFlow<String?> = _downloadLocationUri.asStateFlow()
++
++    private var hasLoaded = false
++
++    fun ensureLoaded() {
++        if (hasLoaded) return
++        hasLoaded = true
++        _downloadLocationUri.value = DownloadsStorage.getDownloadLocationUri()
++    }
++
++    fun onProfileChanged() {
++        hasLoaded = false
++        ensureLoaded()
++    }
++
++    fun setDownloadLocationUri(uri: String?) {
++        _downloadLocationUri.value = uri
++        DownloadsStorage.setDownloadLocationUri(uri)
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
+index 4721842a..48dcc920 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
+@@ -3,4 +3,6 @@ package com.nuvio.app.features.downloads
+ internal expect object DownloadsStorage {
+     fun loadPayload(): String?
+     fun savePayload(payload: String)
++    fun getDownloadLocationUri(): String?
++    fun setDownloadLocationUri(uri: String?)
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
+new file mode 100644
+index 00000000..0870034a
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
+@@ -0,0 +1,66 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.lazy.LazyListScope
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.downloads.DownloadsSettingsRepository
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
++import nuvio.composeapp.generated.resources.settings_downloads_location_private
++import nuvio.composeapp.generated.resources.settings_downloads_location_reset
++import nuvio.composeapp.generated.resources.settings_downloads_location_title
++import org.jetbrains.compose.resources.stringResource
++
++internal fun LazyListScope.downloadsSettingsContent(
++    isTablet: Boolean,
++) {
++    item {
++        val downloadLocationUri by DownloadsSettingsRepository.downloadLocationUri.collectAsStateWithLifecycle()
++        var showPicker by remember { mutableStateOf(false) }
++
++        SettingsSection(
++            title = stringResource(Res.string.compose_settings_root_downloads_title),
++            isTablet = isTablet,
++        ) {
++            SettingsGroup(isTablet = isTablet) {
++                SettingsNavigationRow(
++                    title = stringResource(Res.string.settings_downloads_location_title),
++                    description = downloadLocationUri?.let { formatUriForDisplay(it) } ?: stringResource(Res.string.settings_downloads_location_private),
++                    isTablet = isTablet,
++                    onClick = { showPicker = true },
++                )
++                if (downloadLocationUri != null) {
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsNavigationRow(
++                        title = stringResource(Res.string.settings_downloads_location_reset),
++                        description = null,
++                        isTablet = isTablet,
++                        onClick = { DownloadsSettingsRepository.setDownloadLocationUri(null) },
++                    )
++                }
++            }
++        }
++
++        if (showPicker) {
++            DownloadLocationPicker(
++                onLocationSelected = { uri ->
++                    DownloadsSettingsRepository.setDownloadLocationUri(uri)
++                    showPicker = false
++                },
++                onDismiss = { showPicker = false },
++            )
++        }
++    }
++}
++
++@Composable
++internal expect fun DownloadLocationPicker(
++    onLocationSelected: (uri: String) -> Unit,
++    onDismiss: () -> Unit,
++)
++
++internal expect fun formatUriForDisplay(uri: String): String
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
+new file mode 100644
+index 00000000..c4b15938
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
+@@ -0,0 +1,36 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import com.nuvio.app.core.ui.NuvioScreen
++import com.nuvio.app.core.ui.NuvioScreenHeader
++import com.nuvio.app.core.ui.PlatformBackHandler
++import com.nuvio.app.features.downloads.DownloadsSettingsRepository
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.compose_settings_root_downloads_title
++import org.jetbrains.compose.resources.stringResource
++
++@Composable
++fun DownloadsSettingsScreen(
++    onBack: () -> Unit,
++) {
++    DownloadsSettingsRepository.ensureLoaded()
++
++    PlatformBackHandler(
++        enabled = true,
++        onBack = onBack,
++    )
++
++    NuvioScreen(
++        modifier = Modifier.fillMaxSize(),
++    ) {
++        stickyHeader {
++            NuvioScreenHeader(
++                title = stringResource(Res.string.compose_settings_root_downloads_title),
++                onBack = onBack,
++            )
++        }
++        downloadsSettingsContent(isTablet = false)
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
+new file mode 100644
+index 00000000..b3c0d234
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
+@@ -0,0 +1,21 @@
++package com.nuvio.app.features.downloads
++
++import com.nuvio.app.core.storage.DesktopStorage
++
++internal actual object DownloadsStorage {
++    private val store = DesktopStorage.store("nuvio_downloads")
++
++    actual fun loadPayload(): String? =
++        store.getString("downloads_payload")
++
++    actual fun savePayload(payload: String) {
++        store.putString("downloads_payload", payload)
++    }
++
++    actual fun getDownloadLocationUri(): String? =
++        store.getString("download_location_uri")
++
++    actual fun setDownloadLocationUri(uri: String?) {
++        store.putString("download_location_uri", uri)
++    }
++}
+diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
+new file mode 100644
+index 00000000..8812bcda
+--- /dev/null
++++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
+@@ -0,0 +1,15 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.foundation.layout.Box
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++
++@Composable
++internal actual fun DownloadLocationPicker(
++    onLocationSelected: (uri: String) -> Unit,
++    onDismiss: () -> Unit,
++) {
++    onDismiss()
++}
++
++internal actual fun formatUriForDisplay(uri: String): String = uri
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
+index 1fe7cbf6..d363f62d 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
+@@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
+ 
+ internal actual object DownloadsStorage {
+     private const val payloadKey = "downloads_payload"
++    private const val downloadLocationUriKey = "download_location_uri"
+ 
+     actual fun loadPayload(): String? =
+         NSUserDefaults.standardUserDefaults.stringForKey(ProfileScopedKey.of(payloadKey))
+@@ -12,4 +13,15 @@ internal actual object DownloadsStorage {
+     actual fun savePayload(payload: String) {
+         NSUserDefaults.standardUserDefaults.setObject(payload, forKey = ProfileScopedKey.of(payloadKey))
+     }
++
++    actual fun getDownloadLocationUri(): String? =
++        NSUserDefaults.standardUserDefaults.stringForKey(ProfileScopedKey.of(downloadLocationUriKey))
++
++    actual fun setDownloadLocationUri(uri: String?) {
++        if (uri == null) {
++            NSUserDefaults.standardUserDefaults.removeObjectForKey(ProfileScopedKey.of(downloadLocationUriKey))
++        } else {
++            NSUserDefaults.standardUserDefaults.setObject(uri, forKey = ProfileScopedKey.of(downloadLocationUriKey))
++        }
++    }
+ }
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
+new file mode 100644
+index 00000000..03d3deea
+--- /dev/null
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
+@@ -0,0 +1,16 @@
++package com.nuvio.app.features.settings
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++
++@Composable
++internal actual fun DownloadLocationPicker(
++    onLocationSelected: (uri: String) -> Unit,
++    onDismiss: () -> Unit,
++) {
++    LaunchedEffect(Unit) {
++        onDismiss()
++    }
++}
++
++internal actual fun formatUriForDisplay(uri: String): String = uri
+diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
+index cba08104..1b25fba1 100644
+--- a/iosApp/Configuration/Version.xcconfig
++++ b/iosApp/Configuration/Version.xcconfig
+@@ -1,2 +1,2 @@
+-CURRENT_PROJECT_VERSION=120
+-MARKETING_VERSION=0.4.15
++CURRENT_PROJECT_VERSION=148
++MARKETING_VERSION=0.4.15.3

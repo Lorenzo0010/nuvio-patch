@@ -11,7 +11,7 @@ Mantenere il fork e le patch personalizzate perfettamente allineate con l'upstre
 
 ## ⚖️ Regola di Completezza Funzionale (Rielaborazione Patch)
 
-1. **Risultato = 100% Upstream + Patch**: Il prodotto finale (le APK e la copia di lavoro `NuvioMobile/`) deve contenere **sempre il 100% delle funzioni dell'app originale upstream** e **in aggiunta** tutte le funzioni introdotte dalle patch Plus richieste dall'utente (Live TV, download HLS, updater, widget, prefetch, branding, ecc.). Nessuna funzione di base dell'app originale deve essere persa, oscurata, sostituita o degradata dalle patch.
+1. **Risultato = 100% Upstream + Patch**: Il prodotto finale (le APK e la copia di lavoro `NuvioMobile/`) deve contenere **sempre il 100% delle funzioni dell'app originale upstream** e **in aggiunta** tutte le funzioni introdotte dalle patch Plus richieste dall'utente (Live TV, download HLS, cartella download personalizzata, updater, branding, ecc.). Nessuna funzione di base dell'app originale deve essere persa, oscurata, sostituita o degradata dalle patch.
 2. **Funzioni presenti o aggiunte dall'Upstream con una nostra patch**: Se una funzione esiste già, oppure viene aggiunta successivamente nel repository upstream, e su quella stessa funzione noi avevamo realizzato una patch, il risultato deve essere:
    - **il 100% della funzionalità del repository originale** basata sul codice ufficiale più aggiornato (con relativi bugfix/ottimizzazioni upstream),
    - **più una rielaborazione delle nostre patch** per ottenere gli stessi risultati/comportamenti Plus richiesti dall'utente, senza sovrapposizioni né conflitti con il codice upstream.
@@ -40,7 +40,7 @@ Questo NON è un fork con i sorgenti: è un **repository di manutenzione a patch
 
 | Percorso | Tracciato in git? | Ruolo |
 |---|---|---|
-| `patches/01-..-07-*.patch` | ✅ SÌ | Le 7 patch modulari Plus, applicate in ordine numerico sopra l'upstream |
+| `patches/01-..-05-*.patch` | ✅ SÌ | Le 5 patch modulari Plus, applicate in ordine numerico sopra l'upstream |
 | `scripts/*.ps1`, `scripts/*.sh` | ✅ SÌ | Rigenerazione, applicazione e test delle patch |
 | `assets/extra_libs/` (`.aar`), `assets/jniLibs/` (`.so` per ABI) | ✅ SÌ | Librerie binarie copiate nel tree di build prima di compilare |
 | `assets/keystore/nuvio-release.keystore` | ✅ SÌ (eccezione in `.gitignore`) | Keystore persistente di firma (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`). Non cambiare mai keystore tra le release |
@@ -52,14 +52,12 @@ Questo NON è un fork con i sorgenti: è un **repository di manutenzione a patch
 | `.last_built_upstream_sha` | ✅ SÌ | SHA upstream su cui è allineata la copia di lavoro `NuvioMobile/` |
 | `.github/workflows/` | ⚠️ ASSENTE | Non esiste pipeline CI in questo repo: **build e upload avvengono in locale** con Gradle + `gh` |
 
-### Le 7 patch (ordine di applicazione obbligatorio)
+### Le 5 patch (ordine di applicazione obbligatorio)
 1. `01-branding-and-config.patch` — Branding, appId `com.nuvio.app.plus`, config Gradle (versione pulita senza hash)
 2. `02-app-updater.patch` — Updater reindirizzato su `Lorenzo0010/nuvio-patch`
-3. `03-live-tv.patch` — Live TV, storage, parser M3U, navbar
-4. `04-plugin-hls-downloads.patch` — Download HLS/plugin, sheet selezione tracce, wiring Gradle versione
-5. `05-bugfixes.patch` — Fix vari (contiene valori **vecchi** di `Version.xcconfig`, sovrascritti dalla 07)
-6. `06-launcher-widget.patch` — Widget launcher
-7. `07-stream-prefetch.patch` — Prefetch stream, coda download, **versione corrente di `Version.xcconfig`**
+3. `03-live-tv.patch` — Live TV, storage, parser M3U, tab navbar, pannello canali nel player, stringhe `live_tv_*`
+4. `04-hls-downloads.patch` — Motore download HLS (segmenti paralleli, decrypt AES-128, remux MP4, tracce companion), sheet selezione tracce, hook long-press in `StreamsScreen` (torrent → motore originale, HLS → motore Plus), tab Download navbar, dipendenze Gradle (media3-muxer, documentfile)
+5. `05-download-folder.patch` — Cartella di download personalizzata (repository, picker SAF, ingranaggio nella schermata Download, storage per-profile) + **versione corrente di `Version.xcconfig`**
 
 ### `local.properties` (mai committare)
 Ogni directory di build (la copia `NuvioMobile/` o un clone temporaneo con patch applicate) deve contenere un `local.properties` con:
@@ -77,7 +75,7 @@ NUVIO_RELEASE_KEY_PASSWORD=<password>
 
 ## 🏷️ Regola di Versionamento Obbligatoria
 1. **Controllo delle Prime 3 Parti (`X.Y.Z`, es. `0.4.14`)**: Le prime tre parti della versione sono controllate **esclusivamente dal repository upstream ufficiale** (`https://github.com/NuvioMedia/NuvioMobile.git`). Non devono MAI essere modificate o avanzate arbitrariamente. Cambiano solo ed esclusivamente quando viene rilasciata una nuova versione ufficiale upstream (es. quando l'upstream rilascerà `0.4.15`).
-2. **Controllo Utente della Quarta Parte (`.x`, es. `0.4.14.1`, `0.4.14.2`, ecc.)**: Tutte le modifiche, patch aggiuntive, nuove feature (Live TV, Download HLS, Launcher Widget, Patches Plus, Stream prefetch, ecc.), bugfix o personalizzazioni sono gestite dall'utente incrementando **esclusivamente il quarto numero (`.x`)**:
+2. **Controllo Utente della Quarta Parte (`.x`, es. `0.4.14.1`, `0.4.14.2`, ecc.)**: Tutte le modifiche, patch aggiuntive, nuove feature (Live TV, Download HLS, cartella download personalizzata, updater, branding, ecc.), bugfix o personalizzazioni sono gestite dall'utente incrementando **esclusivamente il quarto numero (`.x`)**:
    - Prima release fork: `0.4.14.1`
    - Seconda release fork: `0.4.14.2`
    - Terza release fork: `0.4.14.3`
@@ -89,7 +87,7 @@ NUVIO_RELEASE_KEY_PASSWORD=<password>
    - Il Tag della release su GitHub deve essere esattamente `<versione>` (es. `0.4.14.13`).
    - Gli APK pubblicati devono seguire la nomenclatura pulita senza hash: `nuvio_plus_<versione>_universal.apk`, `nuvio_plus_<versione>_<abi>.apk` (es. `nuvio_plus_0.4.14.13_universal.apk`, `nuvio_plus_0.4.14.13_arm64-v8a.apk`, ecc.).
 4. **Firma APK Persistente**: Tutti gli APK devono essere firmati con il keystore persistente in `assets/keystore/nuvio-release.keystore` (impronta SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`). Non cambiare mai keystore tra le release per evitare l'errore Android di firma non corrispondente.
-5. **File Sorgente della Versione**: l'unica fonte è `iosApp/Configuration/Version.xcconfig` (`MARKETING_VERSION` = `<versione>`, `CURRENT_PROJECT_VERSION` = versionCode intero incrementale). Il valore **effettivo** è quello della patch applicata per ultima che tocca il file, cioè la **07** (la 05 contiene valori storici sovrascritti). Per un version bump: modifica il file nella copia `NuvioMobile/`, poi rigenera la patch 07 (vedi § Sviluppo).
+5. **File Sorgente della Versione**: l'unica fonte è `iosApp/Configuration/Version.xcconfig` (`MARKETING_VERSION` = `<versione>`, `CURRENT_PROJECT_VERSION` = versionCode intero incrementale). Il valore **effettivo** è quello della patch 05 (l'ultima che tocca il file). Per un version bump: modifica il file nella copia `NuvioMobile/`, poi rigenera la patch 05 (vedi § Sviluppo).
 
 ---
 
@@ -99,9 +97,9 @@ Le modifiche al codice **non** avvengono nel repo root (che non contiene sorgent
 
 1. **Modifica** i file in `NuvioMobile/` (già allineata a `.last_built_upstream_sha` con tutte le patch applicate).
 2. **Rigenera la patch** interessata (ogni script clona l'upstream fresco, applica le patch precedenti, sovrappone i file elencati copiati da `NuvioMobile/`, poi `git diff --binary`):
-   - `powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-04.ps1` (download/HLS — lista file in `$files04`)
-   - `powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-07.ps1` (prefetch/coda/download UI/**versione** — lista file in `$files07`)
-   - `powershell -ExecutionPolicy Bypass -File .\scripts\generate-patch-06.ps1` (widget)
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-03.ps1` (Live TV + wiring shell/tab — lista file in `$files03`)
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-04.ps1` (motore HLS, hook stream, tab Download — lista file in `$files04`)
+   - `powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-05.ps1` (cartella download, schermata Download, **versione** — lista file in `$files05`)
    - Se aggiungi **nuovi file**, inseriscili nella lista `$filesNN` dello script corrispondente, altrimenti non finiranno nella patch.
 3. **Testa** l'applicabilità di tutte le patch su upstream fresco:
    - PowerShell: `powershell -ExecutionPolicy Bypass -File .\scripts\test-patch-apply.ps1`
@@ -129,7 +127,7 @@ Esegui la build **nella directory con le patch applicate** (`NuvioMobile/` oppur
 ### Precondizioni (tutte obbligatorie)
 1. `local.properties` presente nella root di build con `sdk.dir` + chiavi `NUVIO_RELEASE_*` (copialo da `NuvioMobile/local.properties` se la dir è fresca).
 2. Asset copiati: `assets/extra_libs/*` → `composeApp/libs/`, `assets/jniLibs/*` → `composeApp/src/androidMain/jniLibs/` (gli script `apply-*.ps1` lo fanno da soli).
-3. `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` già al valore target (via patch 07).
+3. `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` già al valore target (via patch 05).
 
 ### Comando (PowerShell)
 ```powershell
@@ -162,7 +160,7 @@ Copy-Item androidApp\build\outputs\apk\full\release\androidApp-full-x86-release.
 2. **Commit e push** su `origin/main` (solo file tracciati: patch rigenerate, script, `releases/release_notes.md`, `.last_built_upstream_sha` se in sync, docs). Convenzioni osservate:
    - `feat(downloads): <descrizione> (v<versione>)`
    - `fix(<area>): <descrizione> (v<versione>)`
-   - `chore: aggiorna patch 07 ... v<versione>`
+   - `chore: aggiorna patch 05 ... v<versione>`
    - `docs: aggiorna note di rilascio per v<versione>`
 3. **Crea la GitHub Release** sul repository fork `Lorenzo0010/nuvio-patch` (tag = versione pulita, creato dal comando se assente). Esegui il comando **nella root `F:\GitHub\nuvio`** (il cui `origin` è il fork) oppure aggiungi `--repo Lorenzo0010/nuvio-patch`:
    ```powershell
@@ -176,8 +174,8 @@ Copy-Item androidApp\build\outputs\apk\full\release\androidApp-full-x86-release.
 ## 📌 Checklist Rapida per l'Agente
 - [ ] Verificato ultimo commit upstream via `git ls-remote` e confrontato con `.last_built_upstream_sha`
 - [ ] Sviluppato in `NuvioMobile/`; nuovi file aggiunti alla lista `$filesNN` dello script di rigenerazione
-- [ ] Patch rigenerate (`update-patch-*.ps1` / `generate-patch-06.ps1`) e testate (`test-patch-apply.ps1`)
-- [ ] Regola di versionamento rispettata: `X.Y.Z` da upstream, `.W` dall'utente; versione effettiva via patch 07
+- [ ] Patch rigenerate (`update-patch-03/04/05.ps1`) e testate (`test-patch-apply.ps1`)
+- [ ] Regola di versionamento rispettata: `X.Y.Z` da upstream, `.W` dall'utente; versione effettiva via patch 05
 - [ ] Completezza funzionale: risultato = 100% upstream + patch rielaborate; funzioni base e Plus richieste tutte presenti, visibili e funzionanti (`base + Plus`)
 - [ ] Nessun suffisso/hash in versione, tag (`<versione>`) e nomi APK (`nuvio_plus_<versione>_<abi>.apk`)
 - [ ] `local.properties` presente nella dir di build (mai committato); firma = keystore persistente

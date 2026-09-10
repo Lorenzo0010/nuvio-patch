@@ -1,4 +1,4 @@
-# Script to regenerate patches/05-bugfixes.patch based on latest NuvioMobile changes
+# Script to regenerate patches/05-download-folder.patch based on latest NuvioMobile changes
 param (
     [string]$UpstreamUrl = "https://github.com/NuvioMedia/NuvioMobile.git",
     [string]$UpstreamBranch = "cmp-rewrite",
@@ -10,18 +10,25 @@ $testDir = "$env:TEMP\nuvio_patch_05_gen_$(Get-Random)"
 New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 
 $files05 = @(
-    "composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerEngine.android.kt",
-    "composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerNowPlayingService.android.kt",
-    "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DisintegrationEffect.kt",
-    "composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/PosterZoomActionOverlay.kt",
+    "composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt",
+    "composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt",
+    "composeApp/src/commonMain/composeResources/values-it/strings.xml",
+    "composeApp/src/commonMain/composeResources/values/strings.xml",
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt",
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt",
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt",
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt",
+    "composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt",
+    "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt",
+    "composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt",
+    "composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt",
+    "composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt",
     "iosApp/Configuration/Version.xcconfig"
 )
 
 try {
     Write-Host "Clonazione upstream ($UpstreamUrl, branch: $UpstreamBranch)..." -ForegroundColor Yellow
     $env:GIT_LFS_SKIP_SMUDGE = "1"
-    # Clone con storia completa: git apply --3way richiede i blobs degli antenati,
-    # che un clone shallow non contiene.
     git clone --branch $UpstreamBranch $UpstreamUrl $testDir --quiet
 
     $pinSha = (Get-Content (Join-Path $PSScriptRoot "..\.last_built_upstream_sha") -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
@@ -51,11 +58,6 @@ try {
     Write-Host "Copia file aggiornati da NuvioMobile..." -ForegroundColor Yellow
     foreach ($rel in $files05) {
         $src = Join-Path $NuvioMobileDir ($rel -replace '/', '\')
-        if (-not (Test-Path $src)) {
-            Write-Host "  DEL: $rel" -ForegroundColor Gray
-            Remove-Item -Path (Join-Path $testDir ($rel -replace '/', '\')) -Force -ErrorAction SilentlyContinue
-            continue
-        }
         $dst = Join-Path $testDir ($rel -replace '/', '\')
         $dstDir = Split-Path $dst -Parent
         if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
@@ -63,8 +65,8 @@ try {
     }
 
     git add -N .
-    $patch05Path = Join-Path $PatchesDir "05-bugfixes.patch"
-    Write-Host "Generazione git diff per 05-bugfixes.patch..." -ForegroundColor Yellow
+    $patch05Path = Join-Path $PatchesDir "05-download-folder.patch"
+    Write-Host "Generazione git diff per 05-download-folder.patch..." -ForegroundColor Yellow
     git diff --binary "--output=$patch05Path" -- $files05
     Write-Host "Patch 05 aggiornata con successo! Dimensione: $((Get-Item $patch05Path).Length) bytes" -ForegroundColor Green
 
