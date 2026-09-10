@@ -1,5 +1,13 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.4
+
+### 🧹 Schermata Download semplificata
+- Rimosso il tasto "Apri cartella download" dalla schermata Download: resta solo l'ingranaggio che apre la scelta della cartella personalizzata (o il ripristino ai predefiniti).
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.4` (versionCode `149`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.3
 
 ### 🧹 Riprogettazione: base originale + sole patch essenziali
