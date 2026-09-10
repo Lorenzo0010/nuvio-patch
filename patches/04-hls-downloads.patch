@@ -1800,10 +1800,10 @@ index 00000000..4a2954a5
 +    }
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index 8b0be168..7d67bd29 100644
+index 8b0be168..b0442a2d 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -1982,4 +1982,14 @@
+@@ -1982,4 +1982,18 @@
    <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
    <string name="live_tv_source_title">URL Sorgente</string>
    <string name="live_tv_categories">Categorie</string>
@@ -1817,12 +1817,16 @@ index 8b0be168..7d67bd29 100644
 +  <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
 +  <string name="downloads_foreground_title">Download</string>
 +  <string name="downloads_foreground_subtitle">Download in corso in background</string>
++  <!-- Posizione download -->
++  <string name="settings_downloads_location_title">Posizione Download</string>
++  <string name="settings_downloads_location_private">Archivio Interno (Privato)</string>
++  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 884fe2df..db20084d 100644
+index 884fe2df..82ce88b2 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2298,4 +2298,14 @@
+@@ -2298,4 +2298,18 @@
      <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
      <string name="live_tv_source_title">Source URL</string>
      <string name="live_tv_categories">Categories</string>
@@ -1836,6 +1840,10 @@ index 884fe2df..db20084d 100644
 +    <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
 +    <string name="downloads_foreground_title">Downloads</string>
 +    <string name="downloads_foreground_subtitle">Downloading in background</string>
++    <!-- Download location -->
++    <string name="settings_downloads_location_title">Download Location</string>
++    <string name="settings_downloads_location_private">Internal Storage (Private)</string>
++    <string name="settings_downloads_location_reset">Reset to Default</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 index 8ee5d6cb..fa840266 100644
@@ -2336,10 +2344,10 @@ index 23c8d9b1..c28280a4 100644
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..a334eb6f
+index 00000000..74e04ebc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
-@@ -0,0 +1,406 @@
+@@ -0,0 +1,403 @@
 +package com.nuvio.app.features.downloads
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -2448,13 +2456,10 @@ index 00000000..a334eb6f
 +    }
 +
 +    val audioTracks = remember(playlist) {
-+        // Stesso URI = stesso contenuto: le playlist reali spesso ripetono la
-+        // stessa resa audio/sottotitoli in più gruppi. Senza distinctBy, righe
-+        // diverse condividono la chiave di selezione e si attivano/disattivano insieme.
-+        playlist?.audioTracks?.filter { it.uri != null }?.distinctBy { it.uri }.orEmpty()
++        playlist?.audioTracks?.filter { it.uri != null }.orEmpty()
 +    }
 +    val subtitleTracks = remember(playlist) {
-+        playlist?.subtitleTracks?.filter { it.uri != null }?.distinctBy { it.uri }.orEmpty()
++        playlist?.subtitleTracks?.filter { it.uri != null }.orEmpty()
 +    }
 +
 +    var selectedQualityKey by remember(qualityOptions) {

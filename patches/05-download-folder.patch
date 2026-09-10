@@ -74,32 +74,6 @@ index 00000000..515bac48
 +    val androidUri = android.net.Uri.parse(uri)
 +    return androidUri.path?.substringAfterLast(':') ?: uri
 +}
-diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index 7d67bd29..b0442a2d 100644
---- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
-+++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -1992,4 +1992,8 @@
-   <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
-   <string name="downloads_foreground_title">Download</string>
-   <string name="downloads_foreground_subtitle">Download in corso in background</string>
-+  <!-- Posizione download -->
-+  <string name="settings_downloads_location_title">Posizione Download</string>
-+  <string name="settings_downloads_location_private">Archivio Interno (Privato)</string>
-+  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
- </resources>
-diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index db20084d..82ce88b2 100644
---- a/composeApp/src/commonMain/composeResources/values/strings.xml
-+++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2308,4 +2308,8 @@
-     <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
-     <string name="downloads_foreground_title">Downloads</string>
-     <string name="downloads_foreground_subtitle">Downloading in background</string>
-+    <!-- Download location -->
-+    <string name="settings_downloads_location_title">Download Location</string>
-+    <string name="settings_downloads_location_private">Internal Storage (Private)</string>
-+    <string name="settings_downloads_location_reset">Reset to Default</string>
- </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 index 7019a10c..cf758593 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
@@ -459,11 +433,11 @@ index 00000000..03d3deea
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index cba08104..07c494df 100644
+index cba08104..db7bb0b5 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=120
 -MARKETING_VERSION=0.4.15
-+CURRENT_PROJECT_VERSION=152
-+MARKETING_VERSION=0.4.15.7
++CURRENT_PROJECT_VERSION=153
++MARKETING_VERSION=0.4.15.8
