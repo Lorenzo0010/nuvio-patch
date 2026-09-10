@@ -9,6 +9,7 @@ Questo documento descrive le **sole** personalizzazioni del fork Plus rispetto a
 3. `03-live-tv` — sezione Live TV.
 4. `04-hls-downloads` — motore di download HLS + tab Download.
 5. `05-download-folder` — cartella di download personalizzata + versione corrente.
+6. `06-plugin-crypto` — compatibilità runtime plugin JS (`require('crypto')`/`Buffer`).
 
 ## 📺 Live TV (patch 03)
 
@@ -31,6 +32,12 @@ Questo documento descrive le **sole** personalizzazioni del fork Plus rispetto a
 - **Ingranaggio nella schermata Download** (tab Offline) → selettore cartella (SAF) + ripristino predefinito.
 - Vale per **tutti** i download: i file completati (anche in background ad app chiusa) vengono spostati nella cartella scelta; la risoluzione dei file la cerca lì per prima.
 - Le **Impostazioni restano identiche all'originale**: nessuna pagina/voce "Plus".
+
+## 🔌 Compatibilità plugin JS (patch 06)
+
+- `require('crypto')` / `require('node:crypto')`: `createHash` (MD5/SHA-1/256/384/512), `createHmac`, `createCipheriv`/`createDecipheriv` (AES-CBC/ECB 128/192/256), `pbkdf2Sync`, `randomBytes`/`randomFillSync`/`randomInt`/`randomUUID`, `timingSafeEqual` — eseguiti sui bridge crittografici nativi dell'app.
+- `Buffer` globale minimo + `require('buffer')` (`from`/`alloc`/`concat`/`isBuffer`/`byteLength`, `toString('hex'/'base64'/'utf8'/...)`).
+- Serve ai plugin che usano helper di tipo `cloudflare_provider_fetch.js` (prima fallivano con `Module 'crypto' is not available` e il ripiego Cloudflare non partiva).
 
 ## Rimosso rispetto alle build Plus precedenti
 

@@ -1,0 +1,330 @@
+diff --git a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
+index 5e239048..e740c5b7 100644
+--- a/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
++++ b/composeApp/src/fullCommonMain/kotlin/com/nuvio/app/features/plugins/runtime/js/JsBindings.kt
+@@ -15,6 +15,8 @@ internal object JsBindings {
+             ${urlPolyfill()}
+             ${cryptoPolyfill()}
+             ${textEncoderPolyfill()}
++            ${bufferPolyfill()}
++            ${nodeCryptoPolyfill()}
+             ${cheerioPolyfill()}
+             ${requirePolyfill()}
+             ${arrayPolyfill()}
+@@ -907,6 +909,303 @@ internal object JsBindings {
+         }
+     """.trimIndent()
+ 
++    private fun bufferPolyfill() = """
++        function __bufferToString(bytes, encoding) {
++            var enc = String(encoding || 'utf8').toLowerCase().replace(/[^a-z0-9]/g, '');
++            if (enc === 'hex') return __bytesToHex(bytes);
++            if (enc === 'base64' || enc === 'base64url') {
++                var bin = '';
++                for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
++                var out = btoa(bin);
++                if (enc === 'base64url') out = out.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
++                return out;
++            }
++            if (enc === 'latin1' || enc === 'binary' || enc === 'ascii') {
++                var latin = '';
++                for (var j = 0; j < bytes.length; j++) latin += String.fromCharCode(bytes[j] & 0xff);
++                return latin;
++            }
++            return new TextDecoder('utf-8').decode(bytes);
++        }
++
++        function __stringToBytes(str, encoding) {
++            var enc = String(encoding || 'utf8').toLowerCase().replace(/[^a-z0-9]/g, '');
++            if (enc === 'hex') return __hexToBytes(str);
++            if (enc === 'base64' || enc === 'base64url') {
++                var s = String(str).replace(/-/g, '+').replace(/_/g, '/');
++                while (s.length % 4) s += '=';
++                var bin = atob(s);
++                var out = new Uint8Array(bin.length);
++                for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) & 0xff;
++                return out;
++            }
++            if (enc === 'latin1' || enc === 'binary' || enc === 'ascii') {
++                var raw = String(str);
++                var latin = new Uint8Array(raw.length);
++                for (var j = 0; j < raw.length; j++) latin[j] = raw.charCodeAt(j) & 0xff;
++                return latin;
++            }
++            return new TextEncoder().encode(String(str));
++        }
++
++        function __inputBytes(data, encoding) {
++            if (data === null || data === undefined) return new Uint8Array(0);
++            if (typeof data === 'string') return __stringToBytes(data, encoding);
++            if (data instanceof ArrayBuffer) return new Uint8Array(data);
++            return __toUint8Array(data);
++        }
++
++        function __wrapBuffer(bytes) {
++            var b = __toUint8Array(bytes);
++            b._isBuffer = true;
++            b.toString = function(encoding) { return __bufferToString(b, encoding); };
++            b.equals = function(other) {
++                var o = __toUint8Array(other);
++                if (o.length !== b.length) return false;
++                for (var i = 0; i < b.length; i++) {
++                    if (b[i] !== o[i]) return false;
++                }
++                return true;
++            };
++            b.compare = function(other) {
++                var o = __toUint8Array(other);
++                var n = Math.min(b.length, o.length);
++                for (var i = 0; i < n; i++) {
++                    if (b[i] !== o[i]) return b[i] < o[i] ? -1 : 1;
++                }
++                if (b.length === o.length) return 0;
++                return b.length < o.length ? -1 : 1;
++            };
++            b.copy = function(target, targetStart, sourceStart, sourceEnd) {
++                var t = __toUint8Array(target);
++                targetStart = targetStart === undefined ? 0 : targetStart;
++                sourceStart = sourceStart === undefined ? 0 : sourceStart;
++                sourceEnd = sourceEnd === undefined ? b.length : sourceEnd;
++                var src = Uint8Array.prototype.slice.call(b, sourceStart, sourceEnd);
++                Uint8Array.prototype.set.call(t, src, targetStart);
++                return src.length;
++            };
++            b.slice = function(start, end) { return __wrapBuffer(Uint8Array.prototype.slice.call(b, start, end)); };
++            b.subarray = function(start, end) { return __wrapBuffer(Uint8Array.prototype.subarray.call(b, start, end)); };
++            return b;
++        }
++
++        if (typeof globalThis.Buffer === 'undefined') {
++            globalThis.Buffer = (function() {
++                function Buffer(arg, encoding) {
++                    if (typeof arg === 'number') return Buffer.alloc(arg);
++                    return Buffer.from(arg, encoding);
++                }
++                Buffer.from = function(data, encoding) {
++                    if (typeof data === 'string') return __wrapBuffer(__stringToBytes(data, encoding));
++                    if (data instanceof ArrayBuffer) return __wrapBuffer(new Uint8Array(data));
++                    return __wrapBuffer(data);
++                };
++                Buffer.alloc = function(size, fill, encoding) {
++                    size = size === undefined ? 0 : size >>> 0;
++                    var b = __wrapBuffer(new Uint8Array(size));
++                    if (fill !== undefined && fill !== null && size > 0) {
++                        if (typeof fill === 'string') {
++                            var fb = __stringToBytes(fill, encoding);
++                            if (fb.length > 0) {
++                                for (var i = 0; i < size; i++) b[i] = fb[i % fb.length];
++                            }
++                        } else if (typeof fill === 'number') {
++                            b.fill(fill & 0xff);
++                        } else {
++                            var ob = __toUint8Array(fill);
++                            if (ob.length > 0) {
++                                for (var j = 0; j < size; j++) b[j] = ob[j % ob.length];
++                            }
++                        }
++                    }
++                    return b;
++                };
++                Buffer.allocUnsafe = function(size) { return __wrapBuffer(new Uint8Array(size === undefined ? 0 : size >>> 0)); };
++                Buffer.concat = function(list, totalLength) {
++                    list = list || [];
++                    var total = 0;
++                    var i;
++                    if (totalLength === undefined || totalLength === null) {
++                        for (i = 0; i < list.length; i++) total += __toUint8Array(list[i]).length;
++                    } else {
++                        total = totalLength >>> 0;
++                    }
++                    var out = __wrapBuffer(new Uint8Array(total));
++                    var offset = 0;
++                    for (i = 0; i < list.length && offset < total; i++) {
++                        var part = __toUint8Array(list[i]);
++                        var take = Math.min(part.length, total - offset);
++                        Uint8Array.prototype.set.call(out, Uint8Array.prototype.subarray.call(part, 0, take), offset);
++                        offset += take;
++                    }
++                    return out;
++                };
++                Buffer.isBuffer = function(x) { return !!(x && x._isBuffer === true); };
++                Buffer.isEncoding = function(enc) {
++                    var e = String(enc || '').toLowerCase().replace(/[^a-z0-9]/g, '');
++                    return e === 'utf8' || e === 'utf16le' || e === 'latin1' || e === 'binary' || e === 'ascii' || e === 'hex' || e === 'base64' || e === 'base64url' || e === 'ucs2';
++                };
++                Buffer.byteLength = function(data, encoding) {
++                    if (typeof data === 'string') return __stringToBytes(data, encoding).length;
++                    return __toUint8Array(data).length;
++                };
++                return Buffer;
++            })();
++        }
++    """.trimIndent()
++
++    private fun nodeCryptoPolyfill() = """
++        var nodeCrypto = (function() {
++            function __normalizeNodeHash(algo) {
++                var n = String(algo && algo.name ? algo.name : algo === undefined || algo === null ? 'sha256' : algo).toLowerCase().replace(/[^a-z0-9]/g, '');
++                if (n === 'sha') n = 'sha1';
++                if (n === 'md5') return 'MD5';
++                if (n === 'sha1') return 'SHA1';
++                if (n === 'sha256') return 'SHA256';
++                if (n === 'sha384') return 'SHA384';
++                if (n === 'sha512') return 'SHA512';
++                throw new Error('Unsupported hash algorithm: ' + algo);
++            }
++
++            function __parseAesCipher(algorithm) {
++                var n = String(algorithm).toLowerCase().replace(/[^a-z0-9]/g, '');
++                var m = /^aes(128|192|256)(cbc|ecb|gcm)$/.exec(n);
++                if (!m) throw new Error('Unsupported cipher algorithm: ' + algorithm);
++                if (m[2] === 'gcm') throw new Error('AES-GCM is not supported by the native bridge (no auth-tag support)');
++                return { keyBytes: parseInt(m[1], 10) / 8, mode: m[2] === 'ecb' ? 'AES-ECB' : 'AES-CBC' };
++            }
++
++            function NodeHash(algo) {
++                this._algo = __normalizeNodeHash(algo);
++                this._parts = [];
++            }
++            NodeHash.prototype.update = function(data, encoding) {
++                this._parts.push(__inputBytes(data, encoding));
++                return this;
++            };
++            NodeHash.prototype.digest = function(encoding) {
++                var all = globalThis.Buffer.concat(this._parts);
++                var out = __hexToBytes(__crypto_digest_hex_raw(this._algo, __bytesToHex(all)));
++                if (encoding === undefined || encoding === null) return globalThis.Buffer.from(out);
++                return __bufferToString(out, encoding);
++            };
++
++            function NodeHmac(algo, key, keyEncoding) {
++                this._algo = __normalizeNodeHash(algo);
++                this._key = typeof key === 'string' ? __stringToBytes(key, keyEncoding) : __toUint8Array(key);
++                this._parts = [];
++            }
++            NodeHmac.prototype.update = function(data, encoding) {
++                this._parts.push(__inputBytes(data, encoding));
++                return this;
++            };
++            NodeHmac.prototype.digest = function(encoding) {
++                var all = globalThis.Buffer.concat(this._parts);
++                var out = __hexToBytes(__crypto_hmac_hex_raw(this._algo, __bytesToHex(this._key), __bytesToHex(all)));
++                if (encoding === undefined || encoding === null) return globalThis.Buffer.from(out);
++                return __bufferToString(out, encoding);
++            };
++
++            function NodeCipher(decrypt, algorithm, key, iv) {
++                var parsed = __parseAesCipher(algorithm);
++                var kb = typeof key === 'string' ? __stringToBytes(key, 'utf8') : __toUint8Array(key);
++                if (kb.length !== parsed.keyBytes) throw new Error('Invalid key length ' + kb.length + ' for ' + algorithm);
++                this._decrypt = !!decrypt;
++                this._mode = parsed.mode;
++                this._autoPadding = true;
++                this._key = kb;
++                if (iv === null || iv === undefined) {
++                    this._iv = new Uint8Array(0);
++                } else if (typeof iv === 'string') {
++                    this._iv = __stringToBytes(iv, 'utf8');
++                } else {
++                    this._iv = __toUint8Array(iv);
++                }
++                this._parts = [];
++            }
++            NodeCipher.prototype.setAutoPadding = function(auto) {
++                this._autoPadding = !!auto;
++                return this;
++            };
++            NodeCipher.prototype.update = function(data, inputEncoding, outputEncoding) {
++                this._parts.push(__inputBytes(data, inputEncoding));
++                if (outputEncoding) return '';
++                return globalThis.Buffer.alloc(0);
++            };
++            NodeCipher.prototype.final = function(outputEncoding) {
++                var all = globalThis.Buffer.concat(this._parts);
++                var mode = this._autoPadding ? this._mode : this._mode + '-NoPadding';
++                var fn = this._decrypt ? __crypto_aes_decrypt_hex : __crypto_aes_encrypt_hex;
++                var out = __hexToBytes(fn(mode, __bytesToHex(this._key), __bytesToHex(this._iv), __bytesToHex(all)));
++                if (outputEncoding) return __bufferToString(out, outputEncoding);
++                return globalThis.Buffer.from(out);
++            };
++
++            var nodeCrypto = {
++                createHash: function(algorithm) { return new NodeHash(algorithm); },
++                createHmac: function(algorithm, key, options) {
++                    return new NodeHmac(algorithm, key, typeof options === 'string' ? options : undefined);
++                },
++                createCipheriv: function(algorithm, key, iv) { return new NodeCipher(false, algorithm, key, iv); },
++                createDecipheriv: function(algorithm, key, iv) { return new NodeCipher(true, algorithm, key, iv); },
++                randomBytes: function(size) {
++                    size = size === undefined || size === null ? 0 : size >>> 0;
++                    var b = new Uint8Array(size);
++                    if (size > 0) globalThis.crypto.getRandomValues(b);
++                    return globalThis.Buffer.from(b);
++                },
++                randomFillSync: function(buf, offset, size) {
++                    if (buf instanceof ArrayBuffer) buf = new Uint8Array(buf);
++                    var isView = buf instanceof Uint8Array || (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(buf));
++                    if (!isView) throw new Error('randomFillSync expects a TypedArray or DataView');
++                    var u8 = new Uint8Array(buf.buffer, buf.byteOffset || 0, buf.byteLength);
++                    offset = offset === undefined ? 0 : offset >>> 0;
++                    size = size === undefined ? u8.length - offset : size >>> 0;
++                    if (size > 0) {
++                        var tmp = new Uint8Array(size);
++                        globalThis.crypto.getRandomValues(tmp);
++                        u8.set(tmp, offset);
++                    }
++                    return buf;
++                },
++                randomInt: function(min, max) {
++                    if (max === undefined) { max = min; min = 0; }
++                    min = Math.ceil(min);
++                    max = Math.floor(max);
++                    if (!(max > min)) throw new Error('randomInt: max must be greater than min');
++                    var range = max - min;
++                    var limit = Math.floor(4294967296 / range) * range;
++                    var w = new Uint8Array(4);
++                    while (true) {
++                        globalThis.crypto.getRandomValues(w);
++                        var v = ((w[0] * 256 + w[1]) * 256 + w[2]) * 256 + w[3];
++                        if (v < limit) return min + (v % range);
++                    }
++                },
++                randomUUID: function() { return globalThis.crypto.randomUUID(); },
++                pbkdf2Sync: function(password, salt, iterations, keylen, digest) {
++                    var p = typeof password === 'string' ? new TextEncoder().encode(password) : __toUint8Array(password);
++                    var s = typeof salt === 'string' ? new TextEncoder().encode(salt) : __toUint8Array(salt);
++                    var out = __hexToBytes(__crypto_pbkdf2_hex(__bytesToHex(p), __bytesToHex(s), iterations, keylen * 8, __normalizeNodeHash(digest || 'sha1')));
++                    return globalThis.Buffer.from(out);
++                },
++                timingSafeEqual: function(a, b) {
++                    var x = __toUint8Array(a);
++                    var y = __toUint8Array(b);
++                    if (x.length !== y.length) throw new Error('Input buffers must have the same byte length');
++                    var diff = 0;
++                    for (var i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
++                    return diff === 0;
++                },
++                getHashes: function() { return ['md5', 'sha1', 'sha256', 'sha384', 'sha512']; },
++                getCiphers: function() { return ['aes-128-cbc', 'aes-192-cbc', 'aes-256-cbc', 'aes-128-ecb', 'aes-192-ecb', 'aes-256-ecb']; }
++            };
++            nodeCrypto.webcrypto = globalThis.crypto;
++            return nodeCrypto;
++        })();
++    """.trimIndent()
++
+     private fun requirePolyfill() = """
+         var require = function(moduleName) {
+             if (moduleName === 'cheerio' || moduleName === 'cheerio-without-node-native' || moduleName === 'react-native-cheerio') {
+@@ -915,6 +1214,12 @@ internal object JsBindings {
+             if (moduleName === 'crypto-js') {
+                 return CryptoJS;
+             }
++            if (moduleName === 'crypto' || moduleName === 'node:crypto') {
++                return nodeCrypto;
++            }
++            if (moduleName === 'buffer' || moduleName === 'node:buffer') {
++                return { Buffer: globalThis.Buffer, kMaxLength: 2147483647 };
++            }
+             throw new Error("Module '" + moduleName + "' is not available");
+         };
+     """.trimIndent()

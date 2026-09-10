@@ -1,5 +1,15 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.5
+
+### 🔌 Fix plugin: modulo `crypto` non disponibile
+- I plugin che usano `require('crypto')` (es. helper `cloudflare_provider_fetch.js`) fallivano nel test/ricerca con `Error: Module 'crypto' is not available` e di conseguenza anche il passaggio Cloudflare non partiva. Ora il runtime JS espone un modulo `crypto` compatibile Node (`createHash`, `createHmac`, `createCipheriv`/`createDecipheriv` AES, `pbkdf2Sync`, `randomBytes`/`randomUUID`, `timingSafeEqual`) appoggiato ai bridge crittografici nativi, più un `Buffer` minimo globale (`require('buffer')` incluso).
+- Base upstream invariata (`e377942`, 100% funzioni originali) + patch 06.
+- Schermata test plugin: gli errori del test ora mostrano il messaggio completo in modo più leggibile.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.5` (versionCode `150`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.4
 
 ### 🧹 Schermata Download semplificata

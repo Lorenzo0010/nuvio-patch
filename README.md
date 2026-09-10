@@ -1,6 +1,6 @@
 ﻿# ðŸš€ Nuvio Plus Mobile â€” Repository di Manutenzione Patch
 
-Questo repository mantiene le **5 patch modulari Plus** per [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) (`branch: cmp-rewrite`), gli script di rigenerazione/test e le librerie binarie necessarie alla compilazione. I sorgenti completi **non sono tracciati qui**: vivono nella copia di lavoro locale `NuvioMobile/` (gitignored), su cui vengono applicate le patch e da cui vengono compilati gli APK.
+Questo repository mantiene le **6 patch modulari Plus** per [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) (`branch: cmp-rewrite`), gli script di rigenerazione/test e le librerie binarie necessarie alla compilazione. I sorgenti completi **non sono tracciati qui**: vivono nella copia di lavoro locale `NuvioMobile/` (gitignored), su cui vengono applicate le patch e da cui vengono compilati gli APK.
 
 > **Fa parte dell'ecosistema multipiattaforma [Nuvio Plus](https://github.com/Lorenzo0010/nuvio-patch)**, insieme al repository Desktop [`Lorenzo0010/nuvio-desktop-patch`](https://github.com/Lorenzo0010/nuvio-desktop-patch).
 
@@ -17,6 +17,7 @@ Consulta [ENHANCEMENTS.md](ENHANCEMENTS.md) per la documentazione dettagliata di
 | **HLS Downloader** | Long-press sullo stream: torrent -> motore originale, HLS -> motore Plus (AES-128, remux MP4, tracce audio/sub) |
 | **Cartella download** | Posizione personalizzata per tutti i download (ingranaggio nella schermata Download) |
 | **Updater** | Auto-aggiornamento reindirizzato su `Lorenzo0010/nuvio-patch` (GitHub Releases) |
+| **Plugin JS** | Compatibilita `require('crypto')` + `Buffer` per i plugin (hash/HMAC/AES/PBKDF2/random) |
 
 ---
 
@@ -24,18 +25,20 @@ Consulta [ENHANCEMENTS.md](ENHANCEMENTS.md) per la documentazione dettagliata di
 
 ```text
 F:\GitHub\nuvio\
-â”œâ”€â”€ patches/                          # Le 5 patch modulari Plus (applicate in ordine)
+â”œâ”€â”€ patches/                          # Le 6 patch modulari Plus (applicate in ordine)
 â”‚   â”œâ”€â”€ 01-branding-and-config.patch  # AppId com.nuvio.app.plus, config Gradle
 â”‚   â”œâ”€â”€ 02-app-updater.patch          # Updater â†’ Lorenzo0010/nuvio-patch
 â”‚   â”œâ”€â”€ 03-live-tv.patch              # Live TV, storage, parser M3U, tab navbar, pannello player
 â”‚   â”œâ”€â”€ 04-hls-downloads.patch        # Motore HLS, sheet tracce, hook long-press, tab Download
-â”‚   â””â”€â”€ 05-download-folder.patch      # Cartella download personalizzata + versione corrente
+â”‚   â”œâ”€â”€ 05-download-folder.patch      # Cartella download personalizzata + versione corrente
+â”‚   â””â”€â”€ 06-plugin-crypto.patch        # Compatibilita require('crypto')/Buffer per i plugin JS
 â”œâ”€â”€ scripts/                          # Script PowerShell e Bash
 â”‚   â”œâ”€â”€ apply-patches.ps1 / .sh       # Applica le patch su un clone fresco
 â”‚   â”œâ”€â”€ apply-to-submodule.ps1        # Applica patch + copia asset in NuvioMobile/
 â”‚   â”œâ”€â”€ update-patch-03.ps1           # Rigenera patch 03 da NuvioMobile/
 â”‚   â”œâ”€â”€ update-patch-04.ps1           # Rigenera patch 04 da NuvioMobile/
 â”‚   â”œâ”€â”€ update-patch-05.ps1           # Rigenera patch 05 da NuvioMobile/ (versione)
+â”‚   â”œâ”€â”€ update-patch-06.ps1           # Rigenera patch 06 da NuvioMobile/ (plugin crypto)
 â”‚   â”œâ”€â”€ extract-patches.ps1 / .sh     # Estrazione generica patch da diff
 â”‚   â””â”€â”€ test-patch-apply.ps1 / .sh    # Test applicabilitÃ  su upstream fresco
 â”œâ”€â”€ assets/
@@ -68,7 +71,7 @@ F:\GitHub\nuvio\
 - Nessun suffisso: ~~`-7950aba`~~, ~~`-alpha`~~. La versione Ã¨ sempre e solo `X.Y.Z.W`.
 - Tag GitHub: `0.4.14.24` (pulito, senza prefissi).
 - APK: `nuvio_plus_0.4.14.24_universal.apk`, `nuvio_plus_0.4.14.24_arm64-v8a.apk`, ecc.
-- La versione corrente Ã¨ definita da `iosApp/Configuration/Version.xcconfig` nella patch **07**.
+- La versione corrente Ã¨ definita da `iosApp/Configuration/Version.xcconfig` nella patch **05**.
 
 ---
 
@@ -83,14 +86,17 @@ NuvioMobile/   â† qui si lavora (giÃ  allineata allo SHA in .last_built_u
 
 ### 2. Rigenera la patch interessata
 ```powershell
-# Patch 04 â€” Download/HLS/Plugin
+# Patch 03 — Live TV
+powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-03.ps1
+
+# Patch 04 — Download HLS
 powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-04.ps1
 
-# Patch 07 â€” Prefetch/versione (la patch che conta per il numero di versione)
-powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-07.ps1
+# Patch 05 — Cartella download + versione (la patch che conta per il numero di versione)
+powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-05.ps1
 
-# Patch 06 â€” Widget launcher
-powershell -ExecutionPolicy Bypass -File .\scripts\generate-patch-06.ps1
+# Patch 06 — Compatibilita crypto/Buffer per i plugin JS
+powershell -ExecutionPolicy Bypass -File .\scripts\update-patch-06.ps1
 ```
 
 > Se aggiungi **nuovi file**, inseriscili nella lista `$filesNN` dello script corrispondente.
