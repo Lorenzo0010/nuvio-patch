@@ -1,5 +1,17 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.7
+
+### ➖ Rimossa la compatibilità plugin JS (patch 06)
+- Il runtime plugin torna al 100% upstream: niente più shim `require('crypto'/'fs'/'axios'/...)`. Restano solo le patch strettamente necessarie al download HLS (01–05).
+- Base upstream invariata (`e377942`).
+
+### 🎧 Fix selezione tracce audio/sottotitoli HLS
+- Nel menu di selezione, se la playlist ripete la stessa traccia in più gruppi, le righe condividevano la selezione (togliendone una si toglievano tutte). Ora ogni flusso compare una sola volta e si seleziona indipendentemente.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.7` (versionCode `152`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.6
 
 ### 🔌 Fix plugin: moduli `fs`, `axios` e altri mancanti

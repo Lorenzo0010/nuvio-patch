@@ -101,7 +101,7 @@ index db20084d..82ce88b2 100644
 +    <string name="settings_downloads_location_reset">Reset to Default</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..7d0127dd 100644
+index 7019a10c..cf758593 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -14,10 +14,11 @@ import androidx.compose.foundation.lazy.LazyListScope
@@ -158,7 +158,7 @@ index 7019a10c..7d0127dd 100644
      NuvioScreen {
          stickyHeader {
              NuvioScreenHeader(
-@@ -89,17 +98,13 @@ fun DownloadsScreen(
+@@ -89,17 +98,14 @@ fun DownloadsScreen(
                      }
                  },
                  actions = {
@@ -178,12 +178,13 @@ index 7019a10c..7d0127dd 100644
 +                            Icon(
 +                                imageVector = Icons.Rounded.Settings,
 +                                contentDescription = stringResource(Res.string.compose_settings_page_root),
++                                tint = Color.White,
 +                            )
 +                        }
                      }
                  },
              )
-@@ -392,6 +397,16 @@ private fun DownloadRow(
+@@ -392,6 +398,16 @@ private fun DownloadRow(
                  }
  
                  Row(verticalAlignment = Alignment.CenterVertically) {
@@ -458,11 +459,11 @@ index 00000000..03d3deea
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index cba08104..dd0c6816 100644
+index cba08104..07c494df 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
 -CURRENT_PROJECT_VERSION=120
 -MARKETING_VERSION=0.4.15
-+CURRENT_PROJECT_VERSION=151
-+MARKETING_VERSION=0.4.15.6
++CURRENT_PROJECT_VERSION=152
++MARKETING_VERSION=0.4.15.7

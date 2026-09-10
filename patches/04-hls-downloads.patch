@@ -1906,58 +1906,10 @@ index 8ee5d6cb..fa840266 100644
                      label = stringResource(Res.string.compose_nav_library),
                      selected = selectedTab == AppScreenTab.Library,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index df7e48c8..7bd134a0 100644
+index df7e48c8..cd852fbc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -878,6 +878,47 @@ internal fun MainAppContent(
-             navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
-         }
- 
-+        fun openDownloadedItem(item: DownloadItem) {
-+            val sourceUrl = DownloadsRepository.playableLocalFileUri(item) ?: return
-+            val resumeEntry = item.videoId
-+                .takeIf { it.isNotBlank() }
-+                ?.let(WatchProgressRepository::progressForVideo)
-+                ?.takeIf { it.isResumable }
-+
-+            val playerLaunch = PlayerLaunch(
-+                profileId = activePlaybackProfileId,
-+                title = item.title,
-+                sourceUrl = sourceUrl,
-+                sourceHeaders = emptyMap(),
-+                sourceResponseHeaders = emptyMap(),
-+                externalSubtitles = emptyList(),
-+                streamType = null,
-+                logo = item.logo,
-+                poster = item.poster,
-+                background = item.background,
-+                seasonNumber = item.seasonNumber,
-+                episodeNumber = item.episodeNumber,
-+                episodeTitle = item.episodeTitle,
-+                episodeThumbnail = item.episodeThumbnail,
-+                streamTitle = item.streamTitle,
-+                streamSubtitle = item.streamSubtitle,
-+                providerName = item.providerName,
-+                providerAddonId = item.providerAddonId,
-+                contentType = item.contentType,
-+                videoId = item.videoId,
-+                parentMetaId = item.parentMetaId,
-+                parentMetaType = item.parentMetaType,
-+                initialPositionMs = resumeEntry?.lastPositionMs?.takeIf { it > 0L } ?: 0L,
-+                initialProgressFraction = resumeEntry?.progressFraction?.takeIf { it > 0f },
-+            )
-+            if (playerSettingsUiState.externalPlayerEnabled) {
-+                coroutineScope.launch { openExternalPlayback(playerLaunch) }
-+                return
-+            }
-+            val launchId = PlayerLaunchStore.put(playerLaunch)
-+            navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
-+        }
-+
-         fun openLiveTvChannel(channel: LiveTvChannel) {
-             LiveTvRepository.recordRecentChannel(channel)
-             val playerLaunch = PlayerLaunch(
-@@ -1388,6 +1429,7 @@ internal fun MainAppContent(
+@@ -1388,6 +1388,7 @@ internal fun MainAppContent(
                                  onContinueWatchingClick = onContinueWatchingClick,
                                  onContinueWatchingLongPress = onContinueWatchingLongPress,
                                  onLiveTvChannelClick = ::openLiveTvChannel,
@@ -2384,10 +2336,10 @@ index 23c8d9b1..c28280a4 100644
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..74e04ebc
+index 00000000..a334eb6f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
-@@ -0,0 +1,403 @@
+@@ -0,0 +1,406 @@
 +package com.nuvio.app.features.downloads
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -2496,10 +2448,13 @@ index 00000000..74e04ebc
 +    }
 +
 +    val audioTracks = remember(playlist) {
-+        playlist?.audioTracks?.filter { it.uri != null }.orEmpty()
++        // Stesso URI = stesso contenuto: le playlist reali spesso ripetono la
++        // stessa resa audio/sottotitoli in più gruppi. Senza distinctBy, righe
++        // diverse condividono la chiave di selezione e si attivano/disattivano insieme.
++        playlist?.audioTracks?.filter { it.uri != null }?.distinctBy { it.uri }.orEmpty()
 +    }
 +    val subtitleTracks = remember(playlist) {
-+        playlist?.subtitleTracks?.filter { it.uri != null }.orEmpty()
++        playlist?.subtitleTracks?.filter { it.uri != null }?.distinctBy { it.uri }.orEmpty()
 +    }
 +
 +    var selectedQualityKey by remember(qualityOptions) {
