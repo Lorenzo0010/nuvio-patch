@@ -1,5 +1,18 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.15.9
+
+### 📥 Ripristino funzioni HLS Plus (stato pre-82fb0e4, rielaborato su base 0.4.15)
+- **Progresso per traccia**: durante il download HLS la schermata Download e le notifiche mostrano l'avanzamento separato di Video, Audio e Sottotitoli.
+- **Stato Elaborazione**: quando inizia il remux MP4 l'item passa in "Elaborazione • …" invece di restare fermo; le notifiche offrono l'azione di annullamento in quella fase.
+- **Condividi/Salva**: sui download completati tornano i tasti Condividi (chooser di sistema) e Salva (copia con SAF).
+- **DNS-over-HTTPS**: il motore di download usa DoH selezionabile (Cloudflare, Google, Quad9, AdGuard, NextDNS, Mullvad, OpenDNS) con fallback al DNS di sistema.
+- I download diretti restano sul flusso originale invariato; mantenuti gli hardening (cookie di sessione CDN, Referer, retry 403/429/5xx, rilevamento HLS).
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.15.9` (versionCode `154`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:...`).
+- Base upstream invariata (`e377942`, 100% funzioni originali).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.8
 
 ### 🎧 Fix selezione tracce audio/sottotitoli HLS
