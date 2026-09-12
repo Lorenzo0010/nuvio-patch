@@ -1,6 +1,17 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.2
+
+### 🎧 Fix selezione HLS e salvataggio audio
+- **Selezione singola tracce HLS**: L'interfaccia di selezione per il download HLS (lingua audio e sottotitoli) è tornata a singola scelta. La lingua italiana (o quella predefinita) viene di nuovo selezionata in automatico all'apertura del pannello, ripristinando il corretto comportamento.
+- **Salvataggio Audio HLS (Remux)**: Risolto il bug critico che scaricava i flussi HLS muti. A causa di un difetto nella multiselezione, al momento del download la lista delle tracce audio veniva passata vuota, causando un remux senza audio. Ora la singola traccia selezionata viene inviata correttamente al downloader e fusa (remuxata) nel file MP4 finale tramite Media3.
+- **Qualità video multiple**: Risolto il bug visivo per cui, nella schermata di download, apparivano "tutte le risoluzioni selezionate" a causa di URL duplicati nelle varianti. Ora la selezione per la qualità massima è correttamente identificata in modo univoco.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.17.2` (versionCode `156`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.1
+
 
 ### 🚀 Allineamento Upstream 0.4.17
 - **Base Upstream 0.4.17**: Allineata la base dell'app all'upstream ufficiale `0.4.17` (`74492b2`), mantenendo il 100% del codice originale.
