@@ -1,5 +1,20 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.4
+
+### 🎧 Download HLS: audio ITA sempre + selezione qualità + fix freeze
+
+- **Audio italiano prioritario**: nella schermata di selezione HLS la traccia ITA (`LANGUAGE="ita"/"it"`) viene selezionata automaticamente all'apertura; se manca, cade su ENG con avviso esplicito ("Audio inglese disponibile").
+- **Selezione qualità funzionante**: finalmente rispettate le 4 qualità (480p/720p/1080p) dai variant master VixSrc; il bug `resolveHlsUrl` invertito è stato corretto in `HlsPlaylist.kt`.
+- **Header per-track**: `Referer` e `User-Agent` ora sono per-URL (video/audio/key hanno host e token diversi su VixSrc CDN). Loggati gli errori reali invece di `null` silenziosi.
+- **Remux interleaved per PTS**: scrittura video+audio sincronizzati per sampleTime invece di video-poi-audio → MP4 con interleave corretto, nessun blocco/freeze durante la riproduzione.
+- **Nessun `VIDEO_ONLY` silenzioso**: se l'audio era richiesto ma non muxato e il video non ha audio integrato → fallimento esplicito con messaggio chiaro, non consegna muto.
+- **Parità iOS**: usa ora `hlsAudioUrls` (lista) invece di `hlsAudioUrl` singolo; stessa logica ITA→ENG fallback.
+
+### 🏷️ Firme e Integrità
+
+- Versione pulita `0.4.17.4` (versionCode `158`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.3
 
 ### 🎧 Fix download tracce audio duplicate HLS

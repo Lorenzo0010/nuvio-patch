@@ -843,7 +843,7 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..8b754234 100644
+index 1f6484c5..99aaedb7 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -1,25 +1,164 @@
@@ -1306,7 +1306,7 @@ index 1f6484c5..8b754234 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +475,944 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +475,1107 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1451,8 +1451,13 @@ index 1f6484c5..8b754234 100644
 +    val customLocationUriString = DownloadsSettingsRepository.downloadLocationUri.value
 +    val customLocationUri = customLocationUriString?.let { Uri.parse(it) }
 +
-+    // Header condivisi da tutte le richieste HLS (manifest, key, segmenti, audio, subs).
-+    val hlsHeaders = withHlsRequestHeaders(request.item.sourceHeaders, request.item.sourceUrl)
++    // Header per-track: ogni playlist VixSrc (video/audio/subs) vive su host
++    // e token diversi (vixsrc.to vs sc-u4-*.vix-content.net). Il Referer deve
++    // essere la playlist del singolo track, non sempre il master: diversi CDN
++    // anti-hotlinking rispondono 403 con Referer di altro host. La key
++    // AES (/storage/enc.key, senza token) viene validata via Referer+cookie,
++    // quindi ogni track usa i propri header anche per key e segmenti.
++    val videoHeaders = withHlsRequestHeaders(request.item.sourceHeaders, request.item.sourceUrl)
 +
 +    val (videoTarget, videoTemp) = createHlsTargets(context, customLocationUri, request.item.fileName)
 +    if (videoTemp.exists()) videoTemp.delete()
@@ -1474,7 +1479,7 @@ index 1f6484c5..8b754234 100644
 +                try {
 +                    val outcome = downloadHlsToFile(
 +                        sourceUrl = request.item.sourceUrl,
-+                        httpGet = { url, range -> androidHttpGet(url, hlsHeaders, range) },
++                        httpGet = { url, range -> androidHttpGet(url, videoHeaders, range) },
 +                        appendBytes = { bytes ->
 +                            videoTempOut.write(bytes)
 +                        },
@@ -1528,7 +1533,7 @@ index 1f6484c5..8b754234 100644
 +                            context = context,
 +                            customLocationUri = customLocationUri,
 +                            url = audioUrl,
-+                            headers = hlsHeaders,
++                            headers = withHlsRequestHeaders(request.item.sourceHeaders, audioUrl),
 +                            finalName = audioFinalName,
 +                            tempName = audioTempName,
 +                            onProgress = { _, _ -> },
@@ -1539,7 +1544,7 @@ index 1f6484c5..8b754234 100644
 +                    } catch (_: CancellationException) {
 +                        throw CancellationException()
 +                    } catch (e: Throwable) {
-+                        val audioErrMsg = "audio[$audioIndex] download failed: ${e::class.simpleName} ${e.message}"
++                        val audioErrMsg = "audio[$audioIndex] url='${audioUrl.take(120)}' failed: ${e::class.simpleName} ${e.message}"
 +                        AndroidLog.e("Remux", audioErrMsg)
 +                        InAppLogger.error("Remux", audioErrMsg)
 +                        null
@@ -1565,7 +1570,7 @@ index 1f6484c5..8b754234 100644
 +                            context = context,
 +                            customLocationUri = customLocationUri,
 +                            url = subUrl,
-+                            headers = hlsHeaders,
++                            headers = withHlsRequestHeaders(request.item.sourceHeaders, subUrl),
 +                            finalName = subFinalName,
 +                            tempName = subTempName,
 +                            onProgress = { _, _ -> },
@@ -1596,6 +1601,7 @@ index 1f6484c5..8b754234 100644
 +        onPhase?.invoke("remux")
 +        withContext(Dispatchers.Main) { /* force UI to process Processing status before remux */ }
 +        val canRemux = videoUri.startsWith("file:")
++        var lastRemuxResult: RemuxResult? = null
 +        val remuxedUri = if (canRemux) {
 +            AndroidLog.i("Remux", "remux attempt videoUri=$videoUri audioUri=$audioUri")
 +            InAppLogger.info("Remux", "remux attempt videoUri=$videoUri audioUri=$audioUri")
@@ -1615,6 +1621,7 @@ index 1f6484c5..8b754234 100644
 +                InAppLogger.info("Remux", "destMp4Name=$destMp4Name")
 +                val remuxTmpPath = destFile.absolutePath + ".remux_tmp"
 +                val remuxResult = remuxToMp4(context, videoPath, audioPath, remuxTmpPath)
++                lastRemuxResult = remuxResult
 +                AndroidLog.i("Remux", "remuxToMp4 returned $remuxResult")
 +                InAppLogger.info("Remux", "remuxToMp4 returned $remuxResult")
 +                if (remuxResult == RemuxResult.FAILED) {
@@ -1660,12 +1667,38 @@ index 1f6484c5..8b754234 100644
 +            null
 +        }
 +
-+        val companionWarning = if (request.item.hlsAudioUrls.isNotEmpty() && audioUri == null) {
-+            "Audio track(s) not found"
++        // Obiettivo utente: sempre audio ITA (fallback ENG) in un unico MP4.
++        // Un "successo" muto è peggio di un errore esplicito: se l'audio era
++        // richiesto ma non è stato scaricato E il video non ha audio integrato,
++        // falliamo con messaggio chiaro invece di consegnare un video muto.
++        // (Se il video ha già audio muxed, il companion mancante è irrilevante.)
++        val audioRequested = request.item.hlsAudioUrls.isNotEmpty()
++        val videoHasEmbeddedAudio = runCatching {
++            val vp = File(URI(videoUri)).absolutePath
++            hasEmbeddedAudioTrack(vp)
++        }.getOrDefault(false)
++        AndroidLog.i("Remux", "audioRequested=$audioRequested audioUri=$audioUri videoHasEmbeddedAudio=$videoHasEmbeddedAudio")
++        InAppLogger.info("Remux", "audioRequested=$audioRequested videoHasEmbeddedAudio=$videoHasEmbeddedAudio")
++        if (audioRequested && audioUri == null && !videoHasEmbeddedAudio && remuxedUri == null) {
++            // Video senza audio + companion mancante + nessun remux: errore, non muto.
++            // Pulizia file muto per non lasciare junk; il retry riscarica da zero.
++            runCatching {
++                val mutePath = File(URI(videoUri)).absolutePath
++                File(mutePath).delete()
++            }
++            videoTemp.delete()
++            onFailure("Audio track download failed (ITA/ENG not found)")
++            return
++        }
++
++        val companionWarning = if (audioRequested && (audioUri == null || lastRemuxResult == RemuxResult.VIDEO_ONLY) && !videoHasEmbeddedAudio) {
++            if (audioUri == null) "Audio track(s) not found" else "Audio not muxed (companion kept)"
 +        } else null
 +        if (remuxedUri != null) {
 +            onSuccess(remuxedUri, videoOutcome.totalBytes, HlsCompanionOutcome(null, subtitleUri, audioLocalFileUris = audioUris, subtitleLocalFileUris = subtitleUris, warningMessage = companionWarning))
 +        } else {
++            // Nessun remux (es. SAF senza file:): consegna video + companion.
++            // Se qui il video è muto e manca il companion, abbiamo già fallito sopra.
 +            onSuccess(videoUri, videoOutcome.totalBytes, HlsCompanionOutcome(audioUri, subtitleUri, audioUris, subtitleUris, companionWarning))
 +        }
 +    } catch (_: CancellationException) {
@@ -1973,17 +2006,29 @@ index 1f6484c5..8b754234 100644
 +            InAppLogger.debug("Remux", "added audio track index=$audioMuxerTrack")
 +        }
 +
-+        val buffer = ByteBuffer.allocateDirect(1024 * 1024)
++        val buffer = ByteBuffer.allocateDirect(4 * 1024 * 1024)
 +
 +        val videoSamples: Int
 +        val audioSamples: Int
 +        if (audioTrackId >= 0) {
-+            InAppLogger.debug("Remux", "copying video samples (separate extractor)...")
-+            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
-+            InAppLogger.debug("Remux", "video samples done: $videoSamples")
-+            InAppLogger.debug("Remux", "copying audio samples (separate extractor)...")
-+            audioSamples = copyTrack(audioExtractor!!, muxer, audioMuxerTrack, buffer, trackIndex = effectiveAudioTrackId, tag = "audio")
-+            InAppLogger.debug("Remux", "audio samples done: $audioSamples")
++            // Extractor separati (caso VixSrc: video-only + audio-only): scrittura
++            // interleaved per PTS con normalizzazione dello start. La vecchia copia
++            // sequenziale (tutto il video poi tutto l'audio) produceva MP4 con
++            // interleave sbagliato -> blocchi/freeze durante la riproduzione.
++            InAppLogger.debug("Remux", "copying interleaved (separate extractors)...")
++            val counts = copyInterleaved(
++                videoExtractor = videoExtractor,
++                videoTrackIndex = videoTrackId,
++                videoMuxerTrack = videoMuxerTrack,
++                audioExtractor = audioExtractor!!,
++                audioTrackIndex = effectiveAudioTrackId,
++                audioMuxerTrack = audioMuxerTrack,
++                muxer = muxer,
++                buffer = buffer,
++            )
++            videoSamples = counts.first
++            audioSamples = counts.second
++            InAppLogger.debug("Remux", "interleaved done: videoSamples=$videoSamples audioSamples=$audioSamples")
 +        } else if (effectiveAudioTrackId >= 0) {
 +            InAppLogger.debug("Remux", "copying all tracks (same extractor)...")
 +            val counts = copyAllTracks(videoExtractor, muxer, videoMuxerTrack, audioMuxerTrack, videoTrackId, effectiveAudioTrackId, buffer)
@@ -1996,8 +2041,7 @@ index 1f6484c5..8b754234 100644
 +            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
 +            audioSamples = 0
 +            InAppLogger.debug("Remux", "video samples done: $videoSamples")
-         }
--    }.getOrNull()
++        }
 +
 +        if (videoSamples == 0 && audioSamples == 0) {
 +            InAppLogger.error("Remux", "no samples written to any track, aborting")
@@ -2023,7 +2067,8 @@ index 1f6484c5..8b754234 100644
 +            InAppLogger.error("Remux", "output file is not a valid MP4 (missing moov)")
 +            File(outputPath).delete()
 +            return false
-+        }
+         }
+-    }.getOrNull()
 +
 +        AndroidLog.i("Remux", "remuxToMp4 SUCCEEDED (videoSamples=$videoSamples audioSamples=$audioSamples)")
 +        InAppLogger.debug("Remux", "remuxToMp4 SUCCEEDED")
@@ -2126,6 +2171,124 @@ index 1f6484c5..8b754234 100644
 +        if (trackIndex == videoExtractorTrack) videoSamples++ else audioSamples++
 +    }
 +    AndroidLog.i("Remux", "copyAllTracks done: videoSamples=$videoSamples audioSamples=$audioSamples")
++    return videoSamples to audioSamples
++}
++
++/** True se il file contiene almeno una track audio (muxed). Mai lancia. */
++private fun hasEmbeddedAudioTrack(path: String): Boolean {
++    var extractor: MediaExtractor? = null
++    return try {
++        extractor = MediaExtractor()
++        extractor.setDataSource(path)
++        findMediaTrack(extractor, "audio/") >= 0
++    } catch (_: Exception) {
++        false
++    } finally {
++        try { extractor?.release() } catch (_: Exception) {}
++    }
++}
++
++private class PendingSample(
++    val data: ByteArray,
++    val timeUs: Long,
++    val flags: Int,
++)
++
++/**
++ * Merge interleaved di due extractor indipendenti (video-only + audio-only VixSrc).
++ * Ogni track viene normalizzata a partire da 0 (sottrazione del primo PTS) così
++ * playlist indipendenti con start diversi restano sincronizzate. Scrive sempre il
++ * sample con PTS minore: il MP4 risultante è interleaved e non causa freeze.
++ */
++private fun copyInterleaved(
++    videoExtractor: MediaExtractor,
++    videoTrackIndex: Int,
++    videoMuxerTrack: Int,
++    audioExtractor: MediaExtractor,
++    audioTrackIndex: Int,
++    audioMuxerTrack: Int,
++    muxer: Mp4Muxer,
++    buffer: ByteBuffer,
++): Pair<Int, Int> {
++    fun readPending(extractor: MediaExtractor, trackIndex: Int): PendingSample? {
++        while (true) {
++            buffer.clear()
++            val size = extractor.readSampleData(buffer, 0)
++            if (size < 0) return null
++            if (trackIndex >= 0 && extractor.sampleTrackIndex != trackIndex) {
++                extractor.advance()
++                continue
++            }
++            val flags = extractor.sampleFlags
++            val timeUs = extractor.sampleTime
++            if (flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
++                extractor.advance()
++                continue
++            }
++            if (size > buffer.capacity()) {
++                AndroidLog.w("Remux", "sample size $size exceeds buffer ${buffer.capacity()}, skipping")
++                InAppLogger.warn("Remux", "oversize sample skipped ($size bytes)")
++                extractor.advance()
++                continue
++            }
++            buffer.limit(size)
++            buffer.position(0)
++            val data = ByteArray(size)
++            buffer.get(data)
++            extractor.advance()
++            return PendingSample(data, timeUs, flags)
++        }
++    }
++
++    var videoPending = readPending(videoExtractor, videoTrackIndex)
++    var audioPending = readPending(audioExtractor, audioTrackIndex)
++    // Normalizzazione: entrambe le track partono da 0.
++    val videoBase = videoPending?.timeUs
++    val audioBase = audioPending?.timeUs
++    var videoSamples = 0
++    var audioSamples = 0
++    var prevVideoTime = -1L
++    var prevAudioTime = -1L
++
++    fun normalizedTime(pending: PendingSample, base: Long?): Long {
++        val t = pending.timeUs
++        if (base == null) return t.coerceAtLeast(0L)
++        return (t - base).coerceAtLeast(0L)
++    }
++
++    while (videoPending != null || audioPending != null) {
++        val takeVideo = when {
++            videoPending == null -> false
++            audioPending == null -> true
++            else -> normalizedTime(videoPending, videoBase) <= normalizedTime(audioPending, audioBase)
++        }
++        if (takeVideo) {
++            val p = videoPending!!
++            var t = normalizedTime(p, videoBase)
++            if (t <= prevVideoTime) t = prevVideoTime + 1 // monotonicità garantita per il muxer
++            prevVideoTime = t
++            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
++            muxer.writeSampleData(videoMuxerTrack, ByteBuffer.wrap(p.data), BufferInfo(t, p.data.size, writeFlags))
++            videoSamples++
++            if (videoSamples <= 3) {
++                AndroidLog.i("Remux", "interleaved video #$videoSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
++            }
++            videoPending = readPending(videoExtractor, videoTrackIndex)
++        } else {
++            val p = audioPending!!
++            var t = normalizedTime(p, audioBase)
++            if (t <= prevAudioTime) t = prevAudioTime + 1
++            prevAudioTime = t
++            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
++            muxer.writeSampleData(audioMuxerTrack, ByteBuffer.wrap(p.data), BufferInfo(t, p.data.size, writeFlags))
++            audioSamples++
++            if (audioSamples <= 3) {
++                AndroidLog.i("Remux", "interleaved audio #$audioSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
++            }
++            audioPending = readPending(audioExtractor, audioTrackIndex)
++        }
++    }
++    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples videoBase=$videoBase audioBase=$audioBase")
 +    return videoSamples to audioSamples
 +}
 +
@@ -2668,10 +2831,10 @@ index 00000000..f82780cc
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..5ff71741
+index 00000000..486626aa
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
-@@ -0,0 +1,422 @@
+@@ -0,0 +1,441 @@
 +package com.nuvio.app.features.downloads
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -2789,22 +2952,28 @@ index 00000000..5ff71741
 +    var selectedQualityKey by remember(qualityOptions) {
 +        mutableStateOf(qualityOptions.firstOrNull()?.key)
 +    }
-+    var selectedAudioKey by remember(audioTracks) {
-+        val italianTracks = audioTracks.filter { isItalianTrack(it) }
-+        val initialKey = if (italianTracks.isNotEmpty()) {
-+            val defaultItalian = italianTracks.filter { it.isDefault }
-+            if (defaultItalian.isNotEmpty()) {
-+                defaultItalian.firstOrNull()?.uri
-+            } else {
-+                italianTracks.firstOrNull()?.uri
-+            }
-+        } else {
-+            audioTracks.filter { it.isDefault }.firstOrNull()?.uri ?: audioTracks.firstOrNull()?.uri
-+        }
-+        mutableStateOf(initialKey)
-+    }
 +    var selectedSubtitleKey by remember(subtitleTracks) {
 +        mutableStateOf<String?>(null)
++    }
++
++    // Variante selezionata -> gruppo audio richiesto (VixSrc: AUDIO="audio").
++    // Mostriamo solo le tracce del gruppo compatibile; fallback a tutte se il
++    // gruppo non matcha (playlist senza GROUP-ID o quote residue).
++    val selectedVariantAudioGroup = remember(sortedVariants, selectedQualityKey) {
++        sortedVariants.firstOrNull { "${it.url}_${it.bandwidth}" == selectedQualityKey }?.audioGroup
++    }
++    val visibleAudioTracks = remember(audioTracks, selectedVariantAudioGroup) {
++        val group = selectedVariantAudioGroup?.trim()?.takeIf { it.isNotEmpty() }
++        if (group == null) {
++            audioTracks
++        } else {
++            val filtered = audioTracks.filter { it.groupId.trim() == group }
++            if (filtered.isNotEmpty()) filtered else audioTracks
++        }
++    }
++
++    var selectedAudioKey by remember(visibleAudioTracks) {
++        mutableStateOf(selectPreferredAudioUri(visibleAudioTracks))
 +    }
 +
 +    LaunchedEffect(qualityOptions) {
@@ -2813,24 +2982,13 @@ index 00000000..5ff71741
 +        }
 +    }
 +
-+    LaunchedEffect(audioTracks) {
-+        if (audioTracks.isNotEmpty() && selectedAudioKey == null) {
-+            val italianTracks = audioTracks.filter { isItalianTrack(it) }
-+            val newKey = if (italianTracks.isNotEmpty()) {
-+                val defaultItalian = italianTracks.filter { it.isDefault }
-+                if (defaultItalian.isNotEmpty()) {
-+                    defaultItalian.firstOrNull()?.uri
-+                } else {
-+                    italianTracks.firstOrNull()?.uri
-+                }
-+            } else {
-+                audioTracks.filter { it.isDefault }.firstOrNull()?.uri ?: audioTracks.firstOrNull()?.uri
-+            }
-+            selectedAudioKey = newKey
++    LaunchedEffect(audioTracks, selectedVariantAudioGroup) {
++        if (visibleAudioTracks.isNotEmpty() && (selectedAudioKey == null || visibleAudioTracks.none { it.uri == selectedAudioKey })) {
++            selectedAudioKey = selectPreferredAudioUri(visibleAudioTracks)
 +        }
 +    }
 +
-+    val hasAudio = audioTracks.isNotEmpty()
++    val hasAudio = visibleAudioTracks.isNotEmpty()
 +    val hasSubtitles = subtitleTracks.isNotEmpty()
 +    val canDownload = qualityOptions.isNotEmpty()
 +
@@ -2933,7 +3091,7 @@ index 00000000..5ff71741
 +                            )
 +                            val audioOptions = mutableListOf<NuvioDropdownOption>()
 +                            var selectedAudioLabel = ""
-+                            for (track in audioTracks) {
++                            for (track in visibleAudioTracks) {
 +                                val langLabel = languageLabelForCode(track.language)
 +                                if (track.uri == selectedAudioKey) {
 +                                    selectedAudioLabel = langLabel
@@ -3005,16 +3163,26 @@ index 00000000..5ff71741
 +                            enabled = canDownload,
 +                            onClick = {
 +                                coroutineScope.launch {
-+                                    val selectedAudioTracks = audioTracks.filter { it.uri == selectedAudioKey }
++                                    val selectedAudioTracks = visibleAudioTracks.filter { it.uri == selectedAudioKey }
++                                    // Fallback: se il gruppo è cambiato tra selezione e click,
++                                    // cerca in tutta la playlist prima di rinunciare all'audio.
++                                    val effectiveAudioTracks = selectedAudioTracks.ifEmpty {
++                                        audioTracks.filter { it.uri == selectedAudioKey }
++                                    }
 +                                    val selectedSubtitleTracks = subtitleTracks.filter { it.uri == selectedSubtitleKey }
-+                                    val audioLabels = selectedAudioTracks.map { getLanguageLabelForCode(it.language) }
++                                    val audioLabels = effectiveAudioTracks.map { getLanguageLabelForCode(it.language) }
 +                                    val subtitleLabels = selectedSubtitleTracks.map { getLanguageLabelForCode(it.language) }
 +                                    val selectedVariant = playlist?.variants?.firstOrNull {
 +                                        "${it.url}_${it.bandwidth}" == selectedQualityKey
 +                                    }
++                                    // Filtriamo solo l'URL identico alla variante (audio muxed):
++                                    // con URL corrette video (?type=video) e audio (?type=audio)
++                                    // sono sempre diverse, quindi l'audio ITA/ENG passa.
++                                    val variantUrl = selectedVariant?.url.orEmpty().trim()
 +                                    val selection = HlsDownloadSelection(
 +                                        variantUrl = selectedVariant?.url.orEmpty(),
-+                                        audioUrls = listOfNotNull(selectedAudioKey).filter { it != selectedVariant?.url },
++                                        audioUrls = listOfNotNull(selectedAudioKey?.trim()?.takeIf { it.isNotBlank() })
++                                            .filter { it.trim() != variantUrl || variantUrl.isBlank() },
 +                                        subtitleUrls = listOfNotNull(selectedSubtitleKey).filter { it != selectedVariant?.url },
 +                                        audioLabels = audioLabels,
 +                                        subtitleLabels = subtitleLabels,
@@ -3069,8 +3237,7 @@ index 00000000..5ff71741
 +    return 0L
 +}
 +
-+internal fun isItalianTrack(track: HlsMediaTrack): Boolean {
-+    val lang = track.language?.trim()?.lowercase()
++internal fun isItalianTrack(track: HlsMediaTrack): Boolean {    val lang = track.language?.trim()?.lowercase()
 +    val name = track.name.trim().lowercase()
 +
 +    if (lang != null && (lang == "it" || lang == "ita" || lang == "italian" || lang == "italiano" || lang.startsWith("it-") || lang.startsWith("it_"))) {
@@ -3092,6 +3259,21 @@ index 00000000..5ff71741
 +        return true
 +    }
 +    return false
++}
++
++/**
++ * Ordine di preferenza audio: ITA > DEFAULT > ENG > prima disponibile.
++ * Obiettivo utente: sempre italiano; se manca (solo ENG) scarica ENG lo stesso.
++ */
++internal fun selectPreferredAudioUri(tracks: List<HlsMediaTrack>): String? {
++    if (tracks.isEmpty()) return null
++    val italian = tracks.filter { isItalianTrack(it) }
++    if (italian.isNotEmpty()) {
++        return italian.firstOrNull { it.isDefault }?.uri ?: italian.firstOrNull()?.uri
++    }
++    tracks.firstOrNull { it.isDefault }?.uri?.let { return it }
++    tracks.firstOrNull { it.language?.trim()?.lowercase()?.startsWith("eng") == true }?.uri?.let { return it }
++    return tracks.firstOrNull()?.uri
 +}
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
@@ -4000,10 +4182,10 @@ index 00000000..5bf68166
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 00000000..78a58613
+index 00000000..78b74773
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
-@@ -0,0 +1,481 @@
+@@ -0,0 +1,485 @@
 +package com.nuvio.app.features.downloads
 +
 +internal sealed interface HlsPlaylist {
@@ -4017,6 +4199,8 @@ index 00000000..78a58613
 +    val averageBandwidth: Long? = null,
 +    val resolution: String? = null,
 +    val codecs: String? = null,
++    val audioGroup: String? = null,
++    val subtitlesGroup: String? = null,
 +)
 +
 +data class HlsMediaTrack(
@@ -4388,23 +4572,25 @@ index 00000000..78a58613
 +                    val bandwidth = attrs["BANDWIDTH"]?.toLongOrNull() ?: 0L
 +                    val resolution = attrs["RESOLUTION"]
 +                    val codecs = attrs["CODECS"]
++                    val audioGroup = attrs["AUDIO"]?.trim()?.let { removeQuotes(it) }?.takeIf { it.isNotBlank() }
++                    val subtitlesGroup = attrs["SUBTITLES"]?.trim()?.let { removeQuotes(it) }?.takeIf { it.isNotBlank() }
 +                    i++
-+                    // resolveHlsUrl gestisce correttamente path assoluti (/...),
++                    // resolveHlsUrl(base, ref): base = master URL, ref = riga relativa/assoluta.
 +                    // URL relativi, ".." e query/fragment (resolveUrl no).
 +                    val rawUrlLine = lines.getOrNull(i)?.trim().orEmpty()
-+                    val urlLine = if (rawUrlLine.isBlank()) "" else resolveHlsUrl(rawUrlLine, baseUrl)
++                    val urlLine = if (rawUrlLine.isBlank()) "" else resolveHlsUrl(baseUrl, rawUrlLine)
 +                    if (urlLine.isNotBlank() && !urlLine.startsWith("#")) {
-+                        variants.add(HlsVariant(url = urlLine, bandwidth = bandwidth, resolution = resolution, codecs = codecs))
++                        variants.add(HlsVariant(url = urlLine, bandwidth = bandwidth, resolution = resolution, codecs = codecs, audioGroup = audioGroup, subtitlesGroup = subtitlesGroup))
 +                    }
 +                }
 +                line.startsWith("#EXT-X-MEDIA:") -> {
 +                    val attrs = parseAttributes(line.removePrefix("#EXT-X-MEDIA:"))
 +                    val type = attrs["TYPE"]?.trim()?.uppercase() ?: ""
-+                    val groupId = attrs["GROUP-ID"]?.trim() ?: ""
++                    val groupId = attrs["GROUP-ID"]?.trim()?.let { removeQuotes(it) } ?: ""
 +                    val name = removeQuotes(attrs["NAME"]?.trim().orEmpty())
 +                    val language = attrs["LANGUAGE"]?.trim()?.let { removeQuotes(it) }
 +                    val uri = attrs["URI"]?.trim()?.takeIf { it.isNotBlank() }
-+                        ?.let { resolveHlsUrl(removeQuotes(it), baseUrl) }
++                        ?.let { resolveHlsUrl(baseUrl, removeQuotes(it)) }
 +                    val isDefault = attrs["DEFAULT"]?.trim()?.uppercase() == "YES"
 +                    val isForced = attrs["FORCED"]?.trim()?.uppercase() == "YES"
 +
@@ -5042,7 +5228,7 @@ index 2cd1d315..5b9cd310 100644
          DownloadStatus.Failed -> 2
          DownloadStatus.Completed -> 3
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
-index f8e6e673..b3e30b5d 100644
+index f8e6e673..9f6042b8 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 @@ -2,13 +2,21 @@ package com.nuvio.app.features.downloads
@@ -5260,7 +5446,7 @@ index f8e6e673..b3e30b5d 100644
          nativeRequest.setValue(value, forHTTPHeaderField = key)
      }
      if (rangeStart != null && rangeStart > 0L) {
-@@ -513,3 +647,371 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
+@@ -513,3 +647,380 @@ private fun parseContentRangeTotal(headerValue: String?): Long? {
      if (totalPart == "*") return null
      return totalPart.toLongOrNull()?.takeIf { it > 0L }
  }
@@ -5305,13 +5491,20 @@ index f8e6e673..b3e30b5d 100644
 +    var audioUri: String? = null
 +    var subtitleUri: String? = null
 +
-+    if (!request.item.hlsAudioUrl.isNullOrBlank()) {
++    // Parità Android: la selezione ora salva la lista (ITA > DEFAULT > ENG).
++    // iOS muxa la prima traccia; fallback ai campi legacy per item vecchi.
++    val effectiveAudioUrl = request.item.hlsAudioUrls.firstOrNull { it.isNotBlank() }
++        ?: request.item.hlsAudioUrl?.takeIf { it.isNotBlank() }
++    val effectiveSubtitleUrl = request.item.hlsSubtitleUrls.firstOrNull { it.isNotBlank() }
++        ?: request.item.hlsSubtitleUrl?.takeIf { it.isNotBlank() }
++
++    if (!effectiveAudioUrl.isNullOrBlank()) {
 +        try {
 +            val audioTemp = hlsCompanionFileName(request.item.fileName, "audio", "part")
 +            val audioFinal = hlsCompanionFileName(finalVideoName, "audio", "mp4")
 +            val (_, audioOutcome) = downloadSingleHlsTrackIos(
 +                downloadsDirectory = downloadsDirectory,
-+                url = request.item.hlsAudioUrl,
++                url = effectiveAudioUrl,
 +                headers = request.item.sourceHeaders,
 +                handle = handle,
 +                tempName = audioTemp,
@@ -5328,13 +5521,13 @@ index f8e6e673..b3e30b5d 100644
 +        }
 +    }
 +
-+    if (!request.item.hlsSubtitleUrl.isNullOrBlank()) {
++    if (!effectiveSubtitleUrl.isNullOrBlank()) {
 +        try {
 +            val subTemp = hlsCompanionFileName(request.item.fileName, "subs", "part")
 +            val subFinal = hlsCompanionFileName(finalVideoName, "subs", "vtt")
 +            val (_, subOutcome) = downloadSingleHlsTrackIos(
 +                downloadsDirectory = downloadsDirectory,
-+                url = request.item.hlsSubtitleUrl,
++                url = effectiveSubtitleUrl,
 +                headers = request.item.sourceHeaders,
 +                handle = handle,
 +                tempName = subTemp,
@@ -5367,7 +5560,9 @@ index f8e6e673..b3e30b5d 100644
 +        } catch (_: Exception) { null }
 +    } else null
 +
-+    val companionWarning = if (!request.item.hlsAudioUrl.isNullOrBlank() && audioUri == null) {
++    val audioWasRequested = !effectiveAudioUrl.isNullOrBlank() ||
++        request.item.hlsAudioUrls.isNotEmpty() || !request.item.hlsAudioUrl.isNullOrBlank()
++    val companionWarning = if (audioWasRequested && audioUri == null) {
 +        "Audio track not found"
 +    } else null
 +    if (remuxedUri != null) {
