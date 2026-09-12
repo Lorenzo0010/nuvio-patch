@@ -2668,7 +2668,7 @@ index 00000000..f82780cc
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..b76159b9
+index 00000000..5ff71741
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 @@ -0,0 +1,422 @@
@@ -3014,8 +3014,8 @@ index 00000000..b76159b9
 +                                    }
 +                                    val selection = HlsDownloadSelection(
 +                                        variantUrl = selectedVariant?.url.orEmpty(),
-+                                        audioUrls = listOfNotNull(selectedAudioKey),
-+                                        subtitleUrls = listOfNotNull(selectedSubtitleKey),
++                                        audioUrls = listOfNotNull(selectedAudioKey).filter { it != selectedVariant?.url },
++                                        subtitleUrls = listOfNotNull(selectedSubtitleKey).filter { it != selectedVariant?.url },
 +                                        audioLabels = audioLabels,
 +                                        subtitleLabels = subtitleLabels,
 +                                        displayQuality = selectedVariant?.resolution

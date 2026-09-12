@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $buildApkDir = "F:\GitHub\nuvio\NuvioMobile\androidApp\build\outputs\apk\full\release"
 $releasesDir = "F:\GitHub\nuvio\releases"
-$version = "0.4.17.2"
+$version = "0.4.17.3"
 
 Copy-Item "$buildApkDir\androidApp-full-universal-release.apk" "$releasesDir\nuvio_plus_${version}_universal.apk" -Force
 Copy-Item "$buildApkDir\androidApp-full-arm64-v8a-release.apk"  "$releasesDir\nuvio_plus_${version}_arm64-v8a.apk" -Force

@@ -1,5 +1,10 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.3
+
+### 🎧 Fix download tracce audio duplicate HLS
+- Risolto un problema critico di spreco banda e fallimento estrazione audio su flussi HLS in cui la traccia audio è fornita dallo stesso file video multiplexato (ad esempio sui CDN easystreams). L'app ora filtra automaticamente l'URL audio se è identico all'URL video principale, scaricando un solo file ed estraendo correttamente l'audio nativo anziché scaricare file multi-GB due volte, il che corrompeva il processo di muxing MP4.
+
 ## Novità in Nuvio Plus Mobile 0.4.17.2
 
 ### 🎧 Fix selezione HLS e salvataggio audio
