@@ -203,7 +203,7 @@ index cc827e5..faab0e7 100644
 +  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 0477bf1..715d67a 100644
+index 0477bf1..6b2ee99 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -627,6 +627,12 @@
@@ -219,24 +219,7 @@ index 0477bf1..715d67a 100644
      <string name="episodes_cd_watched">Watched</string>
      <string name="episodes_season">Season %1$d</string>
      <string name="episodes_specials">Specials</string>
-@@ -904,8 +910,6 @@
-     <string name="settings_meta_cinematic_background_description">Blurred backdrop behind content, similar to stream screen.</string>
-     <string name="settings_meta_background_mode">Background Mode</string>
-     <string name="settings_meta_background_mode_description">Choose how artwork appears behind metadata pages.</string>
--    <string name="settings_meta_poster_transition">Poster Transition</string>
--    <string name="settings_meta_poster_transition_description">Expand and blur posters when opening details.</string>
-     <string name="settings_meta_background_mode_normal">Normal</string>
-     <string name="settings_meta_background_mode_normal_description">Use the standard app background.</string>
-     <string name="settings_meta_background_mode_cinematic">Cinematic</string>
-@@ -1249,7 +1253,6 @@
-     <string name="settings_tracking_simkl_library_description">Use your Simkl plan-to-watch and status lists.</string>
-     <string name="settings_tracking_nuvio_progress_description">Resume with progress stored by Nuvio Sync.</string>
-     <string name="settings_tracking_trakt_progress_description">Resume with playback progress from Trakt.</string>
--    <string name="settings_tracking_trakt_progress_required">Available when Trakt is the Watch Progress source</string>
-     <string name="settings_tracking_simkl_progress_description">Resume with playback progress from Simkl.</string>
-     <string name="settings_tracking_tmdb_recommendations_description">Use TMDB recommendations on details pages.</string>
-     <string name="settings_tracking_trakt_recommendations_description">Use personalized related titles from Trakt.</string>
-@@ -2267,4 +2270,52 @@
+@@ -2267,4 +2273,52 @@
          <item quantity="one">%d title</item>
          <item quantity="other">%d titles</item>
      </plurals>
