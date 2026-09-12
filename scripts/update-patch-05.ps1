@@ -45,7 +45,7 @@ try {
 
     Push-Location $testDir
 
-    for ($i = 1; $i -le 4; $i++) {
+    for ($i = 1; $i -le 2; $i++) {
         $prefix = "{0:D2}-" -f $i
         $patchFile = Get-ChildItem -Path $PatchesDir -Filter "$prefix*.patch" | Select-Object -First 1
         Write-Host "Applicazione patch $($patchFile.Name)..." -ForegroundColor Yellow
