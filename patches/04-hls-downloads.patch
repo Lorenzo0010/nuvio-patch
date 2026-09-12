@@ -843,7 +843,7 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..99aaedb7 100644
+index 1f6484c5..c585a9bd 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -1,25 +1,164 @@
@@ -1306,7 +1306,7 @@ index 1f6484c5..99aaedb7 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +475,1107 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +475,1131 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1888,6 +1888,15 @@ index 1f6484c5..99aaedb7 100644
 +    }
 +    File(outputPath).delete()
 +    if (remuxToMp4Impl(videoPath, audioPath, outputPath)) {
++        // Se l'audio era stato richiesto ma il file audio non contiene una
++        // traccia leggibile (audioTrackId == -1), remuxToMp4Impl scrive il solo
++        // video e ritorna true: senza questa verifica consegneremmo un MP4 MUTO
++        // spacciato per "full". Verifichiamo che l'output abbia davvero audio.
++        if (audioPath != null && !hasEmbeddedAudioTrack(outputPath)) {
++            AndroidLog.w("Remux", "audio requested but not muxed into output — downgrading to VIDEO_ONLY")
++            InAppLogger.warn("Remux", "audio requested but not muxed into output — downgrading to VIDEO_ONLY")
++            return RemuxResult.VIDEO_ONLY
++        }
 +        AndroidLog.i("Remux", "MediaMuxer remux succeeded (full audio+video)")
 +        InAppLogger.info("Remux", "MediaMuxer remux succeeded (full audio+video)")
 +        return RemuxResult.FULL
@@ -1928,6 +1937,21 @@ index 1f6484c5..99aaedb7 100644
 +        val videoTrackId = findMediaTrack(videoExtractor, "video/")
 +        val videoAudioTrackId = findMediaTrack(videoExtractor, "audio/")
 +        val audioTrackId = audioExtractor?.let { findMediaTrack(it, "audio/") } ?: -1
++
++        // Diagnostica: se il file audio esiste ma non espone una traccia audio,
++        // registriamo i formati reali per capire il tipo di container (ADTS, TS,
++        // fMP4...) ed evitare di consegnare un MP4 muto in silenzio.
++        if (audioPath != null && audioTrackId < 0) {
++            val size = runCatching { File(audioPath).length() }.getOrDefault(-1L)
++            val tracks = audioExtractor?.let { ex ->
++                (0 until ex.trackCount).joinToString("; ") { idx ->
++                    val mime = ex.getTrackFormat(idx).getString(MediaFormat.KEY_MIME) ?: "?"
++                    "track#$idx=$mime"
++                }
++            } ?: "n/a"
++            AndroidLog.w("Remux", "audio file has NO audio/ track. size=$size tracks=[$tracks] path=$audioPath")
++            InAppLogger.warn("Remux", "audio file has NO audio/ track. size=$size tracks=[$tracks] path=$audioPath")
++        }
 +        val effectiveAudioTrackId = if (audioTrackId >= 0) audioTrackId else videoAudioTrackId
 +        AndroidLog.i("Remux", "videoTrackId=$videoTrackId videoAudioTrackId=$videoAudioTrackId audioTrackId=$audioTrackId effectiveAudioTrackId=$effectiveAudioTrackId")
 +        InAppLogger.debug("Remux", "videoTrackId=$videoTrackId videoAudioTrackId=$videoAudioTrackId audioTrackId=$audioTrackId effectiveAudioTrackId=$effectiveAudioTrackId")
@@ -2035,8 +2059,7 @@ index 1f6484c5..99aaedb7 100644
 +            videoSamples = counts.first
 +            audioSamples = counts.second
 +            InAppLogger.debug("Remux", "all tracks done: videoSamples=$videoSamples audioSamples=$audioSamples")
-         } else {
--            File(this)
++        } else {
 +            InAppLogger.debug("Remux", "copying video samples (no audio)...")
 +            videoSamples = copyTrack(videoExtractor, muxer, videoMuxerTrack, buffer, trackIndex = videoTrackId, tag = "video")
 +            audioSamples = 0
@@ -2067,8 +2090,7 @@ index 1f6484c5..99aaedb7 100644
 +            InAppLogger.error("Remux", "output file is not a valid MP4 (missing moov)")
 +            File(outputPath).delete()
 +            return false
-         }
--    }.getOrNull()
++        }
 +
 +        AndroidLog.i("Remux", "remuxToMp4 SUCCEEDED (videoSamples=$videoSamples audioSamples=$audioSamples)")
 +        InAppLogger.debug("Remux", "remuxToMp4 SUCCEEDED")
@@ -2091,7 +2113,7 @@ index 1f6484c5..99aaedb7 100644
 +        if (mime.startsWith(mimePrefix)) return i
 +    }
 +    return -1
- }
++}
 +
 +private fun copyTrack(
 +    extractor: MediaExtractor,
@@ -2274,7 +2296,8 @@ index 1f6484c5..99aaedb7 100644
 +                AndroidLog.i("Remux", "interleaved video #$videoSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            videoPending = readPending(videoExtractor, videoTrackIndex)
-+        } else {
+         } else {
+-            File(this)
 +            val p = audioPending!!
 +            var t = normalizedTime(p, audioBase)
 +            if (t <= prevAudioTime) t = prevAudioTime + 1
@@ -2286,11 +2309,12 @@ index 1f6484c5..99aaedb7 100644
 +                AndroidLog.i("Remux", "interleaved audio #$audioSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            audioPending = readPending(audioExtractor, audioTrackIndex)
-+        }
+         }
+-    }.getOrNull()
 +    }
 +    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples videoBase=$videoBase audioBase=$audioBase")
 +    return videoSamples to audioSamples
-+}
+ }
 +
 +private fun isValidMp4File(path: String): Boolean {
 +    return try {

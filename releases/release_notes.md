@@ -1,5 +1,17 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.5
+
+### 🔇 Fix consegna MP4 muto + diagnostica audio HLS
+
+- **Niente più "successo" muto**: quando veniva richiesto l'audio (ITA/ENG) ma il file audio scaricato risultava illeggibile (nessuna traccia `audio/`), il remux scriveva il solo video e veniva etichettato `FULL`, consegnando così un MP4 muto spacciato per completo. Ora il remux verifica che l'output contenga davvero una traccia audio: se manca, il risultato viene declassato a `VIDEO_ONLY` con warning esplicito ("Audio not muxed") invece di un successo silenzioso.
+- **Diagnostica audio**: quando `MediaExtractor` non trova una traccia audio nel file audio scaricato, vengono ora loggate dimensione file e MIME delle tracce reali (`audio file has NO audio/ track. size=… tracks=[…]`). Questo permette di individuare con precisione il tipo di container (ADTS/TS/fMP4) e risolvere la causa radice della perdita audio.
+- **Verifica di riavvio del remux**: il downgrade `FULL → VIDEO_ONLY` mantiene il companion audio separato invece di cancellarlo, così l'audio non va mai perso definitivamente.
+
+### 🏷️ Firme e Integrità
+
+- Versione pulita `0.4.17.5` (versionCode `159`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.4
 
 ### 🎧 Download HLS: audio ITA sempre + selezione qualità + fix freeze
