@@ -1,18 +1,20 @@
 # Note di rilascio — Nuvio Plus Mobile
 
-## Novità in Nuvio Plus Mobile 0.4.17.6
+## Novità in Nuvio Plus Mobile 0.4.17.7
 
-### 🎬 Fix codec config remux (ExoPlayer non partiva + HEVC supporto)
+### 🎞️ Remux HLS riscritto su `android.media.MediaMuxer` (platform)
 
-- **Configurazione codec video corretta**: il fallback che estrae SPS/PPS/VPS dal bitstream ora produce un `initializationData` corretto (length-prefixed, combinato) per **AVC (avcC)** e **HEVC (hvcC)**. Prima restituiva NAL grezzi senza length-prefix in entry separate e non gestiva HEVC: il muxer scriveva un `avcC`/`hvcC` vuoto → ExoPlayer non iniziava (libmpv invece tollera e parte).
-- **Supporto HEVC (h265/hvc1/hev1)**: i flussi 1080p vixsrc/streamingcommunity in HEVC ora vengono remuxati correttamente.
-- **Diagnostica estesa**: log esplicito "no codec config for ..." se l'estrazione fallisce.
+- **Migrazione da media3 `Mp4Muxer` a `android.media.MediaMuxer`**: il muxer di sistema gestisce nativamente codec config (avcC/hvcC), timestamp (PTS/DTS), interleaving e B-frame senza workaround manuali.
+- **Codec config nativo**: niente più fallback manuali SPS/PPS/VPS — `MediaMuxer.addTrack(MediaFormat)` usa direttamente il formato del `MediaExtractor`, garantendo avcC/hvcC corretti per AVC/HEVC. Risolve "ExoPlayer non parte".
+- **Timestamp corretti**: PTS originali passati a `MediaCodec.BufferInfo` senza clamp monotono artificiale → B-frame e interleaving corretti → niente "video scatta / freeze".
+- **Interleaving robusto**: scrittura campioni per PTS normalizzati su estractor separati (video-only + audio-only VixSrc) con `MediaMuxer.writeSampleData` nativo.
+- **Diagnostica**: log dettagliato track/video/audio, codec config, sample count.
 
 ### 🏷️ Firme e Integrità
 
-- Versione pulita `0.4.17.6` (versionCode `160`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+- Versione pulita `0.4.17.7` (versionCode `161`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
 
-## Novità in Nuvio Plus Mobile 0.4.17.5
+## Novità in Nuvio Plus Mobile 0.4.17.6
 
 ### 🔇 Fix consegna MP4 muto + diagnostica audio HLS
 

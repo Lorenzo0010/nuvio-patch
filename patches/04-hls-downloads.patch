@@ -843,10 +843,10 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..c585a9bd 100644
+index 1f6484c5..54e67161 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -1,25 +1,164 @@
+@@ -1,25 +1,163 @@
 -package com.nuvio.app.features.downloads
 +﻿package com.nuvio.app.features.downloads
  
@@ -855,10 +855,8 @@ index 1f6484c5..c585a9bd 100644
 +import android.media.MediaCodec
 +import android.media.MediaExtractor
 +import android.media.MediaFormat
++import android.media.MediaMuxer
 +import android.net.Uri
-+import androidx.media3.common.Format
-+import androidx.media3.muxer.BufferInfo
-+import androidx.media3.muxer.Mp4Muxer
  import androidx.core.content.FileProvider
 +import androidx.documentfile.provider.DocumentFile
 +import kotlinx.coroutines.CancellationException
@@ -890,6 +888,7 @@ index 1f6484c5..c585a9bd 100644
 +import java.net.URI
 +import java.nio.ByteBuffer
 +import java.util.concurrent.TimeUnit
++import java.util.LinkedHashMap
 +import javax.crypto.Cipher
 +import javax.crypto.spec.IvParameterSpec
 +import javax.crypto.spec.SecretKeySpec
@@ -1014,7 +1013,7 @@ index 1f6484c5..c585a9bd 100644
          scheduler(context)
      }
  
-@@ -29,12 +168,88 @@ internal actual object DownloadsPlatformDownloader {
+@@ -29,12 +167,88 @@ internal actual object DownloadsPlatformDownloader {
          return downloadScheduler ?: AndroidDownloadScheduler(context.applicationContext).also { downloadScheduler = it }
      }
  
@@ -1104,7 +1103,7 @@ index 1f6484c5..c585a9bd 100644
      actual fun start(
          request: DownloadPlatformRequest,
          onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
-@@ -43,20 +258,67 @@ internal actual object DownloadsPlatformDownloader {
+@@ -43,20 +257,67 @@ internal actual object DownloadsPlatformDownloader {
          onPaused: () -> Unit,
      ): DownloadsTaskHandle {
          val scheduler = checkNotNull(downloadScheduler) { "Downloads are not initialized" }
@@ -1179,7 +1178,7 @@ index 1f6484c5..c585a9bd 100644
                  }.collect()
          }
          return object : DownloadsTaskHandle {
-@@ -71,32 +333,109 @@ internal actual object DownloadsPlatformDownloader {
+@@ -71,32 +332,109 @@ internal actual object DownloadsPlatformDownloader {
  
      actual fun removeFile(localFileUri: String?): Boolean {
          if (localFileUri.isNullOrBlank()) return false
@@ -1306,7 +1305,7 @@ index 1f6484c5..c585a9bd 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +475,1131 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +474,1126 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1348,7 +1347,8 @@ index 1f6484c5..c585a9bd 100644
 +    override fun copyTo(other: DownloadTarget) {
 +        if (other is FileDownloadTarget) {
 +            file.copyTo(other.file, overwrite = true)
-+        } else {
+         } else {
+-            File(this)
 +            file.inputStream().use { input ->
 +                other.openOutputStream(false).use { output ->
 +                    input.copyTo(output)
@@ -1379,7 +1379,8 @@ index 1f6484c5..c585a9bd 100644
 +        val doc = getDoc() ?: return false
 +        if (other is DocumentDownloadTarget && other.tree.uri == tree.uri) {
 +            return doc.renameTo(other.fileName)
-+        }
+         }
+-    }.getOrNull()
 +        return false
 +    }
 +    override fun copyTo(other: DownloadTarget) {
@@ -1411,7 +1412,7 @@ index 1f6484c5..c585a9bd 100644
 +            }
 +        }
 +    }
-+}
+ }
 +
 +private fun resolveTotalBytes(
 +    startingBytes: Long,
@@ -1919,7 +1920,7 @@ index 1f6484c5..c585a9bd 100644
 +): Boolean {
 +    var videoExtractor: MediaExtractor? = null
 +    var audioExtractor: MediaExtractor? = null
-+    var muxer: Mp4Muxer? = null
++    var muxer: MediaMuxer? = null
 +    var outputStream: FileOutputStream? = null
 +    return try {
 +        AndroidLog.i("Remux", "remuxToMp4 videoPath=$videoPath audioPath=$audioPath outputPath=$outputPath")
@@ -1964,42 +1965,11 @@ index 1f6484c5..c585a9bd 100644
 +        val androidVideoFormat = videoExtractor.getTrackFormat(videoTrackId)
 +        val videoMime = androidVideoFormat.getString(MediaFormat.KEY_MIME) ?: "video/avc"
 +
-+        val videoFormat = Format.Builder()
-+            .setSampleMimeType(videoMime)
-+            .setWidth(androidVideoFormat.getInteger(MediaFormat.KEY_WIDTH, 0))
-+            .setHeight(androidVideoFormat.getInteger(MediaFormat.KEY_HEIGHT, 0))
-+            .apply {
-+                val csdList = mutableListOf<ByteArray>()
-+                androidVideoFormat.getByteBuffer("csd-0")?.let { buf ->
-+                    val bytes = ByteArray(buf.remaining())
-+                    buf.duplicate().get(bytes)
-+                    csdList.add(bytes)
-+                }
-+                androidVideoFormat.getByteBuffer("csd-1")?.let { buf ->
-+                    val bytes = ByteArray(buf.remaining())
-+                    buf.duplicate().get(bytes)
-+                    csdList.add(bytes)
-+                }
-+                if (csdList.isNotEmpty()) {
-+                    setInitializationData(csdList)
-+                } else if (!videoPath.endsWith(".mp4", ignoreCase = true)) {
-+                    val (extractedSps, extractedPps) = extractSpsPpsFromBitstream(videoExtractor, videoTrackId)
-+                    val extractedCds = listOfNotNull(extractedSps, extractedPps)
-+                    if (extractedCds.isNotEmpty()) {
-+                        setInitializationData(extractedCds)
-+                    }
-+                }
-+            }.build()
-+
 +        AndroidLog.i("Remux", "videoMime=$videoMime width=${androidVideoFormat.getInteger(MediaFormat.KEY_WIDTH, 0)} height=${androidVideoFormat.getInteger(MediaFormat.KEY_HEIGHT, 0)}")
 +
-+        outputStream = FileOutputStream(outputPath)
-+        muxer = Mp4Muxer.Builder(outputStream)
-+            .setSampleBatchingEnabled(true)
-+            .setSampleCopyingEnabled(true)
-+            .build()
++        muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 +
-+        val videoMuxerTrack = muxer.addTrack(videoFormat)
++        val videoMuxerTrack = muxer.addTrack(androidVideoFormat)
 +        InAppLogger.debug("Remux", "added video track index=$videoMuxerTrack")
 +        var audioMuxerTrack = -1
 +        if (effectiveAudioTrackId >= 0) {
@@ -2011,22 +1981,7 @@ index 1f6484c5..c585a9bd 100644
 +            val channelCount = androidAudioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 2)
 +            AndroidLog.i("Remux", "audioMime=$audioMime sampleRate=$sampleRate channels=$channelCount")
 +
-+            val audioFormat = Format.Builder()
-+                // Usare il MIME reale estratto (Opus/AC3/EAC3/AAC...): fissare
-+                // AUDIO_AAC produceva file con codec dichiarato errato.
-+                .setSampleMimeType(audioMime)
-+                .setSampleRate(sampleRate)
-+                .setChannelCount(channelCount)
-+                .apply {
-+                    androidAudioFormat.getByteBuffer("csd-0")?.let { buf ->
-+                        val csdBytes = ByteArray(buf.remaining())
-+                        buf.duplicate().get(csdBytes)
-+                        AndroidLog.i("Remux", "audio csd-0 bytes=${csdBytes.joinToString(" ") { "%02x".format(it) }}")
-+                        setInitializationData(listOf(csdBytes))
-+                    }
-+                }.build()
-+
-+            audioMuxerTrack = muxer.addTrack(audioFormat)
++            audioMuxerTrack = muxer.addTrack(androidAudioFormat)
 +            InAppLogger.debug("Remux", "added audio track index=$audioMuxerTrack")
 +        }
 +
@@ -2072,15 +2027,13 @@ index 1f6484c5..c585a9bd 100644
 +        }
 +
 +        try {
-+            muxer.close()
++            muxer.release()
 +        } catch (e: Exception) {
-+            AndroidLog.e("Remux", "muxer.close() FAILED: ${e::class.simpleName} msg='${e.message}'")
-+            InAppLogger.error("Remux", "muxer.close() FAILED: ${e::class.simpleName} ${e.message}")
++            AndroidLog.e("Remux", "muxer.release() FAILED: ${e::class.simpleName} msg='${e.message}'")
++            InAppLogger.error("Remux", "muxer.release() FAILED: ${e::class.simpleName} ${e.message}")
 +            throw e
 +        }
 +        muxer = null
-+        outputStream?.closeSafe()
-+        outputStream = null
 +        videoExtractor.release()
 +        videoExtractor = null
 +        audioExtractor?.release()
@@ -2098,8 +2051,7 @@ index 1f6484c5..c585a9bd 100644
 +    } catch (e: Exception) {
 +        AndroidLog.e("Remux", "remuxToMp4 exception: ${e::class.simpleName} msg='${e.message}' ${e.stackTraceToString().take(500)}")
 +        InAppLogger.error("Remux", "remuxToMp4 exception: ${e::class.simpleName} ${e.message}")
-+        try { muxer?.close() } catch (_: Exception) {}
-+        try { outputStream?.closeSafe() } catch (_: Exception) {}
++        try { muxer?.release() } catch (_: Exception) {}
 +        try { videoExtractor?.release() } catch (_: Exception) {}
 +        try { audioExtractor?.release() } catch (_: Exception) {}
 +        try { File(outputPath).delete() } catch (_: Exception) {}
@@ -2117,7 +2069,7 @@ index 1f6484c5..c585a9bd 100644
 +
 +private fun copyTrack(
 +    extractor: MediaExtractor,
-+    muxer: Mp4Muxer,
++    muxer: MediaMuxer,
 +    muxerTrack: Int,
 +    buffer: ByteBuffer,
 +    trackIndex: Int = -1,
@@ -2147,7 +2099,11 @@ index 1f6484c5..c585a9bd 100644
 +        buffer.limit(size)
 +        buffer.position(0)
 +        val writeFlags = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
-+        muxer.writeSampleData(muxerTrack, buffer, BufferInfo(timeUs, size, writeFlags))
++        val bufferInfo = MediaCodec.BufferInfo()
++        bufferInfo.presentationTimeUs = timeUs
++        bufferInfo.size = size
++        bufferInfo.flags = writeFlags
++        muxer.writeSampleData(muxerTrack, buffer, bufferInfo)
 +        extractor.advance()
 +        sampleCount++
 +    }
@@ -2157,7 +2113,7 @@ index 1f6484c5..c585a9bd 100644
 +
 +private fun copyAllTracks(
 +    extractor: MediaExtractor,
-+    muxer: Mp4Muxer,
++    muxer: MediaMuxer,
 +    videoMuxerTrack: Int,
 +    audioMuxerTrack: Int,
 +    videoExtractorTrack: Int,
@@ -2188,7 +2144,11 @@ index 1f6484c5..c585a9bd 100644
 +        buffer.limit(size)
 +        buffer.position(0)
 +        val writeFlags = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
-+        muxer.writeSampleData(muxerTrack, buffer, BufferInfo(timeUs, size, writeFlags))
++        val bufferInfo = MediaCodec.BufferInfo()
++        bufferInfo.presentationTimeUs = timeUs
++        bufferInfo.size = size
++        bufferInfo.flags = writeFlags
++        muxer.writeSampleData(muxerTrack, buffer, bufferInfo)
 +        extractor.advance()
 +        if (trackIndex == videoExtractorTrack) videoSamples++ else audioSamples++
 +    }
@@ -2229,7 +2189,7 @@ index 1f6484c5..c585a9bd 100644
 +    audioExtractor: MediaExtractor,
 +    audioTrackIndex: Int,
 +    audioMuxerTrack: Int,
-+    muxer: Mp4Muxer,
++    muxer: MediaMuxer,
 +    buffer: ByteBuffer,
 +): Pair<Int, Int> {
 +    fun readPending(extractor: MediaExtractor, trackIndex: Int): PendingSample? {
@@ -2290,31 +2250,37 @@ index 1f6484c5..c585a9bd 100644
 +            if (t <= prevVideoTime) t = prevVideoTime + 1 // monotonicità garantita per il muxer
 +            prevVideoTime = t
 +            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
-+            muxer.writeSampleData(videoMuxerTrack, ByteBuffer.wrap(p.data), BufferInfo(t, p.data.size, writeFlags))
++            val bufferInfo = MediaCodec.BufferInfo()
++            bufferInfo.presentationTimeUs = t
++            bufferInfo.size = p.data.size
++            bufferInfo.flags = writeFlags
++            muxer.writeSampleData(videoMuxerTrack, ByteBuffer.wrap(p.data), bufferInfo)
 +            videoSamples++
 +            if (videoSamples <= 3) {
 +                AndroidLog.i("Remux", "interleaved video #$videoSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            videoPending = readPending(videoExtractor, videoTrackIndex)
-         } else {
--            File(this)
++        } else {
 +            val p = audioPending!!
 +            var t = normalizedTime(p, audioBase)
 +            if (t <= prevAudioTime) t = prevAudioTime + 1
 +            prevAudioTime = t
 +            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
-+            muxer.writeSampleData(audioMuxerTrack, ByteBuffer.wrap(p.data), BufferInfo(t, p.data.size, writeFlags))
++            val bufferInfo = MediaCodec.BufferInfo()
++            bufferInfo.presentationTimeUs = t
++            bufferInfo.size = p.data.size
++            bufferInfo.flags = writeFlags
++            muxer.writeSampleData(audioMuxerTrack, ByteBuffer.wrap(p.data), bufferInfo)
 +            audioSamples++
 +            if (audioSamples <= 3) {
 +                AndroidLog.i("Remux", "interleaved audio #$audioSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            audioPending = readPending(audioExtractor, audioTrackIndex)
-         }
--    }.getOrNull()
++        }
 +    }
 +    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples videoBase=$videoBase audioBase=$audioBase")
 +    return videoSamples to audioSamples
- }
++}
 +
 +private fun isValidMp4File(path: String): Boolean {
 +    return try {
@@ -2375,18 +2341,24 @@ index 1f6484c5..c585a9bd 100644
 +    try { close() } catch (_: Exception) { }
 +}
 +
-+private fun extractSpsPpsFromBitstream(
++private fun extractCodecConfigFromBitstream(
 +    extractor: MediaExtractor,
 +    trackId: Int,
++    videoMime: String,
 +    maxSamples: Int = 30,
-+): Pair<ByteArray?, ByteArray?> {
-+    var sps: ByteArray? = null
-+    var pps: ByteArray? = null
++): ByteArray? {
++    val isHevc = videoMime.contains("hevc", true) || videoMime.contains("h265", true) ||
++        videoMime.contains("hvc1", true) || videoMime.contains("hev1", true)
++    // AVC: SPS=7, PPS=8. HEVC: VPS=32, SPS=33, PPS=34.
++    val targetTypes = if (isHevc) listOf(32, 33, 34) else listOf(7, 8)
++
 +    extractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 +    extractor.selectTrack(trackId)
 +    val buffer = ByteBuffer.allocate(512 * 1024)
++    val nals = LinkedHashMap<Int, ByteArray>()
 +    var samplesRead = 0
-+    while (samplesRead < maxSamples && (sps == null || pps == null)) {
++
++    while (samplesRead < maxSamples && nals.size < targetTypes.size) {
 +        buffer.clear()
 +        val size = extractor.readSampleData(buffer, 0)
 +        if (size < 0) break
@@ -2399,8 +2371,9 @@ index 1f6484c5..c585a9bd 100644
 +        buffer.position(0)
 +        val data = ByteArray(size)
 +        buffer.get(data)
++
 +        var i = 0
-+        while (i < data.size - 3 && (sps == null || pps == null)) {
++        while (i < data.size - 3 && nals.size < targetTypes.size) {
 +            if (data[i] == 0x00.toByte() && data[i + 1] == 0x00.toByte()) {
 +                val startCodeLen = when {
 +                    i + 3 < data.size && data[i + 2] == 0x00.toByte() && data[i + 3] == 0x01.toByte() -> 4
@@ -2424,9 +2397,8 @@ index 1f6484c5..c585a9bd 100644
 +                            }
 +                        }
 +                        val nalData = data.copyOfRange(nalStart, nalEnd)
-+                        when (nalType) {
-+                            7 -> if (sps == null) sps = nalData
-+                            8 -> if (pps == null) pps = nalData
++                        if (nalType in targetTypes && !nals.containsKey(nalType)) {
++                            nals[nalType] = nalData
 +                        }
 +                        i = nalEnd
 +                        continue
@@ -2439,7 +2411,29 @@ index 1f6484c5..c585a9bd 100644
 +        samplesRead++
 +    }
 +    extractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-+    return sps to pps
++
++    if (nals.isEmpty()) return null
++
++    // Costruisce il csd: per AVC (avcC) -> SPS poi PPS con 2-byte length prefix.
++    // Per HEVC (hvcC) -> VPS, SPS, PPS. media3 Mp4Muxer gestisce la serializzazione
++    // corretta partendo da NAL con 2-byte length prefix (lengthSizeMinusOne=1).
++    // Nota: HEVC standard MP4 usa 4-byte length (lengthSizeMinusOne=3), ma
++    // media3 Mp4Muxer/HevcConfig gestisce entrambe le convenzioni. Qui usiamo
++    // 2-byte per coerenza con AVC e con la convenzione Android csd; il muxer
++    // normalizza se necessario. In caso di mismatch, l'alternativa sarebbe
++    // serializzare un hvcC completo qui (più complesso e rischioso).
++    val ordered = targetTypes.mapNotNull { nals[it] }
++    if (ordered.isEmpty()) return null
++    val totalLen = ordered.sumOf { 2 + it.size }
++    val out = ByteArray(totalLen)
++    var off = 0
++    for (nal in ordered) {
++        out[off] = (nal.size ushr 8).toByte()
++        out[off + 1] = (nal.size and 0xFF).toByte()
++        System.arraycopy(nal, 0, out, off + 2, nal.size)
++        off += 2 + nal.size
++    }
++    return out
 +}
 +
 +
