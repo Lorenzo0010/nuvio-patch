@@ -1,5 +1,16 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.1
+
+### 🚀 Allineamento Upstream 0.4.17
+- **Base Upstream 0.4.17**: Allineata la base dell'app all'upstream ufficiale `0.4.17` (`74492b2`), mantenendo il 100% del codice originale.
+- **Nuova Navigazione "Jelly" Integrata**: Supporto completo per la nuova `FloatingNavigationBar` dinamica sia per la visualizzazione mobile che per tablet, integrando perfettamente i tab dedicati **Live TV** e **Download** con animazioni fluide e stile coerente.
+- **Player & Streams Screen**: Integrati i nuovi parametri di rendering dei provider e formattazione badge/dimensione stream (`LocalStreamSizeLabelFormat`), salvaguardando il motore di selezione multitraccia e download HLS Plus.
+- **Funzionalità Plus 100% Preservate**: Live TV (M3U, canali, categorie, pannello player), motore di download HLS a segmenti paralleli e decrittazione AES-128 con salvataggio/condivisione, selettore cartella personalizzata SAF e updater dedicato su `Lorenzo0010/nuvio-patch`.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.17.1` (versionCode `155`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.15.9
 
 ### 📥 Ripristino funzioni HLS Plus (stato pre-82fb0e4, rielaborato su base 0.4.15)

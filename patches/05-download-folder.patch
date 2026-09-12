@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
-index 01ad3280..fcd0f5d5 100644
+index 01ad328..fcd0f5d 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.android.kt
 @@ -7,6 +7,7 @@ import com.nuvio.app.core.storage.ProfileScopedKey
@@ -33,7 +33,7 @@ index 01ad3280..fcd0f5d5 100644
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
 new file mode 100644
-index 00000000..515bac48
+index 0000000..515bac4
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.android.kt
 @@ -0,0 +1,37 @@
@@ -75,7 +75,7 @@ index 00000000..515bac48
 +    return androidUri.path?.substringAfterLast(':') ?: uri
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
-index 7019a10c..1f903d52 100644
+index 7019a10..1f903d5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsScreen.kt
 @@ -10,14 +10,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -461,7 +461,7 @@ index 7019a10c..1f903d52 100644
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
 new file mode 100644
-index 00000000..3150accc
+index 0000000..3150acc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsSettingsRepository.kt
 @@ -0,0 +1,28 @@
@@ -494,7 +494,7 @@ index 00000000..3150accc
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
-index 4721842a..48dcc920 100644
+index 4721842..48dcc92 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.kt
 @@ -3,4 +3,6 @@ package com.nuvio.app.features.downloads
@@ -506,7 +506,7 @@ index 4721842a..48dcc920 100644
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
 new file mode 100644
-index 00000000..0870034a
+index 0000000..0870034
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.kt
 @@ -0,0 +1,66 @@
@@ -578,7 +578,7 @@ index 00000000..0870034a
 +internal expect fun formatUriForDisplay(uri: String): String
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
 new file mode 100644
-index 00000000..c4b15938
+index 0000000..c4b1593
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsScreen.kt
 @@ -0,0 +1,36 @@
@@ -620,7 +620,7 @@ index 00000000..c4b15938
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 new file mode 100644
-index 00000000..b3c0d234
+index 0000000..b3c0d23
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.desktop.kt
 @@ -0,0 +1,21 @@
@@ -647,7 +647,7 @@ index 00000000..b3c0d234
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
 new file mode 100644
-index 00000000..8812bcda
+index 0000000..8812bcd
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.desktop.kt
 @@ -0,0 +1,15 @@
@@ -667,7 +667,7 @@ index 00000000..8812bcda
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
-index 1fe7cbf6..d363f62d 100644
+index 1fe7cbf..d363f62 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsStorage.ios.kt
 @@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
@@ -696,7 +696,7 @@ index 1fe7cbf6..d363f62d 100644
  }
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
 new file mode 100644
-index 00000000..03d3deea
+index 0000000..03d3dee
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/settings/DownloadsSettingsPage.ios.kt
 @@ -0,0 +1,16 @@
@@ -717,11 +717,11 @@ index 00000000..03d3deea
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index cba08104..a4602b91 100644
+index dd0ef69..8378a28 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,2 @@
--CURRENT_PROJECT_VERSION=120
--MARKETING_VERSION=0.4.15
-+CURRENT_PROJECT_VERSION=154
-+MARKETING_VERSION=0.4.15.9
+-CURRENT_PROJECT_VERSION=122
+-MARKETING_VERSION=0.4.17
++CURRENT_PROJECT_VERSION=155
++MARKETING_VERSION=0.4.17.1

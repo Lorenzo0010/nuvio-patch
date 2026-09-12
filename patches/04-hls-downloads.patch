@@ -1,5 +1,5 @@
 diff --git a/androidApp/build.gradle.kts b/androidApp/build.gradle.kts
-index b290580e..310012c7 100644
+index c167661..310012c 100644
 --- a/androidApp/build.gradle.kts
 +++ b/androidApp/build.gradle.kts
 @@ -69,7 +69,6 @@ android {
@@ -10,7 +10,16 @@ index b290580e..310012c7 100644
      }
  
      flavorDimensions += "distribution"
-@@ -108,7 +107,7 @@ android {
+@@ -103,26 +102,19 @@ android {
+         }
+     }
+ 
+-    androidResources {
+-        noCompress += "cvr"
+-    }
+-
+     splits {
+         abi {
              isEnable = buildsReleaseApks
              reset()
              include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -19,7 +28,19 @@ index b290580e..310012c7 100644
          }
      }
  
-@@ -171,7 +170,4 @@ dependencies {
+     buildTypes {
+         getByName("release") {
+-            val minifyRelease = providers.gradleProperty("releaseMinifyEnabled")
+-                .map(String::toBooleanStrict)
+-                .getOrElse(true)
+-            isMinifyEnabled = minifyRelease
+-            isShrinkResources = minifyRelease
++            isMinifyEnabled = true
++            isShrinkResources = true
+             proguardFiles(
+                 getDefaultProguardFile("proguard-android-optimize.txt"),
+                 "../composeApp/proguard-rules.pro",
+@@ -178,7 +170,4 @@ dependencies {
      implementation(libs.androidx.appcompat)
      coreLibraryDesugaring(libs.desugar.jdk.libs)
      debugImplementation(libs.compose.uiTooling)
@@ -28,7 +49,7 @@ index b290580e..310012c7 100644
 -    androidTestImplementation(libs.androidx.testExt.junit)
  }
 diff --git a/androidApp/src/main/AndroidManifest.xml b/androidApp/src/main/AndroidManifest.xml
-index eb08c54d..d2fc3024 100644
+index eb08c54..d2fc302 100644
 --- a/androidApp/src/main/AndroidManifest.xml
 +++ b/androidApp/src/main/AndroidManifest.xml
 @@ -7,10 +7,12 @@
@@ -58,7 +79,7 @@ index eb08c54d..d2fc3024 100644
              android:name="com.nuvio.app.features.player.PlayerNowPlayingActionReceiver"
              android:exported="false" />
 diff --git a/composeApp/build.gradle.kts b/composeApp/build.gradle.kts
-index 293a2128..4a78cb93 100644
+index 960f72b..4a78cb9 100644
 --- a/composeApp/build.gradle.kts
 +++ b/composeApp/build.gradle.kts
 @@ -407,6 +407,7 @@ kotlin {
@@ -78,8 +99,25 @@ index 293a2128..4a78cb93 100644
                  implementation(libs.mpv.android.lib)
                  implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
                  if (androidDistribution == "full") {
+@@ -433,8 +436,6 @@ kotlin {
+         val androidHostTest by getting {
+             dependencies {
+                 implementation("org.robolectric:robolectric:4.16")
+-                implementation("androidx.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}")
+-                implementation("androidx.compose.ui:ui-test-manifest:${libs.versions.composeMultiplatform.get()}")
+                 implementation("androidx.work:work-testing:${libs.versions.androidx.work.get()}")
+                 implementation("com.squareup.okhttp3:mockwebserver:5.3.2")
+             }
+@@ -464,6 +465,7 @@ kotlin {
+             implementation(libs.compose.ui)
+             implementation(libs.compose.components.resources)
+             implementation(libs.compose.uiToolingPreview)
++            implementation(libs.compottie)
+             implementation(libs.androidx.lifecycle.viewmodelCompose)
+             implementation(libs.androidx.lifecycle.runtimeCompose)
+             implementation(libs.androidx.savedstate)
 diff --git a/composeApp/src/androidMain/AndroidManifest.xml b/composeApp/src/androidMain/AndroidManifest.xml
-index 1be97173..44fdc849 100644
+index 1be9717..44fdc84 100644
 --- a/composeApp/src/androidMain/AndroidManifest.xml
 +++ b/composeApp/src/androidMain/AndroidManifest.xml
 @@ -15,5 +15,9 @@
@@ -94,7 +132,7 @@ index 1be97173..44fdc849 100644
  </manifest>
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt
 new file mode 100644
-index 00000000..aff23ebc
+index 0000000..aff23eb
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/logging/InAppLogger.android.kt
 @@ -0,0 +1,8 @@
@@ -108,7 +146,7 @@ index 00000000..aff23ebc
 +    SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt
 new file mode 100644
-index 00000000..4c543a1b
+index 0000000..4c543a1
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/network/AndroidDnsProvider.kt
 @@ -0,0 +1,127 @@
@@ -241,7 +279,7 @@ index 00000000..4c543a1b
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt
 new file mode 100644
-index 00000000..88381599
+index 0000000..8838159
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/core/share/SharePlatform.android.kt
 @@ -0,0 +1,49 @@
@@ -296,7 +334,7 @@ index 00000000..88381599
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 new file mode 100644
-index 00000000..528f4e1e
+index 0000000..528f4e1
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.android.kt
 @@ -0,0 +1,67 @@
@@ -369,7 +407,7 @@ index 00000000..528f4e1e
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
 new file mode 100644
-index 00000000..a0af0888
+index 0000000..a0af088
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsForegroundService.kt
 @@ -0,0 +1,285 @@
@@ -659,7 +697,7 @@ index 00000000..a0af0888
 +    )
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
-index 209b599f..43cea2c4 100644
+index 209b599..43cea2c 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.android.kt
 @@ -42,19 +42,27 @@ internal actual object DownloadsLiveStatusPlatform {
@@ -786,7 +824,7 @@ index 209b599f..43cea2c4 100644
      )
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
-index d35da359..53f9858c 100644
+index d35da35..53f9858 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsNotificationActionReceiver.kt
 @@ -33,12 +33,14 @@ class DownloadsNotificationActionReceiver : BroadcastReceiver() {
@@ -805,7 +843,7 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..8b754234 100644
+index 1f6484c..8b75423 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -1,25 +1,164 @@
@@ -2221,7 +2259,7 @@ index 1f6484c5..8b754234 100644
 +
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 new file mode 100644
-index 00000000..4a2954a5
+index 0000000..4a2954a
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/Mp4ParserRemux.kt
 @@ -0,0 +1,10 @@
@@ -2235,208 +2273,9 @@ index 00000000..4a2954a5
 +        return false
 +    }
 +}
-diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index 8b0be168..faab0e79 100644
---- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
-+++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -293,6 +293,12 @@
-   <string name="downloads_status_downloading">Download in corso • %1$s</string>
-   <string name="downloads_status_failed">Fallito</string>
-   <string name="downloads_status_paused">In pausa • %1$s</string>
-+  <string name="downloads_status_processing">Elaborazione • %1$s</string>
-+  <string name="downloads_track_video">Video</string>
-+  <string name="downloads_track_audio">Audio</string>
-+  <string name="downloads_track_subtitles">Sottotitoli</string>
-+  <string name="downloads_share">Condividi</string>
-+  <string name="downloads_save">Salva</string>
-   <string name="episodes_cd_watched">Visto</string>
-   <string name="episodes_season">Stagione %1$d</string>
-   <string name="episodes_specials">Speciali</string>
-@@ -1982,4 +1988,18 @@
-   <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
-   <string name="live_tv_source_title">URL Sorgente</string>
-   <string name="live_tv_categories">Categorie</string>
-+  <string name="compose_nav_downloads">Offline</string>
-+  <!-- Downloads & HLS -->
-+  <string name="downloads_hls_quality">Qualità Video</string>
-+  <string name="downloads_hls_audio">Traccia Audio</string>
-+  <string name="downloads_hls_subtitles">Sottotitoli</string>
-+  <string name="downloads_hls_download">Scarica</string>
-+  <string name="downloads_hls_fetching">Recupero stream disponibili…</string>
-+  <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
-+  <string name="downloads_foreground_title">Download</string>
-+  <string name="downloads_foreground_subtitle">Download in corso in background</string>
-+  <!-- Posizione download -->
-+  <string name="settings_downloads_location_title">Posizione Download</string>
-+  <string name="settings_downloads_location_private">Archivio Interno (Privato)</string>
-+  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
- </resources>
-diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 884fe2df..715d67af 100644
---- a/composeApp/src/commonMain/composeResources/values/strings.xml
-+++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -627,6 +627,12 @@
-     <string name="downloads_status_downloading">Downloading • %1$s</string>
-     <string name="downloads_status_failed">Failed</string>
-     <string name="downloads_status_paused">Paused • %1$s</string>
-+    <string name="downloads_status_processing">Processing • %1$s</string>
-+    <string name="downloads_track_video">Video</string>
-+    <string name="downloads_track_audio">Audio</string>
-+    <string name="downloads_track_subtitles">Subtitles</string>
-+    <string name="downloads_share">Share</string>
-+    <string name="downloads_save">Save</string>
-     <string name="episodes_cd_watched">Watched</string>
-     <string name="episodes_season">Season %1$d</string>
-     <string name="episodes_specials">Specials</string>
-@@ -2298,4 +2304,18 @@
-     <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
-     <string name="live_tv_source_title">Source URL</string>
-     <string name="live_tv_categories">Categories</string>
-+    <string name="compose_nav_downloads">Offline</string>
-+    <!-- Downloads & HLS -->
-+    <string name="downloads_hls_quality">Video Quality</string>
-+    <string name="downloads_hls_audio">Audio Track</string>
-+    <string name="downloads_hls_subtitles">Subtitles</string>
-+    <string name="downloads_hls_download">Download</string>
-+    <string name="downloads_hls_fetching">Fetching available streams…</string>
-+    <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
-+    <string name="downloads_foreground_title">Downloads</string>
-+    <string name="downloads_foreground_subtitle">Downloading in background</string>
-+    <!-- Download location -->
-+    <string name="settings_downloads_location_title">Download Location</string>
-+    <string name="settings_downloads_location_private">Internal Storage (Private)</string>
-+    <string name="settings_downloads_location_reset">Reset to Default</string>
- </resources>
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 8ee5d6cb..fa840266 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -18,6 +18,9 @@ import androidx.compose.foundation.lazy.LazyListState
- import androidx.compose.material.icons.Icons
- import androidx.compose.material.icons.filled.Home
- import androidx.compose.material.icons.rounded.LiveTv
-+import androidx.compose.material.icons.rounded.Download
-+import com.nuvio.app.features.downloads.DownloadItem
-+import com.nuvio.app.features.downloads.DownloadsScreen
- import com.nuvio.app.features.livetv.LiveTvChannel
- import com.nuvio.app.features.livetv.LiveTvScreen
- import androidx.compose.material3.Icon
-@@ -63,6 +66,7 @@ import kotlinx.coroutines.flow.emptyFlow
- import nuvio.composeapp.generated.resources.Res
- import nuvio.composeapp.generated.resources.app_brand_name
- import nuvio.composeapp.generated.resources.compose_nav_home
-+import nuvio.composeapp.generated.resources.compose_nav_downloads
- import nuvio.composeapp.generated.resources.compose_nav_library
- import nuvio.composeapp.generated.resources.compose_nav_profile
- import nuvio.composeapp.generated.resources.compose_nav_search
-@@ -137,6 +141,7 @@ internal data class AppTabActions(
-     val onCollectionsSettingsClick: () -> Unit = {},
-     val onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
-     val onLiveTvChannelClick: ((LiveTvChannel) -> Unit)? = null,
-+    val onOpenDownload: ((DownloadItem) -> Unit)? = null,
-     val onRequestedSettingsPageConsumed: () -> Unit = {},
-     val onInitialHomeContentRendered: () -> Unit = {},
- )
-@@ -191,6 +196,13 @@ internal fun AppTabHost(
-                     )
-                 }
- 
-+                AppScreenTab.Downloads -> {
-+                    DownloadsScreen(
-+                        onBack = {},
-+                        onOpenDownload = { item -> actions.onOpenDownload?.invoke(item) },
-+                    )
-+                }
-+
-                 AppScreenTab.Library -> {
-                     LibraryScreen(
-                         modifier = Modifier.fillMaxSize(),
-@@ -311,6 +323,23 @@ internal fun TabletFloatingTopBar(
-                         )
-                     },
-                 )
-+                TabletTopPillItem(
-+                    label = stringResource(Res.string.compose_nav_downloads),
-+                    selected = selectedTab == AppScreenTab.Downloads,
-+                    onClick = { onTabSelected(AppScreenTab.Downloads) },
-+                    icon = {
-+                        Icon(
-+                            imageVector = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_nav_downloads),
-+                            modifier = Modifier.size(NuvioTokens.Space.s18),
-+                            tint = if (selectedTab == AppScreenTab.Downloads) {
-+                                tokens.colors.textPrimary
-+                            } else {
-+                                tokens.colors.textMuted
-+                            },
-+                        )
-+                    },
-+                )
-                 TabletTopPillItem(
-                     label = stringResource(Res.string.compose_nav_library),
-                     selected = selectedTab == AppScreenTab.Library,
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index df7e48c8..cd852fbc 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -1388,6 +1388,7 @@ internal fun MainAppContent(
-                                 onContinueWatchingClick = onContinueWatchingClick,
-                                 onContinueWatchingLongPress = onContinueWatchingLongPress,
-                                 onLiveTvChannelClick = ::openLiveTvChannel,
-+                                onOpenDownload = ::openDownloadedItem,
-                                 onSwitchProfile = onSwitchProfile,
-                                 onSettingsPageClick = if (useNativeNavigation && !isTabletLayout) {
-                                     { pageName, title ->
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 9ebe0fe1..f21f885b 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
- import androidx.compose.material.icons.Icons
- import androidx.compose.material.icons.filled.Home
- import androidx.compose.material.icons.rounded.LiveTv
-+import androidx.compose.material.icons.rounded.Download
- import androidx.compose.material3.Scaffold
- import androidx.compose.runtime.Composable
- import androidx.compose.runtime.CompositionLocalProvider
-@@ -37,6 +38,7 @@ import nuvio.composeapp.generated.resources.compose_nav_home
- import nuvio.composeapp.generated.resources.compose_nav_library
- import nuvio.composeapp.generated.resources.compose_nav_profile
- import nuvio.composeapp.generated.resources.compose_nav_search
-+import nuvio.composeapp.generated.resources.compose_nav_downloads
- import nuvio.composeapp.generated.resources.live_tv_title
- import nuvio.composeapp.generated.resources.sidebar_library
- import nuvio.composeapp.generated.resources.sidebar_search
-@@ -101,6 +103,12 @@ internal fun MainTabsDestination(
-                             icon = Icons.Rounded.LiveTv,
-                             contentDescription = stringResource(Res.string.live_tv_title),
-                         )
-+                        NavItem(
-+                            selected = selectedTab == AppScreenTab.Downloads,
-+                            onClick = { onTabSelected(AppScreenTab.Downloads) },
-+                            icon = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_nav_downloads),
-+                        )
-                         NavItem(
-                             selected = selectedTab == AppScreenTab.Library,
-                             onClick = { onTabSelected(AppScreenTab.Library) },
-@@ -181,6 +189,13 @@ internal fun MainTabsDestination(
-                             contentDescription = stringResource(Res.string.live_tv_title),
-                             label = stringResource(Res.string.live_tv_title),
-                         )
-+                        NavItem(
-+                            selected = selectedTab == AppScreenTab.Downloads,
-+                            onClick = { onTabSelected(AppScreenTab.Downloads) },
-+                            icon = Icons.Rounded.Download,
-+                            contentDescription = stringResource(Res.string.compose_nav_downloads),
-+                            label = stringResource(Res.string.compose_nav_downloads),
-+                        )
-                         NavItem(
-                             selected = selectedTab == AppScreenTab.Library,
-                             onClick = { onTabSelected(AppScreenTab.Library) },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt
 new file mode 100644
-index 00000000..e4cba788
+index 0000000..e4cba78
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/logging/InAppLogger.kt
 @@ -0,0 +1,168 @@
@@ -2610,7 +2449,7 @@ index 00000000..e4cba788
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt
 new file mode 100644
-index 00000000..28ee667d
+index 0000000..28ee667
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/share/SharePlatform.kt
 @@ -0,0 +1,5 @@
@@ -2620,7 +2459,7 @@ index 00000000..28ee667d
 +    fun shareFile(filePath: String, title: String, mimeType: String)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
-index 87d6d7fc..a8ee9f98 100644
+index 87d6d7f..a8ee9f9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/BottomSheet.kt
 @@ -139,3 +139,14 @@ private fun NuvioBottomSheetDragHandle() {
@@ -2639,7 +2478,7 @@ index 87d6d7fc..a8ee9f98 100644
 +    )
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
-index 23c8d9b1..c28280a4 100644
+index 23c8d9b..c28280a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/DropdownChip.kt
 @@ -5,15 +5,18 @@ import androidx.compose.foundation.clickable
@@ -2817,7 +2656,7 @@ index 23c8d9b1..c28280a4 100644
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
 new file mode 100644
-index 00000000..f82780cc
+index 0000000..f82780c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.kt
 @@ -0,0 +1,6 @@
@@ -2829,10 +2668,10 @@ index 00000000..f82780cc
 +expect fun rememberDownloadFileSaver(): (DownloadItem) -> Unit
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
 new file mode 100644
-index 00000000..74e04ebc
+index 0000000..3820146
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsHlsSelectionSheet.kt
-@@ -0,0 +1,403 @@
+@@ -0,0 +1,428 @@
 +package com.nuvio.app.features.downloads
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -2968,6 +2807,31 @@ index 00000000..74e04ebc
 +    }
 +    var selectedSubtitleKeys by remember(subtitleTracks) {
 +        mutableStateOf(setOf<String>())
++    }
++
++    LaunchedEffect(qualityOptions) {
++        if (qualityOptions.isNotEmpty() && (selectedQualityKey == null || qualityOptions.none { it.key == selectedQualityKey })) {
++            selectedQualityKey = qualityOptions.firstOrNull()?.key
++        }
++    }
++
++    LaunchedEffect(audioTracks) {
++        if (audioTracks.isNotEmpty() && selectedAudioKeys.isEmpty()) {
++            val italianTracks = audioTracks.filter { isItalianTrack(it) }
++            val newKeys = if (italianTracks.isNotEmpty()) {
++                val defaultItalian = italianTracks.filter { it.isDefault }
++                if (defaultItalian.isNotEmpty()) {
++                    defaultItalian.mapNotNull { it.uri }.toSet()
++                } else {
++                    setOfNotNull(italianTracks.firstOrNull()?.uri)
++                }
++            } else {
++                audioTracks.filter { it.isDefault }.mapNotNull { it.uri }.toSet().ifEmpty {
++                    setOfNotNull(audioTracks.firstOrNull()?.uri)
++                }
++            }
++            selectedAudioKeys = newKeys
++        }
 +    }
 +
 +    val hasAudio = audioTracks.isNotEmpty()
@@ -3237,7 +3101,7 @@ index 00000000..74e04ebc
 +}
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
-index 48da488c..b18905e8 100644
+index 48da488..b18905e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsModels.kt
 @@ -15,8 +15,14 @@ enum class DownloadStatus {
@@ -3309,7 +3173,7 @@ index 48da488c..b18905e8 100644
      sortedWith(downloadSeriesEpisodeComparator)
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
-index c423daa1..30e458f8 100644
+index c423daa..30e458f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.kt
 @@ -8,6 +8,14 @@ internal data class DownloadPlatformRequest(
@@ -3354,7 +3218,7 @@ index c423daa1..30e458f8 100644
      fun openDownloadsDirectory(): Boolean
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
-index 041a38ee..79da4856 100644
+index 041a38e..79da485 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/DownloadsRepository.kt
 @@ -1,7 +1,14 @@
@@ -3790,7 +3654,7 @@ index 041a38ee..79da4856 100644
      return normalized.startsWith("http://") || normalized.startsWith("https://")
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
 new file mode 100644
-index 00000000..5bf68166
+index 0000000..5bf6816
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
 @@ -0,0 +1,346 @@
@@ -4142,7 +4006,7 @@ index 00000000..5bf68166
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 00000000..78a58613
+index 0000000..78a5861
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 @@ -0,0 +1,481 @@
@@ -4629,7 +4493,7 @@ index 00000000..78a58613
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt
 new file mode 100644
-index 00000000..602b8e1b
+index 0000000..602b8e1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/NetworkSettingsRepository.kt
 @@ -0,0 +1,98 @@
@@ -4732,10 +4596,10 @@ index 00000000..602b8e1b
 +
 +var globalNetworkSettingsRepository: NetworkSettingsRepository? = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index e5169fa9..267893be 100644
+index ca1e563..953f053 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -78,7 +78,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
+@@ -79,7 +79,10 @@ import com.nuvio.app.core.ui.NuvioBottomSheetDivider
  import com.nuvio.app.core.ui.NuvioModalBottomSheet
  import com.nuvio.app.core.ui.NuvioToastController
  import com.nuvio.app.core.ui.dismissNuvioBottomSheet
@@ -4746,7 +4610,7 @@ index e5169fa9..267893be 100644
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import androidx.compose.material3.ExperimentalMaterial3Api
-@@ -162,6 +165,7 @@ fun StreamsScreen(
+@@ -163,6 +166,7 @@ fun StreamsScreen(
      val streamLinkCopiedText = stringResource(Res.string.streams_link_copied)
      val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
      var streamActionsTarget by remember(videoId) { mutableStateOf<StreamItem?>(null) }
@@ -4754,7 +4618,7 @@ index e5169fa9..267893be 100644
      val downloadScope = rememberCoroutineScope()
      var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
      var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
-@@ -389,57 +393,66 @@ fun StreamsScreen(
+@@ -390,57 +394,66 @@ fun StreamsScreen(
                  }
              },
              onDownload = { stream ->
@@ -4866,7 +4730,7 @@ index e5169fa9..267893be 100644
                  }
              },
              onOpen = { stream, openExternally ->
-@@ -451,6 +464,32 @@ fun StreamsScreen(
+@@ -452,6 +465,32 @@ fun StreamsScreen(
                  )
              },
          )
@@ -4901,7 +4765,7 @@ index e5169fa9..267893be 100644
  
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt
 new file mode 100644
-index 00000000..aff23ebc
+index 0000000..aff23eb
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/logging/InAppLogger.desktop.kt
 @@ -0,0 +1,8 @@
@@ -4915,7 +4779,7 @@ index 00000000..aff23ebc
 +    SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt
 new file mode 100644
-index 00000000..82046343
+index 0000000..8204634
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/core/share/SharePlatform.desktop.kt
 @@ -0,0 +1,5 @@
@@ -4926,7 +4790,7 @@ index 00000000..82046343
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
 new file mode 100644
-index 00000000..3d1ab5a7
+index 0000000..3d1ab5a
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.desktop.kt
 @@ -0,0 +1,6 @@
@@ -4938,7 +4802,7 @@ index 00000000..3d1ab5a7
 +actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
 new file mode 100644
-index 00000000..2a9a1c8e
+index 0000000..2a9a1c8
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsClock.desktop.kt
 @@ -0,0 +1,5 @@
@@ -4949,7 +4813,7 @@ index 00000000..2a9a1c8e
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
 new file mode 100644
-index 00000000..92e4807a
+index 0000000..92e4807
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.desktop.kt
 @@ -0,0 +1,5 @@
@@ -4960,7 +4824,7 @@ index 00000000..92e4807a
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 new file mode 100644
-index 00000000..57fc8137
+index 0000000..57fc813
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.desktop.kt
 @@ -0,0 +1,136 @@
@@ -5102,7 +4966,7 @@ index 00000000..57fc8137
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt
 new file mode 100644
-index 00000000..5a0c6716
+index 0000000..5a0c671
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/logging/InAppLogger.ios.kt
 @@ -0,0 +1,10 @@
@@ -5118,7 +4982,7 @@ index 00000000..5a0c6716
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt
 new file mode 100644
-index 00000000..372ba484
+index 0000000..372ba48
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/share/SharePlatform.ios.kt
 @@ -0,0 +1,29 @@
@@ -5153,7 +5017,7 @@ index 00000000..372ba484
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
 new file mode 100644
-index 00000000..3d1ab5a7
+index 0000000..3d1ab5a
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadFileSaver.ios.kt
 @@ -0,0 +1,6 @@
@@ -5164,7 +5028,7 @@ index 00000000..3d1ab5a7
 +@Composable
 +actual fun rememberDownloadFileSaver(): (DownloadItem) -> Unit = {}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
-index 2cd1d315..5b9cd310 100644
+index 2cd1d31..5b9cd31 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsLiveStatusPlatform.ios.kt
 @@ -20,6 +20,7 @@ internal actual object DownloadsLiveStatusPlatform {
@@ -5184,7 +5048,7 @@ index 2cd1d315..5b9cd310 100644
          DownloadStatus.Failed -> 2
          DownloadStatus.Completed -> 3
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
-index f8e6e673..b3e30b5d 100644
+index f8e6e67..b3e30b5 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.ios.kt
 @@ -2,13 +2,21 @@ package com.nuvio.app.features.downloads
@@ -5775,7 +5639,7 @@ index f8e6e673..b3e30b5d 100644
 +    return if (produced == outputCapacity) output else output.copyOf(produced)
 +}
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
-index eea0c5a0..cf998c8c 100644
+index 5f89e0d..cf998c8 100644
 --- a/gradle/libs.versions.toml
 +++ b/gradle/libs.versions.toml
 @@ -9,6 +9,7 @@ androidx-navigation3 = "1.2.0-alpha02"
@@ -5786,7 +5650,15 @@ index eea0c5a0..cf998c8c 100644
  androidx-espresso = "3.7.0"
  androidx-lifecycle = "2.11.0"
  androidx-savedstate = "1.4.0"
-@@ -42,6 +43,7 @@ kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.
+@@ -16,6 +17,7 @@ androidx-work = "2.10.3"
+ androidx-testExt = "1.3.0"
+ composeMultiplatform = "1.12.0"
+ coil = "3.5.0-beta01"
++compottie = "2.3.1"
+ kermit = "2.0.5"
+ junit = "4.13.2"
+ kotlin = "2.4.10"
+@@ -41,6 +43,7 @@ kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.
  junit = { module = "junit:junit", version.ref = "junit" }
  androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
  androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidx-core-splashscreen" }
@@ -5794,7 +5666,15 @@ index eea0c5a0..cf998c8c 100644
  androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
  androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
  androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
-@@ -86,6 +88,7 @@ androidx-media3-session = { module = "androidx.media3:media3-session", version.r
+@@ -59,6 +62,7 @@ compose-materialRipple = { module = "org.jetbrains.compose.material:material-rip
+ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+ compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
+ compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
++compottie = { module = "io.github.alexzhirkevich:compottie", version.ref = "compottie" }
+ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+ coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
+ coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+@@ -84,6 +88,7 @@ androidx-media3-session = { module = "androidx.media3:media3-session", version.r
  androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "androidx-media3" }
  androidx-media3-container = { module = "androidx.media3:media3-container", version.ref = "androidx-media3" }
  androidx-media3-extractor = { module = "androidx.media3:media3-extractor", version.ref = "androidx-media3" }

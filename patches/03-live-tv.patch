@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index 66d6dcdd..ac0f6685 100644
+index 66d6dcd..ac0f668 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 @@ -24,6 +24,7 @@ import com.nuvio.app.features.downloads.DownloadsLiveStatusPlatform
@@ -20,7 +20,7 @@ index 66d6dcdd..ac0f6685 100644
          DownloadsLiveStatusPlatform.initialize(applicationContext)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.android.kt
 new file mode 100644
-index 00000000..725368bd
+index 0000000..725368b
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.android.kt
 @@ -0,0 +1,33 @@
@@ -59,7 +59,7 @@ index 00000000..725368bd
 +}
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
 new file mode 100644
-index 00000000..426603fc
+index 0000000..426603f
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.android.kt
 @@ -0,0 +1,69 @@
@@ -133,10 +133,23 @@ index 00000000..426603fc
 +    }
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values-it/strings.xml b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-index cc827e54..8b0be168 100644
+index cc827e5..faab0e7 100644
 --- a/composeApp/src/commonMain/composeResources/values-it/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values-it/strings.xml
-@@ -1948,4 +1948,38 @@
+@@ -293,6 +293,12 @@
+   <string name="downloads_status_downloading">Download in corso • %1$s</string>
+   <string name="downloads_status_failed">Fallito</string>
+   <string name="downloads_status_paused">In pausa • %1$s</string>
++  <string name="downloads_status_processing">Elaborazione • %1$s</string>
++  <string name="downloads_track_video">Video</string>
++  <string name="downloads_track_audio">Audio</string>
++  <string name="downloads_track_subtitles">Sottotitoli</string>
++  <string name="downloads_share">Condividi</string>
++  <string name="downloads_save">Salva</string>
+   <string name="episodes_cd_watched">Visto</string>
+   <string name="episodes_season">Stagione %1$d</string>
+   <string name="episodes_specials">Speciali</string>
+@@ -1948,4 +1954,52 @@
    <string name="entity_browse_about">Informazioni</string>
    <string name="player_external_loading_subtitles">Caricamento sottotitoli dagli addon...</string>
    <string name="player_external_downloading_subtitles">Download dei sottotitoli...</string>
@@ -174,12 +187,56 @@ index cc827e54..8b0be168 100644
 +  <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
 +  <string name="live_tv_source_title">URL Sorgente</string>
 +  <string name="live_tv_categories">Categorie</string>
++  <string name="compose_nav_downloads">Offline</string>
++  <!-- Downloads & HLS -->
++  <string name="downloads_hls_quality">Qualità Video</string>
++  <string name="downloads_hls_audio">Traccia Audio</string>
++  <string name="downloads_hls_subtitles">Sottotitoli</string>
++  <string name="downloads_hls_download">Scarica</string>
++  <string name="downloads_hls_fetching">Recupero stream disponibili…</string>
++  <string name="downloads_hls_select_variant">Seleziona qualità, audio e sottotitoli</string>
++  <string name="downloads_foreground_title">Download</string>
++  <string name="downloads_foreground_subtitle">Download in corso in background</string>
++  <!-- Posizione download -->
++  <string name="settings_downloads_location_title">Posizione Download</string>
++  <string name="settings_downloads_location_private">Archivio Interno (Privato)</string>
++  <string name="settings_downloads_location_reset">Ripristina Predefiniti</string>
  </resources>
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 03b34a97..884fe2df 100644
+index 0477bf1..715d67a 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2264,4 +2264,38 @@
+@@ -627,6 +627,12 @@
+     <string name="downloads_status_downloading">Downloading • %1$s</string>
+     <string name="downloads_status_failed">Failed</string>
+     <string name="downloads_status_paused">Paused • %1$s</string>
++    <string name="downloads_status_processing">Processing • %1$s</string>
++    <string name="downloads_track_video">Video</string>
++    <string name="downloads_track_audio">Audio</string>
++    <string name="downloads_track_subtitles">Subtitles</string>
++    <string name="downloads_share">Share</string>
++    <string name="downloads_save">Save</string>
+     <string name="episodes_cd_watched">Watched</string>
+     <string name="episodes_season">Season %1$d</string>
+     <string name="episodes_specials">Specials</string>
+@@ -904,8 +910,6 @@
+     <string name="settings_meta_cinematic_background_description">Blurred backdrop behind content, similar to stream screen.</string>
+     <string name="settings_meta_background_mode">Background Mode</string>
+     <string name="settings_meta_background_mode_description">Choose how artwork appears behind metadata pages.</string>
+-    <string name="settings_meta_poster_transition">Poster Transition</string>
+-    <string name="settings_meta_poster_transition_description">Expand and blur posters when opening details.</string>
+     <string name="settings_meta_background_mode_normal">Normal</string>
+     <string name="settings_meta_background_mode_normal_description">Use the standard app background.</string>
+     <string name="settings_meta_background_mode_cinematic">Cinematic</string>
+@@ -1249,7 +1253,6 @@
+     <string name="settings_tracking_simkl_library_description">Use your Simkl plan-to-watch and status lists.</string>
+     <string name="settings_tracking_nuvio_progress_description">Resume with progress stored by Nuvio Sync.</string>
+     <string name="settings_tracking_trakt_progress_description">Resume with playback progress from Trakt.</string>
+-    <string name="settings_tracking_trakt_progress_required">Available when Trakt is the Watch Progress source</string>
+     <string name="settings_tracking_simkl_progress_description">Resume with playback progress from Simkl.</string>
+     <string name="settings_tracking_tmdb_recommendations_description">Use TMDB recommendations on details pages.</string>
+     <string name="settings_tracking_trakt_recommendations_description">Use personalized related titles from Trakt.</string>
+@@ -2267,4 +2270,52 @@
          <item quantity="one">%d title</item>
          <item quantity="other">%d titles</item>
      </plurals>
@@ -217,9 +274,23 @@ index 03b34a97..884fe2df 100644
 +    <string name="live_tv_source_hint">https://example.com/playlist.m3u</string>
 +    <string name="live_tv_source_title">Source URL</string>
 +    <string name="live_tv_categories">Categories</string>
++    <string name="compose_nav_downloads">Offline</string>
++    <!-- Downloads & HLS -->
++    <string name="downloads_hls_quality">Video Quality</string>
++    <string name="downloads_hls_audio">Audio Track</string>
++    <string name="downloads_hls_subtitles">Subtitles</string>
++    <string name="downloads_hls_download">Download</string>
++    <string name="downloads_hls_fetching">Fetching available streams…</string>
++    <string name="downloads_hls_select_variant">Select quality, audio and subtitles</string>
++    <string name="downloads_foreground_title">Downloads</string>
++    <string name="downloads_foreground_subtitle">Downloading in background</string>
++    <!-- Download location -->
++    <string name="settings_downloads_location_title">Download Location</string>
++    <string name="settings_downloads_location_private">Internal Storage (Private)</string>
++    <string name="settings_downloads_location_reset">Reset to Default</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
-index 76a862a3..b1fdb31f 100644
+index 76a862a..b1fdb31 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppScreenTab.kt
 @@ -5,6 +5,8 @@ import com.nuvio.app.core.ui.NativeNavigationTab
@@ -245,35 +316,36 @@ index 76a862a3..b1fdb31f 100644
  }
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index 892da4ba..8ee5d6cb 100644
+index 0813817..b7bb3e2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.statusBars
- import androidx.compose.foundation.lazy.LazyListState
- import androidx.compose.material.icons.Icons
- import androidx.compose.material.icons.filled.Home
-+import androidx.compose.material.icons.rounded.LiveTv
+@@ -26,6 +26,8 @@ import com.nuvio.app.core.ui.nuvio
+ import com.nuvio.app.features.cloud.CloudLibraryContentType
+ import com.nuvio.app.features.cloud.CloudLibraryFile
+ import com.nuvio.app.features.cloud.CloudLibraryItem
++import com.nuvio.app.features.downloads.DownloadItem
++import com.nuvio.app.features.downloads.DownloadsScreen
+ import com.nuvio.app.features.home.HomeCatalogSection
+ import com.nuvio.app.features.home.HomeScreen
+ import com.nuvio.app.features.home.MetaPreview
+@@ -33,6 +35,8 @@ import com.nuvio.app.features.library.LibraryItem
+ import com.nuvio.app.features.library.LibraryScreen
+ import com.nuvio.app.features.library.LibrarySection
+ import com.nuvio.app.features.library.LibrarySortOption
 +import com.nuvio.app.features.livetv.LiveTvChannel
 +import com.nuvio.app.features.livetv.LiveTvScreen
- import androidx.compose.material3.Icon
- import androidx.compose.material3.MaterialTheme
- import androidx.compose.material3.Surface
-@@ -56,12 +59,14 @@ import com.nuvio.app.features.watchprogress.ContinueWatchingItem
+ import com.nuvio.app.features.profiles.NuvioProfile
+ import com.nuvio.app.features.profiles.ProfileBackgroundBackdrop
+ import com.nuvio.app.features.search.SearchScreen
+@@ -42,6 +46,7 @@ import com.nuvio.app.features.watchprogress.ContinueWatchingItem
  import com.nuvio.app.navigation.AppRoute
  import com.nuvio.app.navigation.NuvioNavigator
  import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.flow.emptyFlow
  import nuvio.composeapp.generated.resources.Res
  import nuvio.composeapp.generated.resources.app_brand_name
- import nuvio.composeapp.generated.resources.compose_nav_home
- import nuvio.composeapp.generated.resources.compose_nav_library
- import nuvio.composeapp.generated.resources.compose_nav_profile
- import nuvio.composeapp.generated.resources.compose_nav_search
-+import nuvio.composeapp.generated.resources.live_tv_title
- import nuvio.composeapp.generated.resources.sidebar_library
- import nuvio.composeapp.generated.resources.sidebar_search
- import org.jetbrains.compose.resources.painterResource
-@@ -100,6 +105,7 @@ internal data class AppTabState(
+ import org.jetbrains.compose.resources.stringResource
+@@ -79,6 +84,7 @@ internal data class AppTabState(
  internal data class AppTabRequests(
      val homeScrollToTopRequests: Flow<Unit>,
      val searchScrollToTopRequests: Flow<Unit>,
@@ -281,15 +353,16 @@ index 892da4ba..8ee5d6cb 100644
      val libraryScrollToTopRequests: Flow<Unit>,
      val settingsRootActionRequests: Flow<Unit>,
  )
-@@ -130,6 +136,7 @@ internal data class AppTabActions(
+@@ -109,6 +115,8 @@ internal data class AppTabActions(
      val onTestUpdateBannerClick: (() -> Unit)? = null,
      val onCollectionsSettingsClick: () -> Unit = {},
      val onFolderClick: ((collectionId: String, folderId: String) -> Unit)? = null,
 +    val onLiveTvChannelClick: ((LiveTvChannel) -> Unit)? = null,
++    val onOpenDownload: ((DownloadItem) -> Unit)? = null,
      val onRequestedSettingsPageConsumed: () -> Unit = {},
      val onInitialHomeContentRendered: () -> Unit = {},
  )
-@@ -176,6 +183,14 @@ internal fun AppTabHost(
+@@ -155,6 +163,21 @@ internal fun AppTabHost(
                      )
                  }
  
@@ -301,39 +374,27 @@ index 892da4ba..8ee5d6cb 100644
 +                    )
 +                }
 +
++                AppScreenTab.Downloads -> {
++                    DownloadsScreen(
++                        onBack = {},
++                        onOpenDownload = { item -> actions.onOpenDownload?.invoke(item) },
++                    )
++                }
++
                  AppScreenTab.Library -> {
                      LibraryScreen(
                          modifier = Modifier.fillMaxSize(),
-@@ -279,6 +294,23 @@ internal fun TabletFloatingTopBar(
-                         )
-                     },
-                 )
-+                TabletTopPillItem(
-+                    label = stringResource(Res.string.live_tv_title),
-+                    selected = selectedTab == AppScreenTab.LiveTv,
-+                    onClick = { onTabSelected(AppScreenTab.LiveTv) },
-+                    icon = {
-+                        Icon(
-+                            imageVector = Icons.Rounded.LiveTv,
-+                            contentDescription = stringResource(Res.string.live_tv_title),
-+                            modifier = Modifier.size(NuvioTokens.Space.s18),
-+                            tint = if (selectedTab == AppScreenTab.LiveTv) {
-+                                tokens.colors.textPrimary
-+                            } else {
-+                                tokens.colors.textMuted
-+                            },
-+                        )
-+                    },
-+                )
-                 TabletTopPillItem(
-                     label = stringResource(Res.string.compose_nav_library),
-                     selected = selectedTab == AppScreenTab.Library,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 723a1890..df7e48c8 100644
+index e15a2cd..cd852fb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -48,6 +48,8 @@ import androidx.navigation3.ui.LocalNavAnimatedContentScope
+@@ -46,11 +46,10 @@ import androidx.navigation3.runtime.rememberNavBackStack
+ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+ import androidx.navigation3.ui.LocalNavAnimatedContentScope
  import androidx.navigation3.ui.NavDisplay
+-import com.nuvio.app.core.ui.LocalPosterClickAnchor
+-import com.nuvio.app.navigation.PosterNavigationState
+-import com.nuvio.app.navigation.posterNavigationEntry
  import com.nuvio.app.core.auth.AuthRepository
  import com.nuvio.app.core.auth.AuthState
 +import com.nuvio.app.features.livetv.LiveTvChannel
@@ -341,7 +402,43 @@ index 723a1890..df7e48c8 100644
  import com.nuvio.app.core.auth.DeviceSessionRegistration
  import com.nuvio.app.core.build.AppFeaturePolicy
  import com.nuvio.app.core.deeplink.AppDeepLink
-@@ -229,6 +231,7 @@ internal fun MainAppContent(
+@@ -97,7 +96,6 @@ import com.nuvio.app.features.cloud.providerPosterUrl
+ import com.nuvio.app.features.collection.CollectionRepository
+ import com.nuvio.app.features.collection.CollectionSyncService
+ import com.nuvio.app.features.details.MetaDetailsRepository
+-import com.nuvio.app.features.details.MetaScreenSettingsRepository
+ import com.nuvio.app.features.downloads.DownloadItem
+ import com.nuvio.app.features.downloads.DownloadsRepository
+ import com.nuvio.app.features.home.HomeCatalogSection
+@@ -200,26 +198,17 @@ internal fun MainAppContent(
+     onSwitchProfile: () -> Unit = {},
+ ) {
+         val navBackStack = rememberNavBackStack(navigationSavedStateConfiguration, initialRoute)
+-        val posterNavigation = remember { PosterNavigationState() }
+-        val metaScreenSettings by remember {
+-            MetaScreenSettingsRepository.ensureLoaded()
+-            MetaScreenSettingsRepository.uiState
+-        }.collectAsStateWithLifecycle()
+-        val posterNavigationEnabled = supportsPosterNavigationMotion &&
+-            metaScreenSettings.posterTransitionEnabled && onNavigate == null
+         val routeDisposalDecorator = remember {
+             RouteDisposalNavEntryDecorator<NavKey> { key ->
+                 if (key is AppRoute) disposeRoute(key)
+             }
+         }
+-        val navController = remember(navBackStack, onNavigate, onGoBack, onReplace, posterNavigationEnabled) {
++        val navController = remember(navBackStack, onNavigate, onGoBack, onReplace) {
+             NuvioNavigator(
+                 backStack = navBackStack,
+                 onExternalNavigate = onNavigate,
+                 onExternalBack = onGoBack,
+                 onExternalReplace = onReplace,
+-                onLocalNavigate = if (posterNavigationEnabled) posterNavigation::navigate else null,
+-                onLocalPop = if (posterNavigationEnabled) posterNavigation::clear else null,
+             )
+         }
+         val appUpdaterController = rememberAppUpdaterController()
+@@ -242,22 +231,11 @@ internal fun MainAppContent(
          var searchFocusRequestCount by remember { mutableStateOf(0) }
          val homeScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
          val searchScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
@@ -349,7 +446,23 @@ index 723a1890..df7e48c8 100644
          val searchListState = rememberLazyListState()
          val libraryScrollToTopRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
          val settingsRootActionRequests = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
-@@ -370,8 +373,10 @@ internal fun MainAppContent(
+         val currentRoute = navBackStack.lastOrNull() as? AppRoute
+-        LaunchedEffect(currentRoute, posterNavigationEnabled) {
+-            val request = posterNavigation.active
+-            if (!posterNavigationEnabled || (request != null && currentRoute != request.to)) posterNavigation.clear()
+-        }
+-        LaunchedEffect(posterNavigation.active?.to) {
+-            posterNavigation.active?.to?.let { route ->
+-                MetaDetailsRepository.load(route.type, route.id)
+-            }
+-        }
+-        DisposableEffect(posterNavigation) {
+-            onDispose { posterNavigation.clear() }
+-        }
+         val liquidGlassNativeTabBarEnabled by remember {
+             ThemeSettingsRepository.liquidGlassNativeTabBarEnabled
+         }.collectAsStateWithLifecycle()
+@@ -395,8 +373,10 @@ internal fun MainAppContent(
                  searchFocusRequestCount++
                  searchScrollToTopRequests.tryEmit(Unit)
              }
@@ -360,7 +473,7 @@ index 723a1890..df7e48c8 100644
          }
      }
  
-@@ -873,6 +878,31 @@ internal fun MainAppContent(
+@@ -898,6 +878,31 @@ internal fun MainAppContent(
              navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
          }
  
@@ -392,7 +505,15 @@ index 723a1890..df7e48c8 100644
          fun openExternalStreamUrl(url: String): Boolean {
              val opened = runCatching {
                  uriHandler.openUri(url)
-@@ -1280,6 +1310,7 @@ internal fun MainAppContent(
+@@ -1279,7 +1284,6 @@ internal fun MainAppContent(
+             ) {
+             SharedTransitionLayout {
+                 CompositionLocalProvider(
+-                    LocalPosterClickAnchor provides if (posterNavigationEnabled) posterNavigation::prepare else null,
+                     LocalUseNativeNavigation provides useNativeNavigation,
+                     LocalNativeNavigationBarHidden provides (currentRoute?.hidesNavigationBar == true),
+                 ) {
+@@ -1306,6 +1310,7 @@ internal fun MainAppContent(
                          requests = AppTabRequests(
                              homeScrollToTopRequests = homeScrollToTopRequests,
                              searchScrollToTopRequests = searchScrollToTopRequests,
@@ -400,35 +521,70 @@ index 723a1890..df7e48c8 100644
                              libraryScrollToTopRequests = libraryScrollToTopRequests,
                              settingsRootActionRequests = settingsRootActionRequests,
                          ),
-@@ -1356,6 +1387,7 @@ internal fun MainAppContent(
+@@ -1382,6 +1387,8 @@ internal fun MainAppContent(
                                  },
                                  onContinueWatchingClick = onContinueWatchingClick,
                                  onContinueWatchingLongPress = onContinueWatchingLongPress,
 +                                onLiveTvChannelClick = ::openLiveTvChannel,
++                                onOpenDownload = ::openDownloadedItem,
                                  onSwitchProfile = onSwitchProfile,
                                  onSettingsPageClick = if (useNativeNavigation && !isTabletLayout) {
                                      { pageName, title ->
+@@ -1634,11 +1641,7 @@ internal fun MainAppContent(
+                         { key ->
+                             routeDisposalDecorator.register(
+                                 key = key,
+-                                entry = if (posterNavigationEnabled) {
+-                                    posterNavigationEntry(key, provider(key), posterNavigation)
+-                                } else {
+-                                    provider(key)
+-                                },
++                                entry = provider(key),
+                             )
+                         }
+                     },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-index 2d6219a9..9ebe0fe1 100644
+index 7fdd4cc..686ebf7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt
-@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
- import androidx.compose.foundation.layout.padding
+@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.statusBars
+ import androidx.compose.foundation.layout.widthIn
  import androidx.compose.material.icons.Icons
  import androidx.compose.material.icons.filled.Home
 +import androidx.compose.material.icons.rounded.LiveTv
++import androidx.compose.material.icons.rounded.Download
  import androidx.compose.material3.Scaffold
  import androidx.compose.runtime.Composable
  import androidx.compose.runtime.CompositionLocalProvider
-@@ -36,6 +37,7 @@ import nuvio.composeapp.generated.resources.compose_nav_home
+@@ -41,6 +43,8 @@ import nuvio.composeapp.generated.resources.compose_nav_home
  import nuvio.composeapp.generated.resources.compose_nav_library
  import nuvio.composeapp.generated.resources.compose_nav_profile
  import nuvio.composeapp.generated.resources.compose_nav_search
++import nuvio.composeapp.generated.resources.compose_nav_downloads
 +import nuvio.composeapp.generated.resources.live_tv_title
  import nuvio.composeapp.generated.resources.sidebar_library
  import nuvio.composeapp.generated.resources.sidebar_search
  import org.jetbrains.compose.resources.stringResource
-@@ -93,6 +95,12 @@ internal fun MainTabsDestination(
+@@ -89,6 +93,18 @@ internal fun MainTabsDestination(
+                 drawable = Res.drawable.sidebar_search,
+                 label = stringResource(Res.string.compose_nav_search),
+             ),
++            FloatingNavigationItem(
++                selected = selectedTab == AppScreenTab.LiveTv,
++                onClick = { onTabSelected(AppScreenTab.LiveTv) },
++                icon = Icons.Rounded.LiveTv,
++                label = stringResource(Res.string.live_tv_title),
++            ),
++            FloatingNavigationItem(
++                selected = selectedTab == AppScreenTab.Downloads,
++                onClick = { onTabSelected(AppScreenTab.Downloads) },
++                icon = Icons.Rounded.Download,
++                label = stringResource(Res.string.compose_nav_downloads),
++            ),
+             FloatingNavigationItem(
+                 selected = selectedTab == AppScreenTab.Library,
+                 onClick = { onTabSelected(AppScreenTab.Library) },
+@@ -131,6 +147,18 @@ internal fun MainTabsDestination(
                              icon = Res.drawable.sidebar_search,
                              contentDescription = stringResource(Res.string.compose_nav_search),
                          )
@@ -438,26 +594,18 @@ index 2d6219a9..9ebe0fe1 100644
 +                            icon = Icons.Rounded.LiveTv,
 +                            contentDescription = stringResource(Res.string.live_tv_title),
 +                        )
-                         NavItem(
-                             selected = selectedTab == AppScreenTab.Library,
-                             onClick = { onTabSelected(AppScreenTab.Library) },
-@@ -166,6 +174,13 @@ internal fun MainTabsDestination(
-                             contentDescription = stringResource(Res.string.compose_nav_search),
-                             label = stringResource(Res.string.compose_nav_search),
-                         )
 +                        NavItem(
-+                            selected = selectedTab == AppScreenTab.LiveTv,
-+                            onClick = { onTabSelected(AppScreenTab.LiveTv) },
-+                            icon = Icons.Rounded.LiveTv,
-+                            contentDescription = stringResource(Res.string.live_tv_title),
-+                            label = stringResource(Res.string.live_tv_title),
++                            selected = selectedTab == AppScreenTab.Downloads,
++                            onClick = { onTabSelected(AppScreenTab.Downloads) },
++                            icon = Icons.Rounded.Download,
++                            contentDescription = stringResource(Res.string.compose_nav_downloads),
 +                        )
                          NavItem(
                              selected = selectedTab == AppScreenTab.Library,
                              onClick = { onTabSelected(AppScreenTab.Library) },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvFilterBar.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvFilterBar.kt
 new file mode 100644
-index 00000000..41532247
+index 0000000..4153224
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvFilterBar.kt
 @@ -0,0 +1,304 @@
@@ -767,7 +915,7 @@ index 00000000..41532247
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 new file mode 100644
-index 00000000..fac13582
+index 0000000..fac1358
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvModels.kt
 @@ -0,0 +1,38 @@
@@ -811,7 +959,7 @@ index 00000000..fac13582
 +)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 new file mode 100644
-index 00000000..c73db14d
+index 0000000..c73db14
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvRepository.kt
 @@ -0,0 +1,318 @@
@@ -1135,7 +1283,7 @@ index 00000000..c73db14d
 +        .replace("&apos;", "'")
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 new file mode 100644
-index 00000000..bedfa00c
+index 0000000..bedfa00
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvScreen.kt
 @@ -0,0 +1,652 @@
@@ -1793,7 +1941,7 @@ index 00000000..bedfa00c
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.kt
 new file mode 100644
-index 00000000..8683be4f
+index 0000000..8683be4
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.kt
 @@ -0,0 +1,15 @@
@@ -1814,7 +1962,7 @@ index 00000000..8683be4f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvChannelsPanel.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvChannelsPanel.kt
 new file mode 100644
-index 00000000..7bf0cd7f
+index 0000000..7bf0cd7
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvChannelsPanel.kt
 @@ -0,0 +1,301 @@
@@ -2121,7 +2269,7 @@ index 00000000..7bf0cd7f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvPlayerActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvPlayerActions.kt
 new file mode 100644
-index 00000000..83ce7202
+index 0000000..83ce720
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/LiveTvPlayerActions.kt
 @@ -0,0 +1,37 @@
@@ -2163,7 +2311,7 @@ index 00000000..83ce7202
 +    controlsVisible = true
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
-index eef21334..d1d5a4fc 100644
+index eef2133..d1d5a4f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerControls.kt
 @@ -24,14 +24,17 @@ import androidx.compose.foundation.layout.windowInsetsPadding
@@ -2295,7 +2443,7 @@ index eef21334..d1d5a4fc 100644
                  }
              }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 5b4e16ac..8f622d7b 100644
+index 5b4e16a..8f622d7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -185,6 +185,7 @@ internal class PlayerScreenRuntime(
@@ -2307,7 +2455,7 @@ index 5b4e16ac..8f622d7b 100644
      var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
      var selectedAudioIndex by mutableStateOf(-1)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 34aa5944..953573aa 100644
+index 7771bcd..6d13308 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -215,6 +215,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
@@ -2339,9 +2487,17 @@ index 34aa5944..953573aa 100644
              onOpenInExternalPlayer = args.onOpenInExternalPlayer?.let { openExternal ->
                  {
                      val loadedSubtitles = addonSubtitles
+@@ -301,7 +316,6 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+                                 lang = sub.language,
+                             )
+                         }
+-                    PlayerStreamsRepository.pauseSearchForPlayback()
+                     openExternal(
+                         ExternalPlayerPlaybackRequest(
+                             sourceUrl = activeSourceUrl,
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.desktop.kt
 new file mode 100644
-index 00000000..4df75592
+index 0000000..4df7559
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvClock.desktop.kt
 @@ -0,0 +1,33 @@
@@ -2380,7 +2536,7 @@ index 00000000..4df75592
 +}
 diff --git a/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.desktop.kt b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.desktop.kt
 new file mode 100644
-index 00000000..1593fe9a
+index 0000000..1593fe9
 --- /dev/null
 +++ b/composeApp/src/desktopMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.desktop.kt
 @@ -0,0 +1,44 @@
@@ -2453,7 +2609,7 @@ HcmV?d00001
 
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.ios.kt
 new file mode 100644
-index 00000000..89f08582
+index 0000000..89f0858
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/livetv/LiveTvStorage.ios.kt
 @@ -0,0 +1,74 @@
