@@ -843,12 +843,10 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..54e67161 100644
+index 1f6484c5..0a2bbc66 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-@@ -1,25 +1,163 @@
--package com.nuvio.app.features.downloads
-+﻿package com.nuvio.app.features.downloads
+@@ -2,24 +2,162 @@ package com.nuvio.app.features.downloads
  
  import android.content.Context
  import android.content.Intent
@@ -1305,7 +1303,7 @@ index 1f6484c5..54e67161 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +474,1126 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +474,1139 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1347,8 +1345,7 @@ index 1f6484c5..54e67161 100644
 +    override fun copyTo(other: DownloadTarget) {
 +        if (other is FileDownloadTarget) {
 +            file.copyTo(other.file, overwrite = true)
-         } else {
--            File(this)
++        } else {
 +            file.inputStream().use { input ->
 +                other.openOutputStream(false).use { output ->
 +                    input.copyTo(output)
@@ -1379,8 +1376,7 @@ index 1f6484c5..54e67161 100644
 +        val doc = getDoc() ?: return false
 +        if (other is DocumentDownloadTarget && other.tree.uri == tree.uri) {
 +            return doc.renameTo(other.fileName)
-         }
--    }.getOrNull()
++        }
 +        return false
 +    }
 +    override fun copyTo(other: DownloadTarget) {
@@ -1412,7 +1408,7 @@ index 1f6484c5..54e67161 100644
 +            }
 +        }
 +    }
- }
++}
 +
 +private fun resolveTotalBytes(
 +    startingBytes: Long,
@@ -1969,6 +1965,14 @@ index 1f6484c5..54e67161 100644
 +
 +        muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 +
++        if (!androidVideoFormat.containsKey("csd-0")) {
++            val csd0 = extractCodecConfigFromBitstream(videoExtractor, videoTrackId, videoMime)
++            if (csd0 != null) {
++                androidVideoFormat.setByteBuffer("csd-0", ByteBuffer.wrap(csd0))
++                AndroidLog.i("Remux", "injected csd-0 for MediaMuxer")
++                InAppLogger.debug("Remux", "injected csd-0 for MediaMuxer")
++            }
++        }
 +        val videoMuxerTrack = muxer.addTrack(androidVideoFormat)
 +        InAppLogger.debug("Remux", "added video track index=$videoMuxerTrack")
 +        var audioMuxerTrack = -1
@@ -2224,29 +2228,32 @@ index 1f6484c5..54e67161 100644
 +
 +    var videoPending = readPending(videoExtractor, videoTrackIndex)
 +    var audioPending = readPending(audioExtractor, audioTrackIndex)
-+    // Normalizzazione: entrambe le track partono da 0.
-+    val videoBase = videoPending?.timeUs
-+    val audioBase = audioPending?.timeUs
++    
++    val commonBase = minOf(
++        videoPending?.timeUs ?: Long.MAX_VALUE, 
++        audioPending?.timeUs ?: Long.MAX_VALUE
++    ).takeIf { it != Long.MAX_VALUE }
++
 +    var videoSamples = 0
 +    var audioSamples = 0
 +    var prevVideoTime = -1L
 +    var prevAudioTime = -1L
 +
-+    fun normalizedTime(pending: PendingSample, base: Long?): Long {
++    fun normalizedTime(pending: PendingSample): Long {
 +        val t = pending.timeUs
-+        if (base == null) return t.coerceAtLeast(0L)
-+        return (t - base).coerceAtLeast(0L)
++        if (commonBase == null) return t.coerceAtLeast(0L)
++        return (t - commonBase).coerceAtLeast(0L)
 +    }
 +
 +    while (videoPending != null || audioPending != null) {
 +        val takeVideo = when {
 +            videoPending == null -> false
 +            audioPending == null -> true
-+            else -> normalizedTime(videoPending, videoBase) <= normalizedTime(audioPending, audioBase)
++            else -> normalizedTime(videoPending) <= normalizedTime(audioPending)
 +        }
 +        if (takeVideo) {
 +            val p = videoPending!!
-+            var t = normalizedTime(p, videoBase)
++            var t = normalizedTime(p)
 +            if (t <= prevVideoTime) t = prevVideoTime + 1 // monotonicità garantita per il muxer
 +            prevVideoTime = t
 +            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
@@ -2260,9 +2267,10 @@ index 1f6484c5..54e67161 100644
 +                AndroidLog.i("Remux", "interleaved video #$videoSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            videoPending = readPending(videoExtractor, videoTrackIndex)
-+        } else {
+         } else {
+-            File(this)
 +            val p = audioPending!!
-+            var t = normalizedTime(p, audioBase)
++            var t = normalizedTime(p)
 +            if (t <= prevAudioTime) t = prevAudioTime + 1
 +            prevAudioTime = t
 +            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
@@ -2276,9 +2284,10 @@ index 1f6484c5..54e67161 100644
 +                AndroidLog.i("Remux", "interleaved audio #$audioSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            audioPending = readPending(audioExtractor, audioTrackIndex)
-+        }
+         }
+-    }.getOrNull()
 +    }
-+    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples videoBase=$videoBase audioBase=$audioBase")
++    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples commonBase=$commonBase")
 +    return videoSamples to audioSamples
 +}
 +
@@ -2339,7 +2348,7 @@ index 1f6484c5..54e67161 100644
 +
 +private fun OutputStream.closeSafe() {
 +    try { close() } catch (_: Exception) { }
-+}
+ }
 +
 +private fun extractCodecConfigFromBitstream(
 +    extractor: MediaExtractor,
@@ -2424,14 +2433,16 @@ index 1f6484c5..54e67161 100644
 +    // serializzare un hvcC completo qui (più complesso e rischioso).
 +    val ordered = targetTypes.mapNotNull { nals[it] }
 +    if (ordered.isEmpty()) return null
-+    val totalLen = ordered.sumOf { 2 + it.size }
++    val totalLen = ordered.sumOf { 4 + it.size }
 +    val out = ByteArray(totalLen)
 +    var off = 0
 +    for (nal in ordered) {
-+        out[off] = (nal.size ushr 8).toByte()
-+        out[off + 1] = (nal.size and 0xFF).toByte()
-+        System.arraycopy(nal, 0, out, off + 2, nal.size)
-+        off += 2 + nal.size
++        out[off] = 0
++        out[off + 1] = 0
++        out[off + 2] = 0
++        out[off + 3] = 1
++        System.arraycopy(nal, 0, out, off + 4, nal.size)
++        off += 4 + nal.size
 +    }
 +    return out
 +}
@@ -3848,10 +3859,10 @@ index 041a38ee..79da4856 100644
      return normalized.startsWith("http://") || normalized.startsWith("https://")
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
 new file mode 100644
-index 00000000..5bf68166
+index 00000000..6895fc05
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsDownloadEngine.kt
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,345 @@
 +package com.nuvio.app.features.downloads
 +
 +import kotlinx.coroutines.channels.Channel
@@ -3941,7 +3952,7 @@ index 00000000..5bf68166
 +}
 +
 +private fun isTransientHttpStatus(status: Int): Boolean =
-+    status == 403 || status == 408 || status == 429 || status >= 500
++    status == 408 || status == 429 || status >= 500
 +
 +private fun retryBackoffMs(attempt: Int): Long =
 +    when (attempt) {
@@ -3993,53 +4004,52 @@ index 00000000..5bf68166
 +
 +    val concurrency = DEFAULT_SEGMENT_CONCURRENCY.coerceAtMost(totalSegments).coerceAtLeast(1)
 +    val channel = Channel<SegmentDelivery>(capacity = concurrency * 2)
++    val segmentQueue = Channel<IndexedValue<HlsSegment>>(capacity = Channel.UNLIMITED)
 +
 +    coroutineScope {
-+        val producer = launch {
-+            val semaphore = Semaphore(concurrency)
-+            try {
-+                segments.forEachIndexed { index, segment ->
-+                    ensureActive()
-+                    semaphore.acquire()
-+                    launch {
-+                        try {
-+                            ensureActive()
-+                            val response = resilientHttpGet(segment.url, segment.byteRange)
-+                            if (response.status !in 200..299) {
-+                                deliver(
-+                                    channel,
-+                                    SegmentDelivery.Failed(
-+                                        index,
-+                                        HlsDownloadException(
-+                                            "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
-+                                        ),
++        segments.forEachIndexed { index, segment ->
++            segmentQueue.trySend(IndexedValue(index, segment))
++        }
++        segmentQueue.close()
++
++        val workers = (0 until concurrency).map {
++            launch {
++                for (item in segmentQueue) {
++                    val index = item.index
++                    val segment = item.value
++                    try {
++                        ensureActive()
++                        val response = resilientHttpGet(segment.url, segment.byteRange)
++                        if (response.status !in 200..299) {
++                            deliver(
++                                channel,
++                                SegmentDelivery.Failed(
++                                    index,
++                                    HlsDownloadException(
++                                        "HLS segment ${index + 1}/$totalSegments failed (HTTP ${response.status})",
 +                                    ),
-+                                )
-+                                return@launch
-+                            }
-+
-+                            val payload = decryptSegmentIfNeeded(
-+                                data = response.body,
-+                                encryption = segment.encryption,
-+                                sequenceNumber = segment.sequenceNumber,
-+                                keyCache = keyCache,
-+                                keyMutex = keyMutex,
-+                                httpGet = resilientHttpGet,
-+                                decryptAes128Cbc = decryptAes128Cbc,
-+                                ensureActive = ensureActive,
++                                ),
 +                            )
-+
-+                            deliver(channel, SegmentDelivery.Payload(IndexedSegmentPayload(index, segment, payload)))
-+                        } catch (e: Throwable) {
-+                            if (e is kotlinx.coroutines.CancellationException) throw e
-+                            deliver(channel, SegmentDelivery.Failed(index, e))
-+                        } finally {
-+                            semaphore.release()
++                            continue
 +                        }
++
++                        val payload = decryptSegmentIfNeeded(
++                            data = response.body,
++                            encryption = segment.encryption,
++                            sequenceNumber = segment.sequenceNumber,
++                            keyCache = keyCache,
++                            keyMutex = keyMutex,
++                            httpGet = resilientHttpGet,
++                            decryptAes128Cbc = decryptAes128Cbc,
++                            ensureActive = ensureActive,
++                        )
++
++                        deliver(channel, SegmentDelivery.Payload(IndexedSegmentPayload(index, segment, payload)))
++                    } catch (e: Throwable) {
++                        if (e is kotlinx.coroutines.CancellationException) throw e
++                        deliver(channel, SegmentDelivery.Failed(index, e))
 +                    }
 +                }
-+            } catch (e: Throwable) {
-+                if (e is kotlinx.coroutines.CancellationException) throw e
 +            }
 +        }
 +
@@ -4096,7 +4106,7 @@ index 00000000..5bf68166
 +            }
 +        } finally {
 +            channel.close()
-+            producer.cancel()
++            workers.forEach { it.cancel() }
 +        }
 +    }
 +
@@ -4200,10 +4210,10 @@ index 00000000..5bf68166
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
 new file mode 100644
-index 00000000..78b74773
+index 00000000..a1f56e3f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/downloads/HlsPlaylist.kt
-@@ -0,0 +1,485 @@
+@@ -0,0 +1,465 @@
 +package com.nuvio.app.features.downloads
 +
 +internal sealed interface HlsPlaylist {
@@ -4291,40 +4301,19 @@ index 00000000..78b74773
 +
 +internal fun parseHlsPlaylist(text: String, baseUrl: String): HlsPlaylist {
 +    val lines = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
-+    val variants = parseMasterVariants(lines, baseUrl)
 +    val media = parseMediaPlaylist(lines, baseUrl)
-+    return when {
-+        media.segments.isNotEmpty() -> HlsPlaylist.Media(media)
-+        variants.isNotEmpty() -> HlsPlaylist.Master(variants)
-+        else -> HlsPlaylist.Media(media)
++    if (media.segments.isNotEmpty()) {
++        return HlsPlaylist.Media(media)
 +    }
-+}
-+
-+private fun parseMasterVariants(lines: List<String>, baseUrl: String): List<HlsVariant> {
-+    val variants = mutableListOf<HlsVariant>()
-+    var pendingAttributes: Map<String, String>? = null
-+    for (line in lines) {
-+        when {
-+            line.startsWith(MASTER_TAG) -> {
-+                pendingAttributes = parseAttributeList(line.removePrefix(MASTER_TAG))
-+            }
-+            line.startsWith("#") -> Unit
-+            else -> {
-+                val attributes = pendingAttributes ?: continue
-+                val averageBandwidth = attributes["AVERAGE-BANDWIDTH"]?.toLongOrNull()
-+                val bandwidth = attributes["BANDWIDTH"]?.toLongOrNull() ?: averageBandwidth ?: 0L
-+                variants += HlsVariant(
-+                    url = resolveHlsUrl(baseUrl, line),
-+                    bandwidth = bandwidth,
-+                    averageBandwidth = averageBandwidth,
-+                    resolution = attributes["RESOLUTION"],
-+                    codecs = attributes["CODECS"],
-+                )
-+                pendingAttributes = null
-+            }
-+        }
++    
++    val master = HlsPlaylistParser.parseMasterPlaylist(text, baseUrl)
++    // Filter out the inferred fallback variant if any, unless it's the only one.
++    val actualVariants = master.variants.filter { it.bandwidth > 0L || it.url != baseUrl }
++    return if (actualVariants.isNotEmpty()) {
++        HlsPlaylist.Master(actualVariants)
++    } else {
++        HlsPlaylist.Master(master.variants)
 +    }
-+    return variants
 +}
 +
 +private fun parseMediaPlaylist(lines: List<String>, baseUrl: String): HlsMediaPlaylist {
@@ -4571,7 +4560,8 @@ index 00000000..78b74773
 +
 +    private fun extractResolutionHint(url: String): String? {
 +        val lower = url.lowercase()
-+        val match = Regex("""(?:m|_)(\d{3,4}p)""").find(lower) ?: Regex("""(\d{3,4}p)""").find(lower)
++        val match = Regex("""(?:m|_|-)(\d{3,4}p)(?:[./?_]|$)""").find(lower)
++            ?: Regex("""(\d{3,4}p)(?:[./?_]|$)""").find(lower)
 +        return match?.groupValues?.getOrNull(1)
 +    }
 +

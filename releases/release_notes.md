@@ -1,5 +1,16 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.8
+
+### 🐛 Fix Patch HLS Download
+- **Gestione Memoria (Concurrency)**: Sostituito il pattern ad allocazione massiva con un Worker Pool ottimizzato (`HlsDownloadEngine`). Evita `OutOfMemoryError` con playlist grandi.
+- **Parser HLS Unificato**: Rimosso il codice duplicato e inaffidabile in `HlsPlaylist.kt`. Il downloader ora sfrutta nativamente il parser primario con supporto `#EXT-X-MEDIA` (audio/sottotitoli).
+- **Muxer CSD Injection**: Convertita la funzione `extractCodecConfigFromBitstream` in formato Annex B per iniezione diretta nel `MediaMuxer` Android. Previene i crash di unione audio/video per i formati crudi H.264/HEVC.
+- **Sincronia A/V Interleaved**: Assegnazione normalizzata dei PTS di partenza (`commonBase`) per l'unione dei flussi video-only + audio-only. Mantiene la sincronia millimetrica e il labiale esatto nei video complessi con B-Frames.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.17.8` (versionCode `162`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.7
 
 ### 🎞️ Remux HLS riscritto su `android.media.MediaMuxer` (platform)

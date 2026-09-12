@@ -717,12 +717,12 @@ index 00000000..03d3deea
 +
 +internal actual fun formatUriForDisplay(uri: String): String = uri
 diff --git a/iosApp/Configuration/Version.xcconfig b/iosApp/Configuration/Version.xcconfig
-index dd0ef699..e5112af4 100644
+index dd0ef699..35c42b30 100644
 --- a/iosApp/Configuration/Version.xcconfig
 +++ b/iosApp/Configuration/Version.xcconfig
 @@ -1,2 +1,3 @@
 -CURRENT_PROJECT_VERSION=122
 -MARKETING_VERSION=0.4.17
-+CURRENT_PROJECT_VERSION=161
-+MARKETING_VERSION=0.4.17.7
++CURRENT_PROJECT_VERSION=162
++MARKETING_VERSION=0.4.17.8
 +
