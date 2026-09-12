@@ -1,5 +1,17 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.6
+
+### 🎬 Fix codec config remux (ExoPlayer non partiva + HEVC supporto)
+
+- **Configurazione codec video corretta**: il fallback che estrae SPS/PPS/VPS dal bitstream ora produce un `initializationData` corretto (length-prefixed, combinato) per **AVC (avcC)** e **HEVC (hvcC)**. Prima restituiva NAL grezzi senza length-prefix in entry separate e non gestiva HEVC: il muxer scriveva un `avcC`/`hvcC` vuoto → ExoPlayer non iniziava (libmpv invece tollera e parte).
+- **Supporto HEVC (h265/hvc1/hev1)**: i flussi 1080p vixsrc/streamingcommunity in HEVC ora vengono remuxati correttamente.
+- **Diagnostica estesa**: log esplicito "no codec config for ..." se l'estrazione fallisce.
+
+### 🏷️ Firme e Integrità
+
+- Versione pulita `0.4.17.6` (versionCode `160`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.5
 
 ### 🔇 Fix consegna MP4 muto + diagnostica audio HLS
