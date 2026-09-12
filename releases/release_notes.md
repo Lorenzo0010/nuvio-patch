@@ -1,5 +1,14 @@
 # Note di rilascio — Nuvio Plus Mobile
 
+## Novità in Nuvio Plus Mobile 0.4.17.9
+
+### 🔇 Fix Audio HLS (easystreams) e container MP4
+- **Audio funzionante da tutte le fonti**: Il sistema ora gestisce correttamente i casi in cui i flussi audio (`hlsAudioUrls`) non vengono popolati come liste ma come singolo fallback, garantendo che l'audio venga sempre scaricato, specialmente su provider come `easystreams`.
+- **Muxing MP4 pulito per Audio ADTS**: Alcuni provider HLS forniscono l'audio incapsulato in flussi `.ts` (ADTS). In precedenza, il Muxer MP4 nativo copiava anche l'header proprietario ADTS, generando una traccia audio muta nei lettori video (come ExoPlayer e player iOS). Ora il downloader esegue lo stripping attivo (rimozione) dei byte di intestazione ADTS (7 o 9 byte) in fase di remux e inietta al volo la configurazione `csd-0` (AudioSpecificConfig) generata analizzando il primo frame. Il risultato è un file MP4 compatibile e perfetto al 100%, con l'audio sincronizzato e perfettamente funzionante.
+
+### 🏷️ Firme e Integrità
+- Versione pulita `0.4.17.9` (versionCode `163`), APK firmati con keystore persistente (SHA-256: `BF:46:A0:35:B7:46:8E:77:E2:2D:2D:1F:CE:3A:C9:43:14:E9:EB:D1:AD:35:03:EB:75:C0:06:89:1C:54:46:B7`).
+
 ## Novità in Nuvio Plus Mobile 0.4.17.8
 
 ### 🐛 Fix Patch HLS Download

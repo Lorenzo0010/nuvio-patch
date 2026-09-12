@@ -843,7 +843,7 @@ index d35da359..53f9858c 100644
      }
  }
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
-index 1f6484c5..0a2bbc66 100644
+index 1f6484c5..5ad3b1a3 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/downloads/DownloadsPlatformDownloader.android.kt
 @@ -2,24 +2,162 @@ package com.nuvio.app.features.downloads
@@ -1303,7 +1303,7 @@ index 1f6484c5..0a2bbc66 100644
      }
  
      actual fun openDownloadsDirectory(): Boolean {
-@@ -136,12 +474,1139 @@ internal actual object DownloadsPlatformDownloader {
+@@ -136,12 +474,1223 @@ internal actual object DownloadsPlatformDownloader {
      }
  }
  
@@ -1512,7 +1512,10 @@ index 1f6484c5..0a2bbc66 100644
 +                }
 +            }
 +
-+            val audioDeferreds = request.item.hlsAudioUrls.withIndex().map { (audioIndex, audioUrl) ->
++            val actualAudioUrls = request.item.hlsAudioUrls.takeIf { it.isNotEmpty() }
++                ?: listOfNotNull(request.item.hlsAudioUrl)
++
++            val audioDeferreds = actualAudioUrls.withIndex().map { (audioIndex, audioUrl) ->
 +                async {
 +                    if (audioUrl.isBlank()) return@async null
 +                    try {
@@ -1549,7 +1552,10 @@ index 1f6484c5..0a2bbc66 100644
 +                }
 +            }
 +
-+            val subtitleDeferreds = request.item.hlsSubtitleUrls.withIndex().map { (subIndex, subUrl) ->
++            val actualSubtitleUrls = request.item.hlsSubtitleUrls.takeIf { it.isNotEmpty() }
++                ?: listOfNotNull(request.item.hlsSubtitleUrl)
++
++            val subtitleDeferreds = actualSubtitleUrls.withIndex().map { (subIndex, subUrl) ->
 +                async {
 +                    if (subUrl.isBlank()) return@async null
 +                    try {
@@ -1669,7 +1675,9 @@ index 1f6484c5..0a2bbc66 100644
 +        // richiesto ma non è stato scaricato E il video non ha audio integrato,
 +        // falliamo con messaggio chiaro invece di consegnare un video muto.
 +        // (Se il video ha già audio muxed, il companion mancante è irrilevante.)
-+        val audioRequested = request.item.hlsAudioUrls.isNotEmpty()
++        val actualAudioUrlsForCheck = request.item.hlsAudioUrls.takeIf { it.isNotEmpty() }
++            ?: listOfNotNull(request.item.hlsAudioUrl)
++        val audioRequested = actualAudioUrlsForCheck.isNotEmpty()
 +        val videoHasEmbeddedAudio = runCatching {
 +            val vp = File(URI(videoUri)).absolutePath
 +            hasEmbeddedAudioTrack(vp)
@@ -1985,6 +1993,15 @@ index 1f6484c5..0a2bbc66 100644
 +            val channelCount = androidAudioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 2)
 +            AndroidLog.i("Remux", "audioMime=$audioMime sampleRate=$sampleRate channels=$channelCount")
 +
++            if (audioMime == "audio/mp4a-latm" && !androidAudioFormat.containsKey("csd-0")) {
++                val csd0 = extractAacCsdFromAdts(audioSource, effectiveAudioTrackId)
++                if (csd0 != null) {
++                    androidAudioFormat.setByteBuffer("csd-0", ByteBuffer.wrap(csd0))
++                    AndroidLog.i("Remux", "injected csd-0 for AAC audio from ADTS")
++                    InAppLogger.debug("Remux", "injected csd-0 for AAC audio from ADTS")
++                }
++            }
++
 +            audioMuxerTrack = muxer.addTrack(androidAudioFormat)
 +            InAppLogger.debug("Remux", "added audio track index=$audioMuxerTrack")
 +        }
@@ -2145,12 +2162,29 @@ index 1f6484c5..0a2bbc66 100644
 +                continue
 +            }
 +        }
++        var offset = 0
++        var length = size
++        val isAudio = (trackIndex == audioExtractorTrack)
++        if (isAudio && length >= 7) {
++            val d0 = buffer.get(0)
++            val d1 = buffer.get(1)
++            if (d0 == 0xFF.toByte() && (d1.toInt() and 0xF0) == 0xF0) {
++                val protectionAbsent = d1.toInt() and 0x01
++                val headerLen = if (protectionAbsent == 1) 7 else 9
++                if (length >= headerLen) {
++                    offset = headerLen
++                    length -= headerLen
++                }
++            }
++        }
++        
 +        buffer.limit(size)
-+        buffer.position(0)
++        buffer.position(offset)
 +        val writeFlags = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
 +        val bufferInfo = MediaCodec.BufferInfo()
 +        bufferInfo.presentationTimeUs = timeUs
-+        bufferInfo.size = size
++        bufferInfo.size = length
++        bufferInfo.offset = offset
 +        bufferInfo.flags = writeFlags
 +        muxer.writeSampleData(muxerTrack, buffer, bufferInfo)
 +        extractor.advance()
@@ -2274,18 +2308,31 @@ index 1f6484c5..0a2bbc66 100644
 +            if (t <= prevAudioTime) t = prevAudioTime + 1
 +            prevAudioTime = t
 +            val writeFlags = p.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM.inv()
++            
++            var offset = 0
++            var length = p.data.size
++            if (length >= 7 && p.data[0] == 0xFF.toByte() && (p.data[1].toInt() and 0xF0) == 0xF0) {
++                val protectionAbsent = p.data[1].toInt() and 0x01
++                val headerLen = if (protectionAbsent == 1) 7 else 9
++                if (length >= headerLen) {
++                    offset = headerLen
++                    length -= headerLen
++                }
++            }
++            
++            val buf = ByteBuffer.wrap(p.data, offset, length)
 +            val bufferInfo = MediaCodec.BufferInfo()
 +            bufferInfo.presentationTimeUs = t
-+            bufferInfo.size = p.data.size
++            bufferInfo.size = length
++            bufferInfo.offset = offset
 +            bufferInfo.flags = writeFlags
-+            muxer.writeSampleData(audioMuxerTrack, ByteBuffer.wrap(p.data), bufferInfo)
++            muxer.writeSampleData(audioMuxerTrack, buf, bufferInfo)
 +            audioSamples++
 +            if (audioSamples <= 3) {
 +                AndroidLog.i("Remux", "interleaved audio #$audioSamples origTimeUs=${p.timeUs} normTimeUs=$t size=${p.data.size}")
 +            }
 +            audioPending = readPending(audioExtractor, audioTrackIndex)
-         }
--    }.getOrNull()
++        }
 +    }
 +    AndroidLog.i("Remux", "copyInterleaved done: videoSamples=$videoSamples audioSamples=$audioSamples commonBase=$commonBase")
 +    return videoSamples to audioSamples
@@ -2341,7 +2388,8 @@ index 1f6484c5..0a2bbc66 100644
 +            this[i + 3] == fourcc[3]
 +        ) {
 +            return true
-+        }
+         }
+-    }.getOrNull()
 +    }
 +    return false
 +}
@@ -2349,6 +2397,42 @@ index 1f6484c5..0a2bbc66 100644
 +private fun OutputStream.closeSafe() {
 +    try { close() } catch (_: Exception) { }
  }
++
++private fun extractAacCsdFromAdts(extractor: MediaExtractor, trackId: Int): ByteArray? {
++    extractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
++    extractor.selectTrack(trackId)
++    val buffer = ByteBuffer.allocate(1024)
++    var csd: ByteArray? = null
++    while (true) {
++        buffer.clear()
++        val size = extractor.readSampleData(buffer, 0)
++        if (size < 0) break
++        if (extractor.sampleTrackIndex != trackId) {
++            extractor.advance()
++            continue
++        }
++        if (size >= 7) {
++            buffer.limit(size)
++            buffer.position(0)
++            val data = ByteArray(7)
++            buffer.get(data)
++            if (data[0] == 0xFF.toByte() && (data[1].toInt() and 0xF0) == 0xF0) {
++                val profile = (data[2].toInt() and 0xC0) ushr 6
++                val sampleRateIndex = (data[2].toInt() and 0x3C) ushr 2
++                val channelConfig = ((data[2].toInt() and 0x01) shl 2) or ((data[3].toInt() and 0xC0) ushr 6)
++                
++                val objectType = profile + 1
++                csd = ByteArray(2)
++                csd[0] = ((objectType shl 3) or (sampleRateIndex ushr 1)).toByte()
++                csd[1] = (((sampleRateIndex and 0x01) shl 7) or (channelConfig shl 3)).toByte()
++                break
++            }
++        }
++        break
++    }
++    extractor.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
++    return csd
++}
 +
 +private fun extractCodecConfigFromBitstream(
 +    extractor: MediaExtractor,
